@@ -1,0 +1,49 @@
+    Finished `release` profile [optimized] target(s) in 0.40s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running unittests src/lib.rs (/69710d234f579455f9953bae/contracts/target/debug/deps/workspace-51ba4ba41e55366b)
+
+Found a 'test' script in the Anchor.toml. Running it as a test suite!
+
+Running test suite: "/69710d234f579455f9953bae/contracts/Anchor.toml"
+
+yarn run v1.22.22
+$ /69710d234f579455f9953bae/contracts/node_modules/.bin/ts-mocha -p ./tsconfig.json -t 1000000 'tests/**/*.ts'
+bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)
+
+
+  EscrowPay Invoice Payment Program
+    initialize_config (USDC Invoice)
+      ✔ should create a USDC invoice successfully (445ms)
+      ✔ should fail with zero amount (45ms)
+      ✔ should fail with description too long
+    initialize_config_sol (SOL Invoice)
+      ✔ should create a SOL invoice successfully (328ms)
+    pay_invoice (USDC - Partial Payments)
+      ✔ should make partial payment successfully (426ms)
+      ✔ should complete payment with second partial payment (439ms)
+      ✔ should fail when payment exceeds remaining amount
+      ✔ should fail with zero payment amount (385ms)
+    pay_invoice_sol (SOL - Partial Payments)
+      ✔ should make partial SOL payment successfully (417ms)
+      ✔ should complete SOL payment with second partial payment (401ms)
+    release_funds (USDC - Partial Releases)
+      ✔ should release partial funds successfully (419ms)
+      ✔ should release remaining funds and update status to Released (411ms)
+      ✔ should fail when release exceeds available funds (864ms)
+      ✔ should fail when unauthorized user tries to release (807ms)
+    release_funds_sol (SOL - Partial Releases)
+      ✔ should release partial SOL funds successfully (412ms)
+      ✔ should release remaining SOL funds and update status to Released (405ms)
+    Token Type Mismatch Validation
+      ✔ should fail when paying USDC invoice with SOL method (442ms)
+      ✔ should fail when paying SOL invoice with USDC method (421ms)
+    Platform Fee Calculation
+      ✔ should calculate 1% fee correctly on various amounts (794ms)
+    Edge Cases
+      ✔ should handle minimum payment amount (1 unit) (828ms)
+      ✔ should fail with zero release amount (858ms)
+
+
+  21 passing (15s)
+
+Done in 17.48s.

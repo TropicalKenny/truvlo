@@ -12,8 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { EscrowPaySDK, TokenType } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://qrgciammvnrbycqkkbus.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyZ2NpYW1tdm5yYnljcWtrYnVzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxNTY3MzUsImV4cCI6MjA4NDczMjczNX0.sqDc7elZp24UyD6V9JS78Zn-GPDp0v4JQyx8HPuObxs';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 /**
  * Safely convert any error to a string message
@@ -130,35 +130,37 @@ const CreateInvoiceForm: React.FC = () => {
         });
         toast({ title: 'Invoice created' });
         
-        // Send email notification to client
-        try {
-          const emailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-invoice-email`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({
-              clientEmail: clientEmail.trim(),
-              invoiceId: result.data.invoiceId,
-              amount: amountNum,
-              tokenType: tokenType === TokenType.USDC ? 'USDC' : 'SOL',
-              description: description.trim(),
-              paymentUrl: invoiceUrl,
-              creatorAddress: publicKey?.toBase58(),
-            }),
-          });
-          
-          const emailData = await emailRes.json();
-          if (emailRes.ok) {
-            toast({ title: 'Email sent to client' });
-          } else {
-            console.error('Email sending failed:', emailData);
-            toast({ title: 'Email failed to send', description: emailData?.error || 'Unknown error', variant: 'destructive' });
+        // Send email notification to client (only if Supabase is configured)
+        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+          try {
+            const emailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-invoice-email`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              },
+              body: JSON.stringify({
+                clientEmail: clientEmail.trim(),
+                invoiceId: result.data.invoiceId,
+                amount: amountNum,
+                tokenType: tokenType === TokenType.USDC ? 'USDC' : 'SOL',
+                description: description.trim(),
+                paymentUrl: invoiceUrl,
+                creatorAddress: publicKey?.toBase58(),
+              }),
+            });
+
+            const emailData = await emailRes.json();
+            if (emailRes.ok) {
+              toast({ title: 'Email sent to client' });
+            } else {
+              console.error('Email sending failed:', emailData);
+              toast({ title: 'Email failed to send', description: emailData?.error || 'Unknown error', variant: 'destructive' });
+            }
+          } catch (emailErr) {
+            console.warn('Failed to send email notification:', emailErr);
+            // Don't show error toast - invoice was created successfully
           }
-        } catch (emailErr) {
-          console.warn('Failed to send email notification:', emailErr);
-          // Don't show error toast - invoice was created successfully
         }
       } else {
         // result.error should always be a string from SDK

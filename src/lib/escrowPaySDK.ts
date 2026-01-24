@@ -18,7 +18,7 @@ import {
 import IDL from "../idl/workspace.json";
 
 // Program ID from the deployed contract
-const PROGRAM_ID = new PublicKey(IDL.address || "J5ph7XoPtQiyyJaykt8C8xTPq8v9pfnFhXs4kfj7Y2oX");
+const PROGRAM_ID = new PublicKey(IDL.address || "BnS88pzsJtNfosVM2qe8WpMoZBKkDCJzaXo2yLS7J3C1");
 
 // Token Mints
 export const USDC_MINT_DEVNET = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");

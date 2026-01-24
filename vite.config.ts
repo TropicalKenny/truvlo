@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path';
+import { Buffer } from 'buffer';
 
 export default defineConfig({
   server: {
@@ -13,9 +14,18 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      buffer: 'buffer',
     },
+  },
+  define: {
+    global: 'globalThis',
   },
   optimizeDeps: {
     exclude: ['lucide-react'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
   },
 }) 

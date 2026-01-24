@@ -3,4 +3,4 @@
 export const configAddress = null;
 
 // Program ID from deployment
-export const PROGRAM_ID = "J5ph7XoPtQiyyJaykt8C8xTPq8v9pfnFhXs4kfj7Y2oX";
+export const PROGRAM_ID = "BnS88pzsJtNfosVM2qe8WpMoZBKkDCJzaXo2yLS7J3C1";

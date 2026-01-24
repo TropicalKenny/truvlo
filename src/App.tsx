@@ -17,8 +17,8 @@ import { NotificationProvider } from './components/NotificationProvider';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 const App = () => {
-    // Using localhost for development with local validator
-    const endpoint = useMemo(() => 'http://localhost:8899', []);
+    // Using Solana Devnet for testing
+    const endpoint = useMemo(() => clusterApiUrl(WalletAdapterNetwork.Devnet), []);
 
     const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
 

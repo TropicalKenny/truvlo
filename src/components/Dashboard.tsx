@@ -34,12 +34,14 @@ const Dashboard: React.FC = () => {
   const { connection } = useConnection();
   const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
   const { toast } = useToast();
-  const { notifications, addNotification } = useNotifications();
+  const { notifications, addNotification, clearAll } = useNotifications();
   
   const [invoices, setInvoices] = useState<InvoiceWithKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [releasing, setReleasing] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('all');
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [releaseModal, setReleaseModal] = useState<{
     open: boolean;
     invoiceId: string;
@@ -47,6 +49,21 @@ const Dashboard: React.FC = () => {
     tokenType: TokenType;
     releaseableAmount: number;
   } | null>(null);
+
+  // Track unread count — increments when new notifications arrive while popover is closed
+  useEffect(() => {
+    if (!notifOpen) {
+      setUnreadCount(notifications.length);
+    }
+  }, [notifications.length, notifOpen]);
+
+  // When popover opens, mark all as read (clear badge)
+  const handleNotifOpen = (open: boolean) => {
+    setNotifOpen(open);
+    if (open) {
+      setUnreadCount(0);
+    }
+  };
 
   const sdk = useMemo(() => {
     if (!publicKey || !signTransaction || !signAllTransactions) return null;
@@ -90,17 +107,11 @@ const Dashboard: React.FC = () => {
     fetchInvoices();
   }, [fetchInvoices]);
 
-  // Auto-refresh when window regains focus or on navigation
+  // Auto-refresh when window regains focus
   useEffect(() => {
-    const handleFocus = () => {
-      fetchInvoices();
-    };
-    
+    const handleFocus = () => { fetchInvoices(); };
     window.addEventListener('focus', handleFocus);
-    
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
+    return () => { window.removeEventListener('focus', handleFocus); };
   }, [fetchInvoices]);
 
   const fromSmallestUnit = (amount: any, tokenType: TokenType) => {
@@ -113,10 +124,15 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // FIX: formatAmount only calls fromSmallestUnit for BN/raw chain values.
+  // For plain numbers (already human-readable), use directly.
   const formatAmount = (amount: any, tokenType: TokenType): string => {
-    const value = fromSmallestUnit(amount, tokenType);
     const symbol = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
     const decimals = tokenType === TokenType.USDC ? 2 : 4;
+    // If it's a plain JS number (already converted), use it directly
+    const value = (typeof amount === 'number') 
+      ? amount 
+      : fromSmallestUnit(amount, tokenType);
     return `${value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol}`;
   };
 
@@ -163,14 +179,17 @@ const Dashboard: React.FC = () => {
       
       if (result.success) {
         toast({ title: 'Funds released' });
+        // FIX: releaseableAmount is already a plain number — format it directly, don't run through fromSmallestUnit again
+        const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
+        const decimals = releaseModal.tokenType === TokenType.USDC ? 2 : 4;
+        const displayAmount = `${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol}`;
         addNotification({
           type: 'success',
           title: 'Funds Released',
-          message: `Released ${formatAmount(releaseModal.releaseableAmount, releaseModal.tokenType)} from ${releaseModal.invoiceId}`,
+          message: `Released ${displayAmount} from ${releaseModal.invoiceId}`,
         });
         await fetchInvoices();
       } else {
-        // Ensure error is a string
         const errorMsg = typeof result.error === 'string' ? result.error : 'Release failed';
         toast({ title: 'Release failed', description: errorMsg, variant: 'destructive' });
       }
@@ -241,13 +260,14 @@ const Dashboard: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           {/* Notifications */}
-          <Popover>
+          <Popover open={notifOpen} onOpenChange={handleNotifOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="icon" className="relative">
                 <Bell className="h-4 w-4" />
-                {notifications.length > 0 && (
+                {/* FIX: badge shows unread count, clears when popover opens */}
+                {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-[10px] text-primary-foreground flex items-center justify-center">
-                    {notifications.length}
+                    {unreadCount}
                   </span>
                 )}
               </Button>
@@ -288,7 +308,7 @@ const Dashboard: React.FC = () => {
                 <p className="text-lg font-semibold text-primary">{stats.escrowValueSOL.toFixed(4)} SOL</p>
               )}
               {stats.escrowValueUSDC === 0 && stats.escrowValueSOL === 0 && (
-                <p className="text-lg font-semibold text-muted-foreground">-</p>
+                <p className="text-lg font-semibold text-muted-foreground">0</p>
               )}
             </div>
           </CardContent>

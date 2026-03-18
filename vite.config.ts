@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path';
-import { Buffer } from 'buffer';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig({
   server: {
@@ -10,11 +10,20 @@ export default defineConfig({
     allowedHosts: true,
     watch: { usePolling: true }
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    nodePolyfills({
+      include: ['buffer', 'crypto', 'stream', 'util', 'process'],
+      globals: {
+        Buffer: true,
+        global: true,
+        process: true,
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      buffer: 'buffer',
     },
   },
   define: {
@@ -28,4 +37,4 @@ export default defineConfig({
       },
     },
   },
-}) 
+})

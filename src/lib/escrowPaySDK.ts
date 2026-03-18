@@ -260,7 +260,13 @@ export class EscrowPaySDK {
    */
   private toSmallestUnit(amount: number, tokenType: TokenType): BN {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
-    return new BN(Math.floor(amount * Math.pow(10, decimals)));
+    // Use string-based conversion to avoid floating point precision loss
+    // e.g. 10 * 1_000_000_000 loses precision with Math.floor in JS
+    const amountStr = amount.toFixed(decimals);
+    const [intPart, fracPart = ''] = amountStr.split('.');
+    const paddedFrac = fracPart.padEnd(decimals, '0').slice(0, decimals);
+    const smallestUnit = BigInt(intPart) * BigInt(10 ** decimals) + BigInt(paddedFrac);
+    return new BN(smallestUnit.toString());
   }
 
   /**
@@ -871,3 +877,4 @@ export class EscrowPaySDK {
 }
 
 export default EscrowPaySDK;
+

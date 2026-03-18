@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 interface Notification {
@@ -39,7 +39,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       id: Math.random().toString(36).substr(2, 9),
       timestamp: new Date(),
     };
-    setNotifications(prev => [newNotification, ...prev].slice(0, 50)); // Keep last 50
+    setNotifications(prev => [newNotification, ...prev].slice(0, 50));
   }, []);
 
   const removeNotification = useCallback((id: string) => {
@@ -49,6 +49,17 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const clearAll = useCallback(() => {
     setNotifications([]);
   }, []);
+
+  // Auto-dismiss each notification after 10 seconds
+  useEffect(() => {
+    if (notifications.length === 0) return;
+    const timers = notifications.map(n => {
+      const age = Date.now() - n.timestamp.getTime();
+      const remaining = Math.max(0, 10000 - age);
+      return setTimeout(() => removeNotification(n.id), remaining);
+    });
+    return () => timers.forEach(clearTimeout);
+  }, [notifications, removeNotification]);
 
   return (
     <NotificationContext.Provider value={{ notifications, addNotification, removeNotification, clearAll }}>
@@ -82,7 +93,7 @@ export const NotificationList: React.FC = () => {
     <div className="max-h-80 overflow-y-auto">
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <span className="text-sm font-medium text-foreground">Notifications</span>
-        <button 
+        <button
           onClick={clearAll}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -91,7 +102,7 @@ export const NotificationList: React.FC = () => {
       </div>
       <div className="divide-y divide-border">
         {notifications.map(notification => (
-          <div 
+          <div
             key={notification.id}
             className={`p-3 flex items-start gap-3 ${getTypeStyles(notification.type)}`}
           >
@@ -104,7 +115,7 @@ export const NotificationList: React.FC = () => {
                 {notification.timestamp.toLocaleTimeString()}
               </p>
             </div>
-            <button 
+            <button
               onClick={() => removeNotification(notification.id)}
               className="text-muted-foreground hover:text-foreground"
             >

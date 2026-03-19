@@ -481,7 +481,7 @@ const Dashboard: React.FC = () => {
                               {hasSchedule && (
                                 <div className="flex items-center gap-1">
                                   {schedule.map((_: number, i: number) => (
-                                    <span key={i} className={} />
+                                    <span key={i} className={`w-2 h-2 rounded-full ${i < scheduleIdx ? 'bg-green-400' : i === scheduleIdx ? 'bg-amber-400' : 'bg-muted-foreground/30'}`} />
                                   ))}
                                   <span className="text-xs text-muted-foreground ml-1">
                                     {scheduleIdx + 1}/{installmentsTotal}

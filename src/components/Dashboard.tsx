@@ -424,6 +424,9 @@ const Dashboard: React.FC = () => {
                             {formatAmount(inv.amount, inv.tokenType)}
                           </p>
                           
+                          {inv.description && (
+                            <p className="text-xs font-medium text-foreground mb-0.5 truncate">{inv.description}</p>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             {inv.clientEmail} • {formatDate(inv.createdAt)}
                           </p>

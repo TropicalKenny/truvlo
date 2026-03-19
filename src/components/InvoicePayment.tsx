@@ -28,8 +28,6 @@ const InvoicePayment: React.FC = () => {
 
   const [pageState, setPageState] = useState<PageState>({ type: 'loading' });
   const [paying, setPaying] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'full' | 'partial'>('full');
   const [sdkInitError, setSdkInitError] = useState<string | null>(null);
 
   const urlParams = useMemo(() => {
@@ -100,7 +98,6 @@ const InvoicePayment: React.FC = () => {
         const result = await readOnlySdk.fetchInvoice(urlParams.invoiceId!, creatorPubkey);
         if (result.success && result.data) {
           setPageState({ type: 'invoice_loaded', invoice: result.data });
-          setPaymentAmount(getRemainingAmount(result.data).toString());
         } else {
           setPageState({ type: 'error', message: result.error || 'Invoice not found' });
         }
@@ -137,7 +134,7 @@ const InvoicePayment: React.FC = () => {
   };
 
   const calculateBreakdown = (inv: InvoiceData) => {
-    const amount = paymentMode === 'full' ? getRemainingAmount(inv) : parseFloat(paymentAmount) || 0;
+    const amount = getRemainingAmount(inv);
     const fee = amount * (PLATFORM_FEE_BPS / 10000);
     const total = amount + fee;
     return { amount, fee, total };
@@ -389,51 +386,6 @@ const InvoicePayment: React.FC = () => {
             <>
               <div className="border-t border-border pt-4">
                 <Label className="text-sm font-medium mb-2 block">Payment Amount</Label>
-
-                <div className="flex gap-2 mb-3">
-                  <Button
-                    type="button"
-                    variant={paymentMode === 'full' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setPaymentMode('full')}
-                    className="flex-1"
-                  >
-                    Full ({formatAmount(remaining, invoice.tokenType)})
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={paymentMode === 'partial' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setPaymentMode('partial')}
-                    className="flex-1"
-                  >
-                    Partial
-                  </Button>
-                </div>
-
-                {/* Fixed: partial input now shows currency label */}
-                {paymentMode === 'partial' && (
-                  <div className="mb-3">
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        value={paymentAmount}
-                        onChange={(e) => setPaymentAmount(e.target.value)}
-                        placeholder="0.00"
-                        step={invoice.tokenType === TokenType.USDC ? '0.01' : '0.0001'}
-                        min="0"
-                        max={remaining}
-                        className="pr-16"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">
-                        {symbol}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Max: {formatAmount(remaining, invoice.tokenType)}
-                    </p>
-                  </div>
-                )}
 
                 {/* Payment Breakdown */}
                 <div className="p-3 rounded bg-muted space-y-2 text-sm">

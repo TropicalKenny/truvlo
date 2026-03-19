@@ -3,7 +3,7 @@ use anchor_lang::system_program;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer, CloseAccount};
 use anchor_spl::associated_token::AssociatedToken;
 
-declare_id!("BnS88pzsJtNfosVM2qe8WpMoZBKkDCJzaXo2yLS7J3C1");
+declare_id!("12mH9wkUUvyQmhqD9A6gJzLGxEUCTZCCuddK6W9EbG2w");
 
 // Platform fee: 1% (100 basis points)
 pub const PLATFORM_FEE_BPS: u16 = 100;

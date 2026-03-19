@@ -605,6 +605,67 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "set_release_schedule",
+      "discriminator": [
+        159,
+        183,
+        255,
+        118,
+        216,
+        231,
+        121,
+        122
+      ],
+      "accounts": [
+        {
+          "name": "invoice",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "invoice_id"
+              },
+              {
+                "kind": "account",
+                "path": "invoice.creator",
+                "account": "Invoice"
+              }
+            ]
+          }
+        },
+        {
+          "name": "client",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_id",
+          "type": "string"
+        },
+        {
+          "name": "schedule",
+          "type": {
+            "vec": "u16"
+          }
+        }
+      ]
     }
   ],
   "accounts": [
@@ -626,87 +687,122 @@
     {
       "code": 6000,
       "name": "InvalidAmount",
-      "msg": "Invalid amount - must be greater than 0"
+      "msg": "Invalid amount"
     },
     {
       "code": 6001,
       "name": "DescriptionTooLong",
-      "msg": "Description too long - max 256 characters"
+      "msg": "Description too long"
     },
     {
       "code": 6002,
       "name": "EmailTooLong",
-      "msg": "Email too long - max 128 characters"
+      "msg": "Email too long"
     },
     {
       "code": 6003,
       "name": "InvoiceIdTooLong",
-      "msg": "Invoice ID too long - max 32 characters"
+      "msg": "Invoice ID too long"
     },
     {
       "code": 6004,
       "name": "InvoiceNotPayable",
-      "msg": "Invoice is not payable - must be Unpaid or PartiallyPaid"
+      "msg": "Invoice is not payable"
     },
     {
       "code": 6005,
       "name": "InvoiceNotReleasable",
-      "msg": "Invoice is not releasable - must be PartiallyPaid or FullyPaid"
+      "msg": "Invoice is not releasable"
     },
     {
       "code": 6006,
+      "name": "InvoiceNotFullyPaid",
+      "msg": "Invoice must be fully paid before setting release schedule"
+    },
+    {
+      "code": 6007,
       "name": "InvalidInvoiceId",
       "msg": "Invalid invoice ID"
     },
     {
-      "code": 6007,
+      "code": 6008,
       "name": "Unauthorized",
-      "msg": "Unauthorized - only creator can perform this action"
+      "msg": "Unauthorized"
     },
     {
-      "code": 6008,
+      "code": 6009,
       "name": "InvalidMint",
       "msg": "Invalid mint"
     },
     {
-      "code": 6009,
+      "code": 6010,
       "name": "InvalidOwner",
       "msg": "Invalid owner"
     },
     {
-      "code": 6010,
+      "code": 6011,
       "name": "InvalidTreasury",
       "msg": "Invalid treasury"
     },
     {
-      "code": 6011,
+      "code": 6012,
       "name": "MathOverflow",
       "msg": "Math overflow"
     },
     {
-      "code": 6012,
+      "code": 6013,
       "name": "InvalidPaymentAmount",
-      "msg": "Invalid payment amount - must be greater than 0"
+      "msg": "Invalid payment amount"
     },
     {
-      "code": 6013,
+      "code": 6014,
       "name": "PaymentExceedsRemaining",
       "msg": "Payment exceeds remaining invoice amount"
     },
     {
-      "code": 6014,
+      "code": 6015,
       "name": "InvalidReleaseAmount",
-      "msg": "Invalid release amount - must be greater than 0"
+      "msg": "Invalid release amount"
     },
     {
-      "code": 6015,
+      "code": 6016,
       "name": "ReleaseExceedsAvailable",
       "msg": "Release amount exceeds available funds"
     },
     {
-      "code": 6016,
+      "code": 6017,
       "name": "TokenTypeMismatch",
       "msg": "Token type mismatch"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidSchedule",
+      "msg": "Invalid schedule"
+    },
+    {
+      "code": 6019,
+      "name": "ScheduleMustSumTo100",
+      "msg": "Release schedule must sum to exactly 100%"
+    },
+    {
+      "code": 6020,
+      "name": "ScheduleAlreadySet",
+      "msg": "Release schedule already set"
+    },
+    {
+      "code": 6021,
+      "name": "TooManyInstallments",
+      "msg": "Too many installments - max 10"
+    },
+    {
+      "code": 6022,
+      "name": "AllInstallmentsReleased",
+      "msg": "All installments have been released"
+    },
+    {
+      "code": 6023,
+      "name": "InvalidInstallmentAmount",
+      "msg": "Release amount must match current installment"
     }
   ],
   "types": [
@@ -788,6 +884,16 @@
             "type": {
               "option": "i64"
             }
+          },
+          {
+            "name": "release_schedule",
+            "type": {
+              "vec": "u16"
+            }
+          },
+          {
+            "name": "current_release_index",
+            "type": "u8"
           }
         ]
       }

@@ -61,6 +61,8 @@ export interface InvoiceData {
   createdAt: BN;
   paidAt: BN | null;
   releasedAt: BN | null;
+  releaseSchedule: number[];
+  currentReleaseIndex: number;
 }
 
 export interface CreateInvoiceParams {
@@ -232,6 +234,8 @@ export class EscrowPaySDK {
         createdAt: raw.createdAt ?? raw.created_at ?? new BN(0),
         paidAt: raw.paidAt ?? raw.paid_at ?? null,
         releasedAt: raw.releasedAt ?? raw.released_at ?? null,
+        releaseSchedule: raw.releaseSchedule ?? raw.release_schedule ?? [],
+        currentReleaseIndex: raw.currentReleaseIndex ?? raw.current_release_index ?? 0,
       };
     } catch (e) {
       console.error('Failed to parse invoice data:', e);
@@ -260,13 +264,7 @@ export class EscrowPaySDK {
    */
   private toSmallestUnit(amount: number, tokenType: TokenType): BN {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
-    // Use string-based conversion to avoid floating point precision loss
-    // e.g. 10 * 1_000_000_000 loses precision with Math.floor in JS
-    const amountStr = amount.toFixed(decimals);
-    const [intPart, fracPart = ''] = amountStr.split('.');
-    const paddedFrac = fracPart.padEnd(decimals, '0').slice(0, decimals);
-    const smallestUnit = BigInt(intPart) * BigInt(10 ** decimals) + BigInt(paddedFrac);
-    return new BN(smallestUnit.toString());
+    return new BN(Math.floor(amount * Math.pow(10, decimals)));
   }
 
   /**
@@ -636,6 +634,31 @@ export class EscrowPaySDK {
   }
 
   /**
+   * Set release schedule — called by client after paying full amount
+   * scheduleBps: array of basis points per installment (must sum to 10000)
+   */
+  async setReleaseSchedule(
+    invoiceId: string,
+    creatorPubkey: PublicKey,
+    scheduleBps: number[]
+  ): Promise<SDKResult<{ signature: string }>> {
+    if (!this.provider.publicKey) return { success: false, error: 'Wallet not connected' };
+    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
+    try {
+      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+      const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
+      const tx = await this.program.methods
+        .setReleaseSchedule(invoiceId, scheduleBps)
+        .accounts({ invoice: invoiceAddress, client: this.provider.publicKey })
+        .rpc();
+      return { success: true, data: { signature: tx } };
+    } catch (error: any) {
+      this.logError('setReleaseSchedule', error);
+      return { success: false, error: this.parseError(error) };
+    }
+  }
+
+  /**
    * Release funds from escrow (supports partial releases)
    */
   async releaseFunds(
@@ -877,4 +900,3 @@ export class EscrowPaySDK {
 }
 
 export default EscrowPaySDK;
-

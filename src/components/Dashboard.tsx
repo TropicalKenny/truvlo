@@ -118,7 +118,7 @@ const Dashboard: React.FC = () => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     try {
       const val = amount.toNumber ? amount.toNumber() : Number(amount);
-      return val / Math.pow(10, decimals);
+      return parseFloat((val / Math.pow(10, decimals)).toFixed(decimals));
     } catch {
       return 0;
     }
@@ -164,12 +164,22 @@ const Dashboard: React.FC = () => {
 
   const openReleaseModal = (invoice: InvoiceData) => {
     const releaseableAmount = getReleaseable(invoice);
+    // If schedule is set, only allow releasing current installment amount
+    const schedule = invoice.releaseSchedule ?? [];
+    const idx = invoice.currentReleaseIndex ?? 0;
+    let installmentAmount = releaseableAmount;
+    let installmentLabel = '';
+    if (schedule.length > 0 && idx < schedule.length) {
+      const bps = schedule[idx];
+      installmentAmount = parseFloat((fromSmallestUnit(invoice.amountPaid, invoice.tokenType) * bps / 10000).toFixed(invoice.tokenType === TokenType.USDC ? 6 : 9));
+      installmentLabel = `Installment ${idx + 1} of ${schedule.length} (${bps / 100}%)`;
+    }
     setReleaseModal({
       open: true,
       invoiceId: invoice.invoiceId,
-      amount: formatAmount(invoice.amountPaid, invoice.tokenType),
+      amount: installmentLabel || formatAmount(invoice.amountPaid, invoice.tokenType),
       tokenType: invoice.tokenType,
-      releaseableAmount,
+      releaseableAmount: installmentAmount,
     });
   };
 

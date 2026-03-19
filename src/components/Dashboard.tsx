@@ -401,6 +401,16 @@ const Dashboard: React.FC = () => {
                 const released = fromSmallestUnit(inv.amountReleased, inv.tokenType);
                 const progressPercent = total > 0 ? (paid / total) * 100 : 0;
                 const releaseable = getReleaseable(inv);
+                // Release schedule info
+                const schedule = inv.releaseSchedule ?? [];
+                const scheduleIdx = inv.currentReleaseIndex ?? 0;
+                const hasSchedule = schedule.length > 0;
+                const currentInstallmentBps = hasSchedule && scheduleIdx < schedule.length ? schedule[scheduleIdx] : null;
+                const currentInstallmentAmount = currentInstallmentBps !== null
+                  ? parseFloat((paid * currentInstallmentBps / 10000).toFixed(inv.tokenType === TokenType.USDC ? 2 : 4))
+                  : releaseable;
+                const installmentsReleased = scheduleIdx;
+                const installmentsTotal = schedule.length;
                 
                 return (
                   <Card key={inv.invoiceId} className={`clean-card border-l-4 ${
@@ -440,6 +450,11 @@ const Dashboard: React.FC = () => {
                           <p className="text-xs text-muted-foreground">
                             {inv.clientEmail} • {formatDate(inv.createdAt)}
                           </p>
+                          {hasSchedule && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                              Next: {formatAmount(currentInstallmentAmount, inv.tokenType)} ({currentInstallmentBps !== null ? currentInstallmentBps / 100 : 0}%) — installment {scheduleIdx + 1} of {installmentsTotal}
+                            </p>
+                          )}
                           
                           {/* Progress bar for partial/paid */}
                           {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
@@ -462,14 +477,29 @@ const Dashboard: React.FC = () => {
                           </Button>
                           
                           {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && releaseable > 0 && (
-                            <Button
-                              size="sm"
-                              className="bg-accent hover:bg-accent/90 text-accent-foreground"
-                              onClick={() => openReleaseModal(inv)}
-                            >
-                              <Check className="h-3.5 w-3.5 mr-1" />
-                              Release
-                            </Button>
+                            <div className="flex flex-col items-end gap-1">
+                              {hasSchedule && (
+                                <div className="flex items-center gap-1">
+                                  {schedule.map((_: number, i: number) => (
+                                    <span key={i} className={} />
+                                  ))}
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    {scheduleIdx + 1}/{installmentsTotal}
+                                  </span>
+                                </div>
+                              )}
+                              <Button
+                                size="sm"
+                                className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                                onClick={() => openReleaseModal(inv)}
+                              >
+                                <Check className="h-3.5 w-3.5 mr-1" />
+                                {hasSchedule
+                                  ? `Release ${formatAmount(currentInstallmentAmount, inv.tokenType)}`
+                                  : 'Release'
+                                }
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </div>

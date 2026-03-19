@@ -40,8 +40,8 @@ const HowItWorks: React.FC = () => {
           {steps.map(({ icon: Icon, step, title, description }) => (
             <div key={step} className="flex flex-col items-center text-center relative">
               <div className="relative mb-5">
-                <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center border border-border">
-                  <Icon className="h-7 w-7 text-foreground" />
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                  <Icon className="h-7 w-7 text-primary" />
                 </div>
                 <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center">
                   {parseInt(step)}

@@ -51,8 +51,8 @@ const Features: React.FC = () => {
               key={title}
               className="bg-background rounded-xl p-6 border border-border hover:border-primary/30 transition-colors"
             >
-              <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center mb-4">
-                <Icon className="h-5 w-5 text-foreground" />
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                <Icon className="h-5 w-5 text-primary" />
               </div>
               <h3 className="text-sm font-semibold text-foreground mb-2">{title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>

@@ -3,16 +3,44 @@ use anchor_lang::system_program;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer, CloseAccount};
 use anchor_spl::associated_token::AssociatedToken;
 
+// ============================================================
+// PROGRAM ID — update after deployment
+// ============================================================
 declare_id!("12mH9wkUUvyQmhqD9A6gJzLGxEUCTZCCuddK6W9EbG2w");
 
-pub const PLATFORM_FEE_BPS: u16 = 100;
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+/// Platform treasury wallet
 pub const PLATFORM_TREASURY: Pubkey = pubkey!("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
+
+/// Tiered fee: flat $2 in USDC micro-units (6 decimals) for invoices below $200
+pub const FLAT_FEE_USDC: u64 = 2_000_000; // $2.00
+
+/// Tiered fee threshold: $200 in USDC micro-units
+pub const TIER_THRESHOLD_USDC: u64 = 200_000_000; // $200.00
+
+/// Above threshold: 1% (100 basis points)
+pub const PERCENTAGE_FEE_BPS: u64 = 100;
+
+/// Auto-release timeout: 7 days in seconds
+pub const AUTO_RELEASE_TIMEOUT: i64 = 7 * 24 * 60 * 60;
+
+/// Max installments in a release schedule
 pub const MAX_INSTALLMENTS: usize = 10;
+
+// ============================================================
+// PROGRAM
+// ============================================================
 
 #[program]
 pub mod workspace {
     use super::*;
 
+    // ----------------------------------------------------------
+    // CREATE INVOICE — USDC
+    // ----------------------------------------------------------
     pub fn initialize_config(
         ctx: Context<InitializeConfig>,
         invoice_id: String,
@@ -24,6 +52,7 @@ pub mod workspace {
         require!(description.len() <= 256, ErrorCode::DescriptionTooLong);
         require!(client_email.len() <= 128, ErrorCode::EmailTooLong);
         require!(invoice_id.len() <= 32, ErrorCode::InvoiceIdTooLong);
+
         let invoice = &mut ctx.accounts.invoice;
         invoice.bump = ctx.bumps.invoice;
         invoice.escrow_bump = ctx.bumps.escrow;
@@ -42,9 +71,15 @@ pub mod workspace {
         invoice.released_at = None;
         invoice.release_schedule = Vec::new();
         invoice.current_release_index = 0;
+        invoice.completion_requested_at = None;
+        invoice.client_approved = false;
+        invoice.dispute_raised_at = None;
         Ok(())
     }
 
+    // ----------------------------------------------------------
+    // CREATE INVOICE — SOL
+    // ----------------------------------------------------------
     pub fn initialize_config_sol(
         ctx: Context<InitializeConfigSol>,
         invoice_id: String,
@@ -56,6 +91,7 @@ pub mod workspace {
         require!(description.len() <= 256, ErrorCode::DescriptionTooLong);
         require!(client_email.len() <= 128, ErrorCode::EmailTooLong);
         require!(invoice_id.len() <= 32, ErrorCode::InvoiceIdTooLong);
+
         let invoice = &mut ctx.accounts.invoice;
         invoice.bump = ctx.bumps.invoice;
         invoice.escrow_bump = 0;
@@ -74,10 +110,22 @@ pub mod workspace {
         invoice.released_at = None;
         invoice.release_schedule = Vec::new();
         invoice.current_release_index = 0;
+        invoice.completion_requested_at = None;
+        invoice.client_approved = false;
+        invoice.dispute_raised_at = None;
         Ok(())
     }
 
-    pub fn pay_invoice(ctx: Context<PayInvoice>, invoice_id: String, payment_amount: u64) -> Result<()> {
+    // ----------------------------------------------------------
+    // PAY INVOICE — USDC
+    // Tiered fee: flat $2 below $200 USDC, 1% above
+    // Fee is always paid by the client, never the creator
+    // ----------------------------------------------------------
+    pub fn pay_invoice(
+        ctx: Context<PayInvoice>,
+        invoice_id: String,
+        payment_amount: u64,
+    ) -> Result<()> {
         let invoice = &ctx.accounts.invoice;
         require!(payment_amount > 0, ErrorCode::InvalidPaymentAmount);
         require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
@@ -88,9 +136,19 @@ pub mod workspace {
         require!(invoice.token_type == TokenType::USDC, ErrorCode::TokenTypeMismatch);
         let remaining = invoice.amount.checked_sub(invoice.amount_paid).ok_or(ErrorCode::MathOverflow)?;
         require!(payment_amount <= remaining, ErrorCode::PaymentExceedsRemaining);
-        let fee = payment_amount
-            .checked_mul(PLATFORM_FEE_BPS as u64).ok_or(ErrorCode::MathOverflow)?
-            .checked_div(10000).ok_or(ErrorCode::MathOverflow)?;
+
+        // Tiered fee for USDC — threshold is exact in micro-units
+        let fee = if payment_amount < TIER_THRESHOLD_USDC {
+            FLAT_FEE_USDC // $2 flat
+        } else {
+            payment_amount
+                .checked_mul(PERCENTAGE_FEE_BPS)
+                .ok_or(ErrorCode::MathOverflow)?
+                .checked_div(10000)
+                .ok_or(ErrorCode::MathOverflow)?
+        };
+
+        // Transfer payment_amount to escrow
         token::transfer(
             CpiContext::new(ctx.accounts.token_program.to_account_info(), Transfer {
                 from: ctx.accounts.client_token.to_account_info(),
@@ -99,6 +157,8 @@ pub mod workspace {
             }),
             payment_amount,
         )?;
+
+        // Transfer fee to platform treasury
         if fee > 0 {
             token::transfer(
                 CpiContext::new(ctx.accounts.token_program.to_account_info(), Transfer {
@@ -109,6 +169,7 @@ pub mod workspace {
                 fee,
             )?;
         }
+
         let invoice = &mut ctx.accounts.invoice;
         let new_amount_paid = invoice.amount_paid.checked_add(payment_amount).ok_or(ErrorCode::MathOverflow)?;
         invoice.amount_paid = new_amount_paid;
@@ -122,9 +183,22 @@ pub mod workspace {
         Ok(())
     }
 
-    pub fn pay_invoice_sol(ctx: Context<PayInvoiceSol>, invoice_id: String, payment_amount: u64) -> Result<()> {
+    // ----------------------------------------------------------
+    // PAY INVOICE — SOL
+    // Fee is calculated on the frontend using Pyth Hermes REST API
+    // and passed in as fee_amount (in lamports).
+    // Frontend logic: below $200 USD = flat $2 in SOL, above = 1%
+    // Contract enforces fee > 0 and transfers it to treasury
+    // ----------------------------------------------------------
+    pub fn pay_invoice_sol(
+        ctx: Context<PayInvoiceSol>,
+        invoice_id: String,
+        payment_amount: u64,
+        fee_amount: u64,
+    ) -> Result<()> {
         let invoice = &ctx.accounts.invoice;
         require!(payment_amount > 0, ErrorCode::InvalidPaymentAmount);
+        require!(fee_amount > 0, ErrorCode::InvalidFeeAmount);
         require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
         require!(
             invoice.status == InvoiceStatus::Unpaid || invoice.status == InvoiceStatus::PartiallyPaid,
@@ -133,9 +207,10 @@ pub mod workspace {
         require!(invoice.token_type == TokenType::SOL, ErrorCode::TokenTypeMismatch);
         let remaining = invoice.amount.checked_sub(invoice.amount_paid).ok_or(ErrorCode::MathOverflow)?;
         require!(payment_amount <= remaining, ErrorCode::PaymentExceedsRemaining);
-        let fee = payment_amount
-            .checked_mul(PLATFORM_FEE_BPS as u64).ok_or(ErrorCode::MathOverflow)?
-            .checked_div(10000).ok_or(ErrorCode::MathOverflow)?;
+
+        let fee = fee_amount;
+
+        // Transfer payment to invoice account (SOL escrow)
         system_program::transfer(
             CpiContext::new(ctx.accounts.system_program.to_account_info(), system_program::Transfer {
                 from: ctx.accounts.client.to_account_info(),
@@ -143,6 +218,8 @@ pub mod workspace {
             }),
             payment_amount,
         )?;
+
+        // Transfer fee to platform treasury
         if fee > 0 {
             system_program::transfer(
                 CpiContext::new(ctx.accounts.system_program.to_account_info(), system_program::Transfer {
@@ -152,6 +229,7 @@ pub mod workspace {
                 fee,
             )?;
         }
+
         let invoice = &mut ctx.accounts.invoice;
         let new_amount_paid = invoice.amount_paid.checked_add(payment_amount).ok_or(ErrorCode::MathOverflow)?;
         invoice.amount_paid = new_amount_paid;
@@ -165,8 +243,11 @@ pub mod workspace {
         Ok(())
     }
 
-    // Set release schedule — called by client after paying full amount
-    // schedule: Vec of basis points per installment (must sum to 10000 = 100%)
+    // ----------------------------------------------------------
+    // SET RELEASE SCHEDULE
+    // Called by client after paying full amount
+    // schedule: basis points per installment, must sum to 10000
+    // ----------------------------------------------------------
     pub fn set_release_schedule(
         ctx: Context<SetReleaseSchedule>,
         invoice_id: String,
@@ -182,13 +263,107 @@ pub mod workspace {
         for &bps in &schedule { require!(bps > 0, ErrorCode::InvalidSchedule); }
         let total: u32 = schedule.iter().map(|&x| x as u32).sum();
         require!(total == 10000, ErrorCode::ScheduleMustSumTo100);
+
         let invoice = &mut ctx.accounts.invoice;
         invoice.release_schedule = schedule;
         invoice.current_release_index = 0;
         Ok(())
     }
 
-    pub fn release_funds(ctx: Context<ReleaseFunds>, invoice_id: String, release_amount: u64) -> Result<()> {
+    // ----------------------------------------------------------
+    // REQUEST RELEASE (DUAL APPROVAL — STEP 1)
+    // Creator signals work is complete for current installment
+    // Starts the 7-day client approval window
+    // ----------------------------------------------------------
+    pub fn request_release(
+        ctx: Context<RequestRelease>,
+        invoice_id: String,
+    ) -> Result<()> {
+        let invoice = &ctx.accounts.invoice;
+        require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
+        require!(invoice.creator == ctx.accounts.creator.key(), ErrorCode::Unauthorized);
+        require!(
+            invoice.status == InvoiceStatus::PartiallyPaid || invoice.status == InvoiceStatus::FullyPaid,
+            ErrorCode::InvoiceNotReleasable
+        );
+        require!(invoice.status != InvoiceStatus::Disputed, ErrorCode::InvoiceDisputed);
+        // Cannot request again if already pending client response
+        require!(invoice.completion_requested_at.is_none(), ErrorCode::ReleaseAlreadyRequested);
+
+        let invoice = &mut ctx.accounts.invoice;
+        invoice.completion_requested_at = Some(Clock::get()?.unix_timestamp);
+        invoice.client_approved = false;
+        Ok(())
+    }
+
+    // ----------------------------------------------------------
+    // APPROVE RELEASE (DUAL APPROVAL — STEP 2)
+    // Client approves — funds can now be released
+    // ----------------------------------------------------------
+    pub fn approve_release(
+        ctx: Context<ApproveRelease>,
+        invoice_id: String,
+    ) -> Result<()> {
+        let invoice = &ctx.accounts.invoice;
+        require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
+        require!(invoice.client == Some(ctx.accounts.client.key()), ErrorCode::Unauthorized);
+        require!(invoice.completion_requested_at.is_some(), ErrorCode::NoReleaseRequested);
+        require!(invoice.status != InvoiceStatus::Disputed, ErrorCode::InvoiceDisputed);
+
+        let invoice = &mut ctx.accounts.invoice;
+        invoice.client_approved = true;
+        Ok(())
+    }
+
+    // ----------------------------------------------------------
+    // RAISE DISPUTE
+    // Client raises dispute within 7-day window
+    // Remaining unreleased installments freeze immediately
+    // ----------------------------------------------------------
+    pub fn raise_dispute(
+        ctx: Context<RaiseDispute>,
+        invoice_id: String,
+    ) -> Result<()> {
+        let invoice = &ctx.accounts.invoice;
+        require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
+        require!(invoice.client == Some(ctx.accounts.client.key()), ErrorCode::Unauthorized);
+        require!(
+            invoice.status == InvoiceStatus::PartiallyPaid || invoice.status == InvoiceStatus::FullyPaid,
+            ErrorCode::InvoiceNotReleasable
+        );
+        require!(invoice.status != InvoiceStatus::Disputed, ErrorCode::AlreadyDisputed);
+
+        // Must be within the 7-day window after a release request
+        if let Some(requested_at) = invoice.completion_requested_at {
+            let now = Clock::get()?.unix_timestamp;
+            require!(
+                now - requested_at <= AUTO_RELEASE_TIMEOUT,
+                ErrorCode::DisputeWindowExpired
+            );
+        } else {
+            // Can also dispute without a pending release request (while funds are in escrow)
+        }
+
+        let invoice = &mut ctx.accounts.invoice;
+        invoice.status = InvoiceStatus::Disputed;
+        invoice.dispute_raised_at = Some(Clock::get()?.unix_timestamp);
+        invoice.completion_requested_at = None; // Cancel pending release request
+        invoice.client_approved = false;
+        Ok(())
+    }
+
+    // ----------------------------------------------------------
+    // RELEASE FUNDS — USDC
+    // Requires either:
+    //   (a) client approved, OR
+    //   (b) 7-day timeout has passed since request
+    // Enforces installment schedule if set
+    // ----------------------------------------------------------
+    pub fn release_funds(
+        ctx: Context<ReleaseFunds>,
+        invoice_id: String,
+        release_amount: u64,
+    ) -> Result<()> {
         let invoice = &ctx.accounts.invoice;
         require!(release_amount > 0, ErrorCode::InvalidReleaseAmount);
         require!(invoice.creator == ctx.accounts.creator.key(), ErrorCode::Unauthorized);
@@ -198,7 +373,19 @@ pub mod workspace {
             ErrorCode::InvoiceNotReleasable
         );
         require!(invoice.token_type == TokenType::USDC, ErrorCode::TokenTypeMismatch);
+        require!(invoice.status != InvoiceStatus::Disputed, ErrorCode::InvoiceDisputed);
 
+        // Dual approval check: must have request + either approval or timeout
+        require!(invoice.completion_requested_at.is_some(), ErrorCode::NoReleaseRequested);
+        let requested_at = invoice.completion_requested_at.unwrap();
+        let now = Clock::get()?.unix_timestamp;
+        let timeout_passed = now - requested_at > AUTO_RELEASE_TIMEOUT;
+        require!(
+            invoice.client_approved || timeout_passed,
+            ErrorCode::AwaitingClientApproval
+        );
+
+        // Enforce installment schedule if set
         if !invoice.release_schedule.is_empty() {
             let idx = invoice.current_release_index as usize;
             require!(idx < invoice.release_schedule.len(), ErrorCode::AllInstallmentsReleased);
@@ -231,13 +418,20 @@ pub mod workspace {
         let invoice = &mut ctx.accounts.invoice;
         let new_amount_released = invoice.amount_released.checked_add(release_amount).ok_or(ErrorCode::MathOverflow)?;
         invoice.amount_released = new_amount_released;
+
         if !invoice.release_schedule.is_empty() {
             invoice.current_release_index = invoice.current_release_index.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
         }
 
+        // Reset approval state for next installment
+        invoice.completion_requested_at = None;
+        invoice.client_approved = false;
+
         if new_amount_released == invoice.amount_paid && invoice.amount_paid == invoice.amount {
             invoice.status = InvoiceStatus::Released;
             invoice.released_at = Some(Clock::get()?.unix_timestamp);
+
+            // Close escrow account and return rent to creator
             let creator_key = ctx.accounts.creator.key();
             let invoice_id_bytes = ctx.accounts.invoice.invoice_id.as_bytes();
             let escrow_bump = ctx.accounts.invoice.escrow_bump;
@@ -255,7 +449,15 @@ pub mod workspace {
         Ok(())
     }
 
-    pub fn release_funds_sol(ctx: Context<ReleaseFundsSol>, invoice_id: String, release_amount: u64) -> Result<()> {
+    // ----------------------------------------------------------
+    // RELEASE FUNDS — SOL
+    // Same dual approval logic as USDC version
+    // ----------------------------------------------------------
+    pub fn release_funds_sol(
+        ctx: Context<ReleaseFundsSol>,
+        invoice_id: String,
+        release_amount: u64,
+    ) -> Result<()> {
         let invoice = &ctx.accounts.invoice;
         require!(release_amount > 0, ErrorCode::InvalidReleaseAmount);
         require!(invoice.creator == ctx.accounts.creator.key(), ErrorCode::Unauthorized);
@@ -265,7 +467,16 @@ pub mod workspace {
             ErrorCode::InvoiceNotReleasable
         );
         require!(invoice.token_type == TokenType::SOL, ErrorCode::TokenTypeMismatch);
+        require!(invoice.status != InvoiceStatus::Disputed, ErrorCode::InvoiceDisputed);
 
+        // Dual approval check
+        require!(invoice.completion_requested_at.is_some(), ErrorCode::NoReleaseRequested);
+        let requested_at = invoice.completion_requested_at.unwrap();
+        let now = Clock::get()?.unix_timestamp;
+        let timeout_passed = now - requested_at > AUTO_RELEASE_TIMEOUT;
+        require!(invoice.client_approved || timeout_passed, ErrorCode::AwaitingClientApproval);
+
+        // Enforce installment schedule if set
         if !invoice.release_schedule.is_empty() {
             let idx = invoice.current_release_index as usize;
             require!(idx < invoice.release_schedule.len(), ErrorCode::AllInstallmentsReleased);
@@ -305,13 +516,109 @@ pub mod workspace {
         if !invoice.release_schedule.is_empty() {
             invoice.current_release_index = invoice.current_release_index.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
         }
+        invoice.completion_requested_at = None;
+        invoice.client_approved = false;
+
         if is_final_release {
             invoice.status = InvoiceStatus::Released;
             invoice.released_at = Some(Clock::get()?.unix_timestamp);
         }
         Ok(())
     }
+
+    // ----------------------------------------------------------
+    // RESOLVE DISPUTE (KENNY ONLY)
+    // Kenny splits funds manually after reviewing evidence
+    // creator_bps + client_bps must equal 10000
+    // Only remaining unreleased installments are split
+    // ----------------------------------------------------------
+    pub fn resolve_dispute(
+        ctx: Context<ResolveDispute>,
+        invoice_id: String,
+        creator_bps: u16,
+        client_bps: u16,
+    ) -> Result<()> {
+        let invoice = &ctx.accounts.invoice;
+        require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
+        require!(invoice.status == InvoiceStatus::Disputed, ErrorCode::NotDisputed);
+        require!(ctx.accounts.kenny.key() == PLATFORM_TREASURY, ErrorCode::Unauthorized);
+        // Validate client token account belongs to the client who paid
+        if let Some(client_key) = invoice.client {
+            require!(ctx.accounts.client_token.owner == client_key, ErrorCode::InvalidOwner);
+        }
+        require!(creator_bps as u32 + client_bps as u32 == 10000, ErrorCode::InvalidSplit);
+        require!(invoice.token_type == TokenType::USDC, ErrorCode::TokenTypeMismatch);
+
+        // Funds available for split = amount_paid - amount_released
+        let splittable = invoice.amount_paid
+            .checked_sub(invoice.amount_released)
+            .ok_or(ErrorCode::MathOverflow)?;
+        require!(splittable > 0, ErrorCode::NoFundsToSplit);
+
+        let creator_share = splittable
+            .checked_mul(creator_bps as u64).ok_or(ErrorCode::MathOverflow)?
+            .checked_div(10000).ok_or(ErrorCode::MathOverflow)?;
+        let client_share = splittable
+            .checked_sub(creator_share).ok_or(ErrorCode::MathOverflow)?; // Remainder goes to client
+
+        let creator_key = ctx.accounts.creator.key();
+        let invoice_id_bytes = invoice.invoice_id.as_bytes();
+        let escrow_bump = invoice.escrow_bump;
+        let bump_arr = [escrow_bump];
+        let seeds = &[b"escrow", invoice_id_bytes, creator_key.as_ref(), &bump_arr];
+        let signer_seeds: &[&[&[u8]]] = &[seeds];
+
+        // Transfer creator's share
+        if creator_share > 0 {
+            token::transfer(
+                CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), Transfer {
+                    from: ctx.accounts.escrow.to_account_info(),
+                    to: ctx.accounts.creator_token.to_account_info(),
+                    authority: ctx.accounts.escrow.to_account_info(),
+                }, signer_seeds),
+                creator_share,
+            )?;
+        }
+
+        // Transfer client's share
+        if client_share > 0 {
+            token::transfer(
+                CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), Transfer {
+                    from: ctx.accounts.escrow.to_account_info(),
+                    to: ctx.accounts.client_token.to_account_info(),
+                    authority: ctx.accounts.escrow.to_account_info(),
+                }, signer_seeds),
+                client_share,
+            )?;
+        }
+
+        let invoice = &mut ctx.accounts.invoice;
+        invoice.amount_released = invoice.amount_released.checked_add(creator_share).ok_or(ErrorCode::MathOverflow)?;
+        invoice.status = InvoiceStatus::Released;
+        invoice.released_at = Some(Clock::get()?.unix_timestamp);
+
+        // Close escrow
+        let creator_key = ctx.accounts.creator.key();
+        let invoice_id_bytes = ctx.accounts.invoice.invoice_id.as_bytes();
+        let escrow_bump = ctx.accounts.invoice.escrow_bump;
+        let bump_arr = [escrow_bump];
+        let seeds = &[b"escrow", invoice_id_bytes, creator_key.as_ref(), &bump_arr];
+        let signer_seeds: &[&[&[u8]]] = &[seeds];
+        token::close_account(
+            CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), CloseAccount {
+                account: ctx.accounts.escrow.to_account_info(),
+                destination: ctx.accounts.creator.to_account_info(),
+                authority: ctx.accounts.escrow.to_account_info(),
+            }, signer_seeds),
+        )?;
+
+        Ok(())
+    }
 }
+
+// ============================================================
+// ACCOUNT CONTEXTS
+// ============================================================
 
 #[derive(Accounts)]
 #[instruction(invoice_id: String)]
@@ -357,9 +664,10 @@ pub struct PayInvoice<'info> {
 pub struct PayInvoiceSol<'info> {
     #[account(mut, seeds = [b"invoice", invoice_id.as_bytes(), invoice.creator.as_ref()], bump = invoice.bump)]
     pub invoice: Account<'info, Invoice>,
-    /// CHECK: Platform treasury for SOL fees
+    /// CHECK: Platform treasury — validated by constraint
     #[account(mut, constraint = platform_treasury.key() == PLATFORM_TREASURY @ ErrorCode::InvalidTreasury)]
     pub platform_treasury: AccountInfo<'info>,
+
     #[account(mut)] pub client: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -367,6 +675,30 @@ pub struct PayInvoiceSol<'info> {
 #[derive(Accounts)]
 #[instruction(invoice_id: String)]
 pub struct SetReleaseSchedule<'info> {
+    #[account(mut, seeds = [b"invoice", invoice_id.as_bytes(), invoice.creator.as_ref()], bump = invoice.bump)]
+    pub invoice: Account<'info, Invoice>,
+    #[account(mut)] pub client: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(invoice_id: String)]
+pub struct RequestRelease<'info> {
+    #[account(mut, seeds = [b"invoice", invoice_id.as_bytes(), creator.key().as_ref()], bump = invoice.bump, constraint = invoice.creator == creator.key() @ ErrorCode::Unauthorized)]
+    pub invoice: Account<'info, Invoice>,
+    #[account(mut)] pub creator: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(invoice_id: String)]
+pub struct ApproveRelease<'info> {
+    #[account(mut, seeds = [b"invoice", invoice_id.as_bytes(), invoice.creator.as_ref()], bump = invoice.bump)]
+    pub invoice: Account<'info, Invoice>,
+    #[account(mut)] pub client: Signer<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(invoice_id: String)]
+pub struct RaiseDispute<'info> {
     #[account(mut, seeds = [b"invoice", invoice_id.as_bytes(), invoice.creator.as_ref()], bump = invoice.bump)]
     pub invoice: Account<'info, Invoice>,
     #[account(mut)] pub client: Signer<'info>,
@@ -397,46 +729,110 @@ pub struct ReleaseFundsSol<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(invoice_id: String)]
+pub struct ResolveDispute<'info> {
+    #[account(mut, seeds = [b"invoice", invoice_id.as_bytes(), invoice.creator.as_ref()], bump = invoice.bump)]
+    pub invoice: Account<'info, Invoice>,
+    #[account(mut, seeds = [b"escrow", invoice_id.as_bytes(), invoice.creator.as_ref()], bump = invoice.escrow_bump)]
+    pub escrow: Account<'info, TokenAccount>,
+    #[account(init_if_needed, payer = kenny, associated_token::mint = usdc_mint, associated_token::authority = creator)]
+    pub creator_token: Account<'info, TokenAccount>,
+    /// Client token account — validated in instruction body
+    #[account(mut)]
+    pub client_token: Account<'info, TokenAccount>,
+    pub usdc_mint: Account<'info, Mint>,
+    /// CHECK: Creator account for token association
+    pub creator: AccountInfo<'info>,
+    /// Kenny's wallet — must match PLATFORM_TREASURY
+    #[account(mut, constraint = kenny.key() == PLATFORM_TREASURY @ ErrorCode::Unauthorized)]
+    pub kenny: Signer<'info>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+// ============================================================
+// INVOICE ACCOUNT
+// ============================================================
+
 #[account]
 pub struct Invoice {
     pub bump: u8,
     pub escrow_bump: u8,
-    pub invoice_id: String,
+    pub invoice_id: String,               // max 32
     pub creator: Pubkey,
     pub client: Option<Pubkey>,
     pub amount: u64,
     pub amount_paid: u64,
     pub amount_released: u64,
     pub token_type: TokenType,
-    pub description: String,
-    pub client_email: String,
+    pub description: String,              // max 256
+    pub client_email: String,             // max 128
     pub status: InvoiceStatus,
     pub created_at: i64,
     pub paid_at: Option<i64>,
     pub released_at: Option<i64>,
-    pub release_schedule: Vec<u16>,
+    // Release schedule
+    pub release_schedule: Vec<u16>,       // basis points, sums to 10000
     pub current_release_index: u8,
+    // Dual approval
+    pub completion_requested_at: Option<i64>,
+    pub client_approved: bool,
+    // Dispute
+    pub dispute_raised_at: Option<i64>,
 }
 
 impl Invoice {
     pub const LEN: usize =
-        1 + 1 + (4 + 32) + 32 + (1 + 32) + 8 + 8 + 8 + 1 +
-        (4 + 256) + (4 + 128) + 1 + 8 + (1 + 8) + (1 + 8) +
-        (4 + MAX_INSTALLMENTS * 2) + 1;
+        1 +           // bump
+        1 +           // escrow_bump
+        (4 + 32) +    // invoice_id String
+        32 +          // creator Pubkey
+        (1 + 32) +    // client Option<Pubkey>
+        8 +           // amount
+        8 +           // amount_paid
+        8 +           // amount_released
+        1 +           // token_type
+        (4 + 256) +   // description String
+        (4 + 128) +   // client_email String
+        1 +           // status
+        8 +           // created_at
+        (1 + 8) +     // paid_at Option<i64>
+        (1 + 8) +     // released_at Option<i64>
+        (4 + MAX_INSTALLMENTS * 2) + // release_schedule Vec<u16>
+        1 +           // current_release_index
+        (1 + 8) +     // completion_requested_at Option<i64>
+        1 +           // client_approved bool
+        (1 + 8);      // dispute_raised_at Option<i64>
 }
+
+// ============================================================
+// ENUMS
+// ============================================================
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum TokenType { USDC = 0, SOL = 1 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
-pub enum InvoiceStatus { Unpaid = 0, PartiallyPaid = 1, FullyPaid = 2, Released = 3 }
+pub enum InvoiceStatus {
+    Unpaid = 0,
+    PartiallyPaid = 1,
+    FullyPaid = 2,
+    Released = 3,
+    Disputed = 4,
+}
+
+// ============================================================
+// ERRORS
+// ============================================================
 
 #[error_code]
 pub enum ErrorCode {
     #[msg("Invalid amount")] InvalidAmount,
-    #[msg("Description too long")] DescriptionTooLong,
-    #[msg("Email too long")] EmailTooLong,
-    #[msg("Invoice ID too long")] InvoiceIdTooLong,
+    #[msg("Description too long — max 256 chars")] DescriptionTooLong,
+    #[msg("Email too long — max 128 chars")] EmailTooLong,
+    #[msg("Invoice ID too long — max 32 chars")] InvoiceIdTooLong,
     #[msg("Invoice is not payable")] InvoiceNotPayable,
     #[msg("Invoice is not releasable")] InvoiceNotReleasable,
     #[msg("Invoice must be fully paid before setting release schedule")] InvoiceNotFullyPaid,
@@ -447,14 +843,24 @@ pub enum ErrorCode {
     #[msg("Invalid treasury")] InvalidTreasury,
     #[msg("Math overflow")] MathOverflow,
     #[msg("Invalid payment amount")] InvalidPaymentAmount,
+    #[msg("Invalid fee amount — must be greater than 0")] InvalidFeeAmount,
     #[msg("Payment exceeds remaining invoice amount")] PaymentExceedsRemaining,
     #[msg("Invalid release amount")] InvalidReleaseAmount,
     #[msg("Release amount exceeds available funds")] ReleaseExceedsAvailable,
     #[msg("Token type mismatch")] TokenTypeMismatch,
-    #[msg("Invalid schedule")] InvalidSchedule,
+    #[msg("Invalid release schedule")] InvalidSchedule,
     #[msg("Release schedule must sum to exactly 100%")] ScheduleMustSumTo100,
     #[msg("Release schedule already set")] ScheduleAlreadySet,
-    #[msg("Too many installments - max 10")] TooManyInstallments,
-    #[msg("All installments have been released")] AllInstallmentsReleased,
-    #[msg("Release amount must match current installment")] InvalidInstallmentAmount,
+    #[msg("Too many installments — max 10")] TooManyInstallments,
+    #[msg("All installments have already been released")] AllInstallmentsReleased,
+    #[msg("Release amount must match the current installment amount")] InvalidInstallmentAmount,
+    #[msg("No release request pending — creator must request release first")] NoReleaseRequested,
+    #[msg("Release request already pending")] ReleaseAlreadyRequested,
+    #[msg("Awaiting client approval or 7-day timeout")] AwaitingClientApproval,
+    #[msg("Invoice is disputed — funds are frozen")] InvoiceDisputed,
+    #[msg("Invoice is not in disputed state")] NotDisputed,
+    #[msg("Already disputed")] AlreadyDisputed,
+    #[msg("Dispute window has expired")] DisputeWindowExpired,
+    #[msg("creator_bps + client_bps must equal 10000")] InvalidSplit,
+    #[msg("No funds available to split")] NoFundsToSplit,
 }

@@ -3,7 +3,12 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import {
+  PhantomWalletAdapter,
+  SolflareWalletAdapter,
+  BackpackWalletAdapter,
+  CoinbaseWalletAdapter,
+} from '@solana/wallet-adapter-wallets';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { clusterApiUrl } from '@solana/web3.js';
 import NotFound from './pages/NotFound';
@@ -17,32 +22,37 @@ import { NotificationProvider } from './components/NotificationProvider';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 const App = () => {
-    // Using Solana Devnet for testing
-    const endpoint = useMemo(() => 'https://api.devnet.solana.com', []);
+  const endpoint = useMemo(() => clusterApiUrl(WalletAdapterNetwork.Devnet), []);
 
-    const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
+  // All major Solana wallets — auto-detect any connected wallet
+  const wallets = useMemo(() => [
+    new PhantomWalletAdapter(),
+    new SolflareWalletAdapter(),
+    new BackpackWalletAdapter(),
+    new CoinbaseWalletAdapter(),
+  ], []);
 
-    return (
-        <ConnectionProvider endpoint={endpoint}>
-            <WalletProvider wallets={wallets} autoConnect>
-                <WalletModalProvider>
-                    <NotificationProvider>
-                    <Routes>
-                        <Route path="/" element={<Index />} />
-                        <Route path="/create" element={<CreateInvoicePage />} />
-                        <Route path="/pay/:invoiceId/:creator" element={<PaymentPage />} />
-                        <Route path="/invoice/:invoiceId/:creator" element={<PaymentPage />} />
-                        <Route path="/invoice/:invoiceId" element={<InvalidInvoicePage />} />
-                        <Route path="/pay/:invoiceId" element={<InvalidInvoicePage />} />
-                        <Route path="/dashboard" element={<DashboardPage />} />
-                        <Route path="*" element={<NotFound />} />
-                    </Routes>
-                    <Toaster />
-                    </NotificationProvider>
-                </WalletModalProvider>
-            </WalletProvider>
-        </ConnectionProvider>
-    );
+  return (
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>
+          <NotificationProvider>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/create" element={<CreateInvoicePage />} />
+              <Route path="/pay/:invoiceId/:creator" element={<PaymentPage />} />
+              <Route path="/invoice/:invoiceId/:creator" element={<PaymentPage />} />
+              <Route path="/invoice/:invoiceId" element={<InvalidInvoicePage />} />
+              <Route path="/pay/:invoiceId" element={<InvalidInvoicePage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+            <Toaster />
+          </NotificationProvider>
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
+  );
 };
 
 export default App;

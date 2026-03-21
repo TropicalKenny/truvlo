@@ -4,9 +4,64 @@
     "name": "workspace",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Created with Anchor"
+    "description": "Truvlo escrow smart contract"
   },
   "instructions": [
+    {
+      "name": "approve_release",
+      "discriminator": [
+        110,
+        173,
+        58,
+        175,
+        146,
+        128,
+        138,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "invoice",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "invoice_id"
+              },
+              {
+                "kind": "account",
+                "path": "invoice.creator",
+                "account": "Invoice"
+              }
+            ]
+          }
+        },
+        {
+          "name": "client",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_id",
+          "type": "string"
+        }
+      ]
+    },
     {
       "name": "initialize_config",
       "discriminator": [
@@ -351,6 +406,65 @@
         {
           "name": "payment_amount",
           "type": "u64"
+        },
+        {
+          "name": "fee_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "raise_dispute",
+      "discriminator": [
+        41,
+        243,
+        1,
+        51,
+        150,
+        95,
+        246,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "invoice",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "invoice_id"
+              },
+              {
+                "kind": "account",
+                "path": "invoice.creator",
+                "account": "Invoice"
+              }
+            ]
+          }
+        },
+        {
+          "name": "client",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_id",
+          "type": "string"
         }
       ]
     },
@@ -607,6 +721,269 @@
       ]
     },
     {
+      "name": "request_release",
+      "discriminator": [
+        167,
+        218,
+        122,
+        2,
+        163,
+        231,
+        150,
+        7
+      ],
+      "accounts": [
+        {
+          "name": "invoice",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "invoice_id"
+              },
+              {
+                "kind": "account",
+                "path": "creator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_id",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "resolve_dispute",
+      "discriminator": [
+        231,
+        6,
+        202,
+        6,
+        96,
+        103,
+        12,
+        230
+      ],
+      "accounts": [
+        {
+          "name": "invoice",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "invoice_id"
+              },
+              {
+                "kind": "account",
+                "path": "invoice.creator",
+                "account": "Invoice"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "invoice_id"
+              },
+              {
+                "kind": "account",
+                "path": "invoice.creator",
+                "account": "Invoice"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator_token",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "creator"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "usdc_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "client_token",
+          "docs": [
+            "Client token account — validated in instruction body"
+          ],
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "creator"
+        },
+        {
+          "name": "kenny",
+          "docs": [
+            "Kenny's wallet — must match PLATFORM_TREASURY"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_id",
+          "type": "string"
+        },
+        {
+          "name": "creator_bps",
+          "type": "u16"
+        },
+        {
+          "name": "client_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
       "name": "set_release_schedule",
       "discriminator": [
         159,
@@ -692,17 +1069,17 @@
     {
       "code": 6001,
       "name": "DescriptionTooLong",
-      "msg": "Description too long"
+      "msg": "Description too long — max 256 chars"
     },
     {
       "code": 6002,
       "name": "EmailTooLong",
-      "msg": "Email too long"
+      "msg": "Email too long — max 128 chars"
     },
     {
       "code": 6003,
       "name": "InvoiceIdTooLong",
-      "msg": "Invoice ID too long"
+      "msg": "Invoice ID too long — max 32 chars"
     },
     {
       "code": 6004,
@@ -756,53 +1133,103 @@
     },
     {
       "code": 6014,
+      "name": "InvalidFeeAmount",
+      "msg": "Invalid fee amount — must be greater than 0"
+    },
+    {
+      "code": 6015,
       "name": "PaymentExceedsRemaining",
       "msg": "Payment exceeds remaining invoice amount"
     },
     {
-      "code": 6015,
+      "code": 6016,
       "name": "InvalidReleaseAmount",
       "msg": "Invalid release amount"
     },
     {
-      "code": 6016,
+      "code": 6017,
       "name": "ReleaseExceedsAvailable",
       "msg": "Release amount exceeds available funds"
     },
     {
-      "code": 6017,
+      "code": 6018,
       "name": "TokenTypeMismatch",
       "msg": "Token type mismatch"
     },
     {
-      "code": 6018,
+      "code": 6019,
       "name": "InvalidSchedule",
-      "msg": "Invalid schedule"
+      "msg": "Invalid release schedule"
     },
     {
-      "code": 6019,
+      "code": 6020,
       "name": "ScheduleMustSumTo100",
       "msg": "Release schedule must sum to exactly 100%"
     },
     {
-      "code": 6020,
+      "code": 6021,
       "name": "ScheduleAlreadySet",
       "msg": "Release schedule already set"
     },
     {
-      "code": 6021,
-      "name": "TooManyInstallments",
-      "msg": "Too many installments - max 10"
-    },
-    {
       "code": 6022,
-      "name": "AllInstallmentsReleased",
-      "msg": "All installments have been released"
+      "name": "TooManyInstallments",
+      "msg": "Too many installments — max 10"
     },
     {
       "code": 6023,
+      "name": "AllInstallmentsReleased",
+      "msg": "All installments have already been released"
+    },
+    {
+      "code": 6024,
       "name": "InvalidInstallmentAmount",
-      "msg": "Release amount must match current installment"
+      "msg": "Release amount must match the current installment amount"
+    },
+    {
+      "code": 6025,
+      "name": "NoReleaseRequested",
+      "msg": "No release request pending — creator must request release first"
+    },
+    {
+      "code": 6026,
+      "name": "ReleaseAlreadyRequested",
+      "msg": "Release request already pending"
+    },
+    {
+      "code": 6027,
+      "name": "AwaitingClientApproval",
+      "msg": "Awaiting client approval or 7-day timeout"
+    },
+    {
+      "code": 6028,
+      "name": "InvoiceDisputed",
+      "msg": "Invoice is disputed — funds are frozen"
+    },
+    {
+      "code": 6029,
+      "name": "NotDisputed",
+      "msg": "Invoice is not in disputed state"
+    },
+    {
+      "code": 6030,
+      "name": "AlreadyDisputed",
+      "msg": "Already disputed"
+    },
+    {
+      "code": 6031,
+      "name": "DisputeWindowExpired",
+      "msg": "Dispute window has expired"
+    },
+    {
+      "code": 6032,
+      "name": "InvalidSplit",
+      "msg": "creator_bps + client_bps must equal 10000"
+    },
+    {
+      "code": 6033,
+      "name": "NoFundsToSplit",
+      "msg": "No funds available to split"
     }
   ],
   "types": [
@@ -894,6 +1321,22 @@
           {
             "name": "current_release_index",
             "type": "u8"
+          },
+          {
+            "name": "completion_requested_at",
+            "type": {
+              "option": "i64"
+            }
+          },
+          {
+            "name": "client_approved",
+            "type": "bool"
+          },
+          {
+            "name": "dispute_raised_at",
+            "type": {
+              "option": "i64"
+            }
           }
         ]
       }
@@ -914,6 +1357,9 @@
           },
           {
             "name": "Released"
+          },
+          {
+            "name": "Disputed"
           }
         ]
       }

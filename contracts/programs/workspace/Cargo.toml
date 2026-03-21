@@ -1,7 +1,7 @@
 [package]
 name = "workspace"
 version = "0.1.0"
-description = "Created with Anchor"
+description = "Truvlo escrow smart contract"
 edition = "2021"
 
 [lib]
@@ -9,17 +9,16 @@ crate-type = ["cdylib", "lib"]
 name = "workspace"
 
 [features]
-default = []
-cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build","anchor-spl/idl-build"]
-
-[lints.rust]
-unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("custom-heap", "custom-panic", "anchor-debug"))'] }
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 
 [dependencies]
-anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
-anchor-spl = "0.31.1"
-mpl-token-metadata = "5"
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.32.1", features = ["associated_token"] }
+
+[dev-dependencies]
+anchor-client = "0.32.1"

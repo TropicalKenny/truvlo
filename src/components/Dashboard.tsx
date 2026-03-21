@@ -4,8 +4,8 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import {
-  Plus, FileText, Clock, Check, ArrowUpRight,
-  Loader2, Copy, RefreshCw, Bell, AlertTriangle, SendHorizonal
+  Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
+  RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp, ArrowDownLeft
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,7 +23,6 @@ interface InvoiceWithKey {
   account: InvoiceData;
 }
 
-// Format seconds remaining into human-readable countdown
 function formatCountdown(seconds: number): string {
   if (seconds <= 0) return 'Auto-releasing soon';
   const days = Math.floor(seconds / 86400);
@@ -38,26 +37,29 @@ const Dashboard: React.FC = () => {
   const { connection } = useConnection();
   const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
   const { toast } = useToast();
-  const { notifications, unreadCount, addNotification, markAllAsRead } = useNotifications();
+  const { unreadCount, addNotification, markAllAsRead } = useNotifications();
 
-  const [invoices, setInvoices] = useState<InvoiceWithKey[]>([]);
+  // Separate invoice lists for each role
+  const [sentInvoices, setSentInvoices] = useState<InvoiceWithKey[]>([]);
+  const [receivedInvoices, setReceivedInvoices] = useState<InvoiceWithKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [releasing, setReleasing] = useState<string | null>(null);
   const [requesting, setRequesting] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('all');
+  const [approving, setApproving] = useState<string | null>(null);
+  const [disputing, setDisputing] = useState<string | null>(null);
+
+  const [roleTab, setRoleTab] = useState<'sent' | 'received'>('sent');
+  const [sentFilter, setSentFilter] = useState('all');
+  const [receivedFilter, setReceivedFilter] = useState('all');
   const [notifOpen, setNotifOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
 
   const [releaseModal, setReleaseModal] = useState<{
-    open: boolean;
-    invoiceId: string;
-    amount: string;
-    tokenType: TokenType;
-    releaseableAmount: number;
+    open: boolean; invoiceId: string; amount: string;
+    tokenType: TokenType; releaseableAmount: number;
   } | null>(null);
 
-  // Tick every minute to update countdowns
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
     return () => clearInterval(interval);
@@ -80,37 +82,34 @@ const Dashboard: React.FC = () => {
     return instance;
   }, [connection, publicKey, signTransaction, signAllTransactions]);
 
-  const fetchInvoices = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     if (!sdk || !connected || !sdk.isInitialized()) {
-      setInvoices([]);
-      setLoading(false);
-      return;
+      setSentInvoices([]); setReceivedInvoices([]); setLoading(false); return;
     }
     setLoading(true);
     try {
-      const result = await sdk.fetchInvoicesByCreator();
-      if (result.success && result.data) {
-        const sorted = result.data.sort((a, b) => {
-          const aTime = a.account.createdAt.toNumber ? a.account.createdAt.toNumber() : 0;
-          const bTime = b.account.createdAt.toNumber ? b.account.createdAt.toNumber() : 0;
-          return bTime - aTime;
+      const [sentResult, receivedResult] = await Promise.all([
+        sdk.fetchInvoicesByCreator(),
+        sdk.fetchInvoicesByClient(),
+      ]);
+      const sort = (arr: InvoiceWithKey[]) =>
+        arr.sort((a, b) => {
+          const at = a.account.createdAt.toNumber ? a.account.createdAt.toNumber() : 0;
+          const bt = b.account.createdAt.toNumber ? b.account.createdAt.toNumber() : 0;
+          return bt - at;
         });
-        setInvoices(sorted);
-      }
-    } catch {
-      setInvoices([]);
-    } finally {
-      setLoading(false);
-    }
+      if (sentResult.success && sentResult.data) setSentInvoices(sort(sentResult.data));
+      if (receivedResult.success && receivedResult.data) setReceivedInvoices(sort(receivedResult.data));
+    } catch { setSentInvoices([]); setReceivedInvoices([]); }
+    finally { setLoading(false); }
   }, [sdk, connected]);
 
-  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
-
+  useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {
-    const handleFocus = () => fetchInvoices();
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [fetchInvoices]);
+    const h = () => fetchAll();
+    window.addEventListener('focus', h);
+    return () => window.removeEventListener('focus', h);
+  }, [fetchAll]);
 
   // ============================================================
   // HELPERS
@@ -128,9 +127,7 @@ const Dashboard: React.FC = () => {
     const symbol = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
     const decimals = tokenType === TokenType.USDC ? 2 : 4;
     const value = typeof amount === 'number' ? amount : fromSmallestUnit(amount, tokenType);
-    // Smart formatting — strip trailing zeros
-    const formatted = parseFloat(value.toFixed(decimals));
-    return `${formatted.toLocaleString('en-US', { maximumFractionDigits: decimals })} ${symbol}`;
+    return `${parseFloat(value.toFixed(decimals)).toLocaleString('en-US', { maximumFractionDigits: decimals })} ${symbol}`;
   };
 
   const formatDate = (timestamp: any): string => {
@@ -153,48 +150,54 @@ const Dashboard: React.FC = () => {
     return Math.max(0, paid - released);
   };
 
-  const getAutoReleaseSecondsRemaining = (invoice: InvoiceData): number => {
-    if (!invoice.completionRequestedAt) return -1;
-    const requestedAt = invoice.completionRequestedAt.toNumber
-      ? invoice.completionRequestedAt.toNumber()
-      : Number(invoice.completionRequestedAt);
-    const elapsed = now - requestedAt;
-    return Math.max(0, 7 * 24 * 60 * 60 - elapsed);
+  const getSecondsRemaining = (inv: InvoiceData): number => {
+    if (!inv.completionRequestedAt) return -1;
+    const req = inv.completionRequestedAt.toNumber ? inv.completionRequestedAt.toNumber() : Number(inv.completionRequestedAt);
+    return Math.max(0, 7 * 24 * 60 * 60 - (now - req));
   };
 
-  const isReleaseReady = (invoice: InvoiceData): boolean => {
-    if (invoice.clientApproved) return true;
-    if (!invoice.completionRequestedAt) return false;
-    return getAutoReleaseSecondsRemaining(invoice) === 0;
-  };
+  const isReleaseReady = (inv: InvoiceData) =>
+    inv.clientApproved || (!!inv.completionRequestedAt && getSecondsRemaining(inv) === 0);
 
   // ============================================================
-  // ACTIONS
+  // ACTIONS — CREATOR (SENT)
   // ============================================================
 
   const handleRequestRelease = async (inv: InvoiceData) => {
-    if (!sdk) return;
+    if (!sdk || !publicKey) return;
     setRequesting(inv.invoiceId);
     try {
       const result = await sdk.requestRelease(inv.invoiceId, inv.tokenType);
       if (result.success) {
-        toast({ title: 'Release requested' });
+        // Send email notification to client
+        try {
+          await fetch('/api/notify-client', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              invoiceId: inv.invoiceId,
+              clientEmail: inv.clientEmail,
+              creatorWallet: publicKey.toBase58(),
+              amount: formatAmount(inv.amountPaid, inv.tokenType),
+              invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey.toBase58()}`,
+            }),
+          });
+        } catch { /* email failure is non-blocking */ }
+
+        toast({ title: 'Release requested', description: 'Client has been notified by email.' });
         addNotification({
           type: 'info',
           title: 'Release Requested',
-          message: `7-day approval window started for ${inv.invoiceId}. Client has been notified.`,
+          message: `7-day window started for ${inv.invoiceId}. Email sent to ${inv.clientEmail}.`,
         });
-        await fetchInvoices();
+        await fetchAll();
       } else {
-        const msg = typeof result.error === 'string' ? result.error : 'Request failed';
-        toast({ title: 'Request failed', description: msg, variant: 'destructive' });
+        toast({ title: 'Request failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
     } catch (error: unknown) {
       const msg = error instanceof Error && error.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.';
       toast({ title: 'Request failed', description: msg, variant: 'destructive' });
-    } finally {
-      setRequesting(null);
-    }
+    } finally { setRequesting(null); }
   };
 
   const openReleaseModal = (invoice: InvoiceData) => {
@@ -208,13 +211,7 @@ const Dashboard: React.FC = () => {
       installmentAmount = parseFloat((fromSmallestUnit(invoice.amountPaid, invoice.tokenType) * bps / 10000).toFixed(invoice.tokenType === TokenType.USDC ? 6 : 9));
       installmentLabel = `Installment ${idx + 1} of ${schedule.length} (${bps / 100}%)`;
     }
-    setReleaseModal({
-      open: true,
-      invoiceId: invoice.invoiceId,
-      amount: installmentLabel || formatAmount(invoice.amountPaid, invoice.tokenType),
-      tokenType: invoice.tokenType,
-      releaseableAmount: installmentAmount,
-    });
+    setReleaseModal({ open: true, invoiceId: invoice.invoiceId, amount: installmentLabel || formatAmount(invoice.amountPaid, invoice.tokenType), tokenType: invoice.tokenType, releaseableAmount: installmentAmount });
   };
 
   const handleReleaseFunds = async () => {
@@ -223,76 +220,113 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.releaseFunds(releaseModal.invoiceId, releaseModal.releaseableAmount, releaseModal.tokenType);
       if (result.success) {
-        toast({ title: 'Funds released' });
+        toast({ title: 'Funds released to wallet' });
         const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
         const decimals = releaseModal.tokenType === TokenType.USDC ? 2 : 4;
-        const displayAmount = `${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol}`;
         addNotification({
           type: 'success',
           title: 'Funds Released',
-          message: `Released ${displayAmount} from ${releaseModal.invoiceId}`,
+          message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}`,
         });
-        await fetchInvoices();
+        await fetchAll();
       } else {
-        const errorMsg = typeof result.error === 'string' ? result.error : 'Release failed';
-        toast({ title: 'Release failed', description: errorMsg, variant: 'destructive' });
+        toast({ title: 'Release failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
     } catch (error: unknown) {
-      const msg = error instanceof Error && error.message.includes('rejected') ? 'Transaction cancelled.' : 'Transaction failed.';
-      toast({ title: 'Release failed', description: msg, variant: 'destructive' });
-    } finally {
-      setReleasing(null);
-      setReleaseModal(null);
-    }
+      toast({ title: 'Release failed', description: error instanceof Error && error.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
+    } finally { setReleasing(null); setReleaseModal(null); }
   };
 
-  const handleCopyLink = async (invoiceId: string) => {
-    const url = `${window.location.origin}/invoice/${invoiceId}/${publicKey?.toBase58()}`;
+  const handleCopyLink = async (invoiceId: string, creatorKey?: string) => {
+    const creator = creatorKey || publicKey?.toBase58();
+    const url = `${window.location.origin}/invoice/${invoiceId}/${creator}`;
     try {
       await navigator.clipboard.writeText(url);
       toast({ title: 'Link copied' });
-    } catch {
-      toast({ title: 'Failed to copy', variant: 'destructive' });
-    }
+    } catch { toast({ title: 'Failed to copy', variant: 'destructive' }); }
+  };
+
+  // ============================================================
+  // ACTIONS — CLIENT (RECEIVED)
+  // ============================================================
+
+  const handleApprove = async (inv: InvoiceData) => {
+    if (!sdk) return;
+    setApproving(inv.invoiceId);
+    try {
+      const result = await sdk.approveRelease(inv.invoiceId, inv.creator);
+      if (result.success) {
+        toast({ title: 'Release approved', description: 'The creator can now withdraw the funds.' });
+        addNotification({ type: 'success', title: 'Release Approved', message: `You approved release for ${inv.invoiceId}.` });
+        await fetchAll();
+      } else {
+        toast({ title: 'Approval failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
+      }
+    } catch (error: unknown) {
+      toast({ title: 'Approval failed', description: error instanceof Error && error.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
+    } finally { setApproving(null); }
+  };
+
+  const handleDispute = async (inv: InvoiceData) => {
+    if (!sdk) return;
+    setDisputing(inv.invoiceId);
+    try {
+      const result = await sdk.raiseDispute(inv.invoiceId, inv.creator);
+      if (result.success) {
+        toast({ title: 'Dispute raised', description: 'Funds are frozen. A mediator will review your case.' });
+        addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}. Funds frozen pending review.` });
+        await fetchAll();
+      } else {
+        toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
+      }
+    } catch (error: unknown) {
+      toast({ title: 'Dispute failed', description: error instanceof Error && error.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
+    } finally { setDisputing(null); }
   };
 
   // ============================================================
   // STATS
   // ============================================================
 
-  const stats = {
-    total: invoices.length,
-    unpaid: invoices.filter(i => i.account.status === InvoiceStatus.Unpaid).length,
-    inEscrow: invoices.filter(i =>
-      i.account.status === InvoiceStatus.PartiallyPaid ||
-      i.account.status === InvoiceStatus.FullyPaid ||
-      i.account.status === InvoiceStatus.Disputed
-    ).length,
-    released: invoices.filter(i => i.account.status === InvoiceStatus.Released).length,
-    disputed: invoices.filter(i => i.account.status === InvoiceStatus.Disputed).length,
-    totalReceivedUSDC: invoices.filter(i => i.account.tokenType === TokenType.USDC)
-      .reduce((sum, i) => sum + fromSmallestUnit(i.account.amountPaid, TokenType.USDC), 0),
-    totalReceivedSOL: invoices.filter(i => i.account.tokenType === TokenType.SOL)
-      .reduce((sum, i) => sum + fromSmallestUnit(i.account.amountPaid, TokenType.SOL), 0),
-    inEscrowUSDC: invoices.filter(i =>
-      (i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid || i.account.status === InvoiceStatus.Disputed) &&
-      i.account.tokenType === TokenType.USDC
-    ).reduce((sum, i) => sum + fromSmallestUnit(i.account.amountPaid, TokenType.USDC) - fromSmallestUnit(i.account.amountReleased, TokenType.USDC), 0),
-    inEscrowSOL: invoices.filter(i =>
-      (i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid || i.account.status === InvoiceStatus.Disputed) &&
-      i.account.tokenType === TokenType.SOL
-    ).reduce((sum, i) => sum + fromSmallestUnit(i.account.amountPaid, TokenType.SOL) - fromSmallestUnit(i.account.amountReleased, TokenType.SOL), 0),
-    pendingReleaseUSDC: invoices.filter(i => i.account.status === InvoiceStatus.FullyPaid && i.account.tokenType === TokenType.USDC)
-      .reduce((sum, i) => sum + fromSmallestUnit(i.account.amountPaid, TokenType.USDC) - fromSmallestUnit(i.account.amountReleased, TokenType.USDC), 0),
-    pendingReleaseSOL: invoices.filter(i => i.account.status === InvoiceStatus.FullyPaid && i.account.tokenType === TokenType.SOL)
-      .reduce((sum, i) => sum + fromSmallestUnit(i.account.amountPaid, TokenType.SOL) - fromSmallestUnit(i.account.amountReleased, TokenType.SOL), 0),
+  const sentStats = {
+    total: sentInvoices.length,
+    unpaid: sentInvoices.filter(i => i.account.status === InvoiceStatus.Unpaid).length,
+    inEscrow: sentInvoices.filter(i => i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid || i.account.status === InvoiceStatus.Disputed).length,
+    released: sentInvoices.filter(i => i.account.status === InvoiceStatus.Released).length,
+    disputed: sentInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length,
+    pendingReleaseUSDC: sentInvoices.filter(i => i.account.status === InvoiceStatus.FullyPaid && i.account.tokenType === TokenType.USDC)
+      .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.USDC) - fromSmallestUnit(i.account.amountReleased, TokenType.USDC), 0),
+    pendingReleaseSOL: sentInvoices.filter(i => i.account.status === InvoiceStatus.FullyPaid && i.account.tokenType === TokenType.SOL)
+      .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.SOL) - fromSmallestUnit(i.account.amountReleased, TokenType.SOL), 0),
   };
 
-  const filteredInvoices = activeTab === 'all' ? invoices : invoices.filter(i => {
-    if (activeTab === 'unpaid') return i.account.status === InvoiceStatus.Unpaid;
-    if (activeTab === 'escrow') return i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid;
-    if (activeTab === 'released') return i.account.status === InvoiceStatus.Released;
-    if (activeTab === 'disputed') return i.account.status === InvoiceStatus.Disputed;
+  const receivedStats = {
+    total: receivedInvoices.length,
+    awaitingApproval: receivedInvoices.filter(i => !!i.account.completionRequestedAt && !i.account.clientApproved && i.account.status !== InvoiceStatus.Disputed).length,
+    disputed: receivedInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length,
+    released: receivedInvoices.filter(i => i.account.status === InvoiceStatus.Released).length,
+    totalPaidUSDC: receivedInvoices.filter(i => i.account.tokenType === TokenType.USDC)
+      .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.USDC), 0),
+    totalPaidSOL: receivedInvoices.filter(i => i.account.tokenType === TokenType.SOL)
+      .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.SOL), 0),
+  };
+
+  // Action-needed badge on Received tab
+  const receivedActionCount = receivedStats.awaitingApproval;
+
+  // Filter invoices
+  const filteredSent = sentFilter === 'all' ? sentInvoices : sentInvoices.filter(i => {
+    if (sentFilter === 'unpaid') return i.account.status === InvoiceStatus.Unpaid;
+    if (sentFilter === 'escrow') return i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid;
+    if (sentFilter === 'released') return i.account.status === InvoiceStatus.Released;
+    if (sentFilter === 'disputed') return i.account.status === InvoiceStatus.Disputed;
+    return true;
+  });
+
+  const filteredReceived = receivedFilter === 'all' ? receivedInvoices : receivedInvoices.filter(i => {
+    if (receivedFilter === 'pending') return !!i.account.completionRequestedAt && !i.account.clientApproved;
+    if (receivedFilter === 'disputed') return i.account.status === InvoiceStatus.Disputed;
+    if (receivedFilter === 'released') return i.account.status === InvoiceStatus.Released;
     return true;
   });
 
@@ -301,11 +335,248 @@ const Dashboard: React.FC = () => {
       <Card className="max-w-md mx-auto">
         <CardContent className="py-12 text-center">
           <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Connect your wallet to view invoices.</p>
+          <p className="text-muted-foreground">Connect your wallet to view your dashboard.</p>
         </CardContent>
       </Card>
     );
   }
+
+  // ============================================================
+  // SHARED CARD RENDERER
+  // ============================================================
+
+  const renderSentCard = (invoice: InvoiceWithKey) => {
+    const inv = invoice.account;
+    const total = fromSmallestUnit(inv.amount, inv.tokenType);
+    const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
+    const progressPercent = total > 0 ? (paid / total) * 100 : 0;
+    const releaseable = getReleaseable(inv);
+    const schedule = inv.releaseSchedule ?? [];
+    const scheduleIdx = inv.currentReleaseIndex ?? 0;
+    const hasSchedule = schedule.length > 0;
+    const currentInstallmentBps = hasSchedule && scheduleIdx < schedule.length ? schedule[scheduleIdx] : null;
+    const currentInstallmentAmount = currentInstallmentBps !== null
+      ? parseFloat((paid * currentInstallmentBps / 10000).toFixed(inv.tokenType === TokenType.USDC ? 2 : 4))
+      : releaseable;
+    const isDisputed = inv.status === InvoiceStatus.Disputed;
+    const releaseRequested = !!inv.completionRequestedAt;
+    const releaseReady = isReleaseReady(inv);
+    const secondsLeft = getSecondsRemaining(inv);
+    const canRequest = (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid)
+      && !isDisputed && !releaseRequested && releaseable > 0;
+
+    const borderColor = isDisputed ? 'border-l-amber-500' :
+      inv.status === InvoiceStatus.Unpaid ? 'border-l-orange-400' :
+      inv.status === InvoiceStatus.PartiallyPaid ? 'border-l-blue-400' :
+      inv.status === InvoiceStatus.FullyPaid ? 'border-l-blue-500' : 'border-l-green-400';
+
+    return (
+      <Card key={inv.invoiceId} className={`clean-card border-l-4 ${borderColor}`}>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <span className="font-mono text-xs text-muted-foreground">{inv.invoiceId}</span>
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  isDisputed ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                  inv.status === InvoiceStatus.Unpaid ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                  inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                  'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                }`}>
+                  {isDisputed && <><AlertTriangle className="h-3 w-3" />Disputed</>}
+                  {!isDisputed && inv.status === InvoiceStatus.Unpaid && <><Clock className="h-3 w-3" />Unpaid</>}
+                  {!isDisputed && inv.status === InvoiceStatus.PartiallyPaid && <><Clock className="h-3 w-3" />Partial</>}
+                  {!isDisputed && inv.status === InvoiceStatus.FullyPaid && <><Check className="h-3 w-3" />Paid</>}
+                  {!isDisputed && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Released</>}
+                </span>
+                <Badge className={`text-xs ${inv.tokenType === TokenType.USDC ? 'token-usdc' : 'token-sol'}`}>
+                  {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
+                </Badge>
+              </div>
+              <p className="text-lg font-semibold text-foreground mb-1">{formatAmount(inv.amount, inv.tokenType)}</p>
+              {inv.description && <p className="text-xs font-medium text-foreground mb-0.5 truncate">{inv.description}</p>}
+              <p className="text-xs text-muted-foreground">{inv.clientEmail} • {formatDate(inv.createdAt)}</p>
+              {hasSchedule && !isDisputed && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  Next: {formatAmount(currentInstallmentAmount, inv.tokenType)} ({currentInstallmentBps !== null ? currentInstallmentBps / 100 : 0}%) — installment {scheduleIdx + 1} of {schedule.length}
+                </p>
+              )}
+              {isDisputed && <p className="text-xs text-amber-500 mt-1">Funds frozen — dispute under review</p>}
+              {releaseRequested && !isDisputed && !releaseReady && (
+                <p className="text-xs text-blue-500 mt-1">Release requested · {formatCountdown(secondsLeft)}</p>
+              )}
+              {releaseRequested && !isDisputed && releaseReady && (
+                <p className="text-xs text-green-500 mt-1">
+                  {inv.clientApproved ? 'Client approved — ready to release' : 'Timeout passed — ready to release'}
+                </p>
+              )}
+              {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
+                <div className="mt-2">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>Paid: {formatAmount(inv.amountPaid, inv.tokenType)}</span>
+                    <span>{progressPercent.toFixed(0)}%</span>
+                  </div>
+                  <div className="progress-bar h-1.5">
+                    <div className={`progress-bar-fill h-full ${isDisputed ? 'bg-amber-500' : ''}`} style={{ width: `${progressPercent}%` }} />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 items-end">
+              <Button variant="outline" size="sm" onClick={() => handleCopyLink(inv.invoiceId)}>
+                <Copy className="h-3.5 w-3.5 mr-1" />Copy Link
+              </Button>
+              {canRequest && (
+                <Button size="sm" variant="outline"
+                  className="border-blue-400 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                  onClick={() => handleRequestRelease(inv)} disabled={requesting === inv.invoiceId}>
+                  {requesting === inv.invoiceId
+                    ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Requesting...</>
+                    : <><SendHorizonal className="h-3.5 w-3.5 mr-1" />Request Release</>}
+                </Button>
+              )}
+              {releaseRequested && !isDisputed && releaseReady && releaseable > 0 && (
+                <div className="flex flex-col items-end gap-1">
+                  {hasSchedule && (
+                    <div className="flex items-center gap-1">
+                      {schedule.map((_: number, i: number) => (
+                        <span key={i} className={`w-2 h-2 rounded-full ${i < scheduleIdx ? 'bg-green-400' : i === scheduleIdx ? 'bg-amber-400' : 'bg-muted-foreground/30'}`} />
+                      ))}
+                      <span className="text-xs text-muted-foreground ml-1">{scheduleIdx + 1}/{schedule.length}</span>
+                    </div>
+                  )}
+                  <Button size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                    onClick={() => openReleaseModal(inv)} disabled={releasing === inv.invoiceId}>
+                    <Check className="h-3.5 w-3.5 mr-1" />
+                    {hasSchedule ? `Release ${formatAmount(currentInstallmentAmount, inv.tokenType)}` : `Release ${formatAmount(releaseable, inv.tokenType)}`}
+                  </Button>
+                </div>
+              )}
+              {releaseRequested && !isDisputed && !releaseReady && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />Awaiting client
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderReceivedCard = (invoice: InvoiceWithKey) => {
+    const inv = invoice.account;
+    const total = fromSmallestUnit(inv.amount, inv.tokenType);
+    const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
+    const released = fromSmallestUnit(inv.amountReleased, inv.tokenType);
+    const progressPercent = total > 0 ? (paid / total) * 100 : 0;
+    const schedule = inv.releaseSchedule ?? [];
+    const scheduleIdx = inv.currentReleaseIndex ?? 0;
+    const isDisputed = inv.status === InvoiceStatus.Disputed;
+    const releaseRequested = !!inv.completionRequestedAt;
+    const clientApproved = inv.clientApproved ?? false;
+    const secondsLeft = getSecondsRemaining(inv);
+    const autoReleaseExpired = releaseRequested && secondsLeft === 0;
+    const needsAction = releaseRequested && !clientApproved && !isDisputed && !autoReleaseExpired;
+
+    const borderColor = isDisputed ? 'border-l-amber-500' :
+      needsAction ? 'border-l-blue-500' :
+      inv.status === InvoiceStatus.Released ? 'border-l-green-400' : 'border-l-muted';
+
+    return (
+      <Card key={inv.invoiceId} className={`clean-card border-l-4 ${borderColor}`}>
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <span className="font-mono text-xs text-muted-foreground">{inv.invoiceId}</span>
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  isDisputed ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                  needsAction ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                  clientApproved ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                  inv.status === InvoiceStatus.Released ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                  'bg-muted text-muted-foreground'
+                }`}>
+                  {isDisputed && <><AlertTriangle className="h-3 w-3" />Disputed</>}
+                  {!isDisputed && needsAction && <><Clock className="h-3 w-3" />Action needed</>}
+                  {!isDisputed && clientApproved && !needsAction && <><Check className="h-3 w-3" />Approved</>}
+                  {!isDisputed && !needsAction && !clientApproved && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Released</>}
+                  {!isDisputed && !needsAction && !clientApproved && inv.status !== InvoiceStatus.Released && <><Check className="h-3 w-3" />In escrow</>}
+                </span>
+                <Badge className={`text-xs ${inv.tokenType === TokenType.USDC ? 'token-usdc' : 'token-sol'}`}>
+                  {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
+                </Badge>
+              </div>
+
+              <p className="text-lg font-semibold text-foreground mb-1">{formatAmount(inv.amount, inv.tokenType)}</p>
+              {inv.description && <p className="text-xs font-medium text-foreground mb-0.5 truncate">{inv.description}</p>}
+              <p className="text-xs text-muted-foreground">
+                To: {inv.creator.toBase58().slice(0, 8)}...{inv.creator.toBase58().slice(-8)} • {formatDate(inv.createdAt)}
+              </p>
+
+              {/* Schedule progress */}
+              {schedule.length > 1 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Installment {scheduleIdx + 1} of {schedule.length} — {formatAmount(released, inv.tokenType)} released of {formatAmount(paid, inv.tokenType)}
+                </p>
+              )}
+
+              {isDisputed && <p className="text-xs text-amber-500 mt-1">Funds frozen — dispute under review</p>}
+              {needsAction && <p className="text-xs text-blue-500 mt-1">Creator requested release · {formatCountdown(secondsLeft)}</p>}
+              {autoReleaseExpired && !clientApproved && !isDisputed && (
+                <p className="text-xs text-amber-500 mt-1">Timeout passed — funds will auto-release shortly</p>
+              )}
+              {clientApproved && !isDisputed && <p className="text-xs text-green-600 mt-1">You approved this release</p>}
+
+              {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
+                <div className="mt-2">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>Paid: {formatAmount(inv.amountPaid, inv.tokenType)}</span>
+                    <span>{progressPercent.toFixed(0)}%</span>
+                  </div>
+                  <div className="progress-bar h-1.5">
+                    <div className={`progress-bar-fill h-full ${isDisputed ? 'bg-amber-500' : ''}`} style={{ width: `${progressPercent}%` }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 items-end">
+              <Button variant="outline" size="sm"
+                onClick={() => handleCopyLink(inv.invoiceId, inv.creator.toBase58())}>
+                <Copy className="h-3.5 w-3.5 mr-1" />View Invoice
+              </Button>
+
+              {needsAction && (
+                <div className="flex gap-2">
+                  <Button size="sm"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => handleApprove(inv)}
+                    disabled={approving === inv.invoiceId || disputing === inv.invoiceId}>
+                    {approving === inv.invoiceId
+                      ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Approving...</>
+                      : <><ThumbsUp className="h-3.5 w-3.5 mr-1" />Approve</>}
+                  </Button>
+                  <Button size="sm" variant="outline"
+                    className="border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                    onClick={() => handleDispute(inv)}
+                    disabled={approving === inv.invoiceId || disputing === inv.invoiceId}>
+                    {disputing === inv.invoiceId
+                      ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />...</>
+                      : <><AlertTriangle className="h-3.5 w-3.5 mr-1" />Dispute</>}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // ============================================================
+  // RENDER
+  // ============================================================
 
   return (
     <div className="space-y-6">
@@ -313,7 +584,9 @@ const Dashboard: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Manage your invoices</p>
+          <p className="text-sm text-muted-foreground">
+            {publicKey ? `${publicKey.toBase58().slice(0, 8)}...${publicKey.toBase58().slice(-8)}` : ''}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Popover open={notifOpen} onOpenChange={handleNotifOpen}>
@@ -331,282 +604,154 @@ const Dashboard: React.FC = () => {
               <NotificationList onViewAll={() => { setNotifOpen(false); setShowHistory(true); }} />
             </PopoverContent>
           </Popover>
-          <Button variant="outline" size="icon" onClick={fetchInvoices} disabled={loading}>
+          <Button variant="outline" size="icon" onClick={fetchAll} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <Link to="/create">
             <Button className="bg-secondary hover:bg-secondary/90">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Invoice
+              <Plus className="mr-2 h-4 w-4" />Create Invoice
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-2">Total Received</p>
-            {formatStat(stats.totalReceivedUSDC, stats.totalReceivedSOL).map((line, i) => (
-              <p key={i} className="text-base font-semibold text-foreground leading-snug">{line}</p>
-            ))}
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-blue-400">
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-2">In Escrow</p>
-            {formatStat(stats.inEscrowUSDC, stats.inEscrowSOL).map((line, i) => (
-              <p key={i} className={`text-base font-semibold leading-snug ${line === '0' ? 'text-muted-foreground' : 'text-blue-500'}`}>{line}</p>
-            ))}
-          </CardContent>
-        </Card>
-        <Card className={`border-l-4 ${stats.disputed > 0 ? 'border-l-amber-500' : 'border-l-amber-400'}`}>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-2">
-              Pending Release{stats.disputed > 0 ? ` · ${stats.disputed} disputed` : ''}
-            </p>
-            {formatStat(stats.pendingReleaseUSDC, stats.pendingReleaseSOL).map((line, i) => (
-              <p key={i} className={`text-base font-semibold leading-snug ${line === '0' ? 'text-muted-foreground' : 'text-amber-500'}`}>{line}</p>
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-2">Invoices</p>
-            <p className="text-2xl font-semibold text-foreground">{stats.total}</p>
-            <div className="flex gap-2 mt-1 flex-wrap">
-              <span className="text-xs text-muted-foreground">{stats.unpaid} unpaid</span>
-              <span className="text-xs text-muted-foreground">•</span>
-              <span className="text-xs text-muted-foreground">{stats.released} released</span>
-              {stats.disputed > 0 && (
-                <>
-                  <span className="text-xs text-muted-foreground">•</span>
-                  <span className="text-xs text-amber-500">{stats.disputed} disputed</span>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Invoices */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-muted flex-wrap h-auto gap-1">
-          <TabsTrigger value="all">All ({stats.total})</TabsTrigger>
-          <TabsTrigger value="unpaid">Unpaid ({stats.unpaid})</TabsTrigger>
-          <TabsTrigger value="escrow">In Escrow ({stats.inEscrow})</TabsTrigger>
-          <TabsTrigger value="released">Released ({stats.released})</TabsTrigger>
-          {stats.disputed > 0 && (
-            <TabsTrigger value="disputed" className="text-amber-500">
-              Disputed ({stats.disputed})
-            </TabsTrigger>
-          )}
+      {/* Role tabs */}
+      <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as 'sent' | 'received')}>
+        <TabsList className="bg-muted">
+          <TabsTrigger value="sent" className="flex items-center gap-1.5">
+            <ArrowUpRight className="h-3.5 w-3.5" />
+            Sent ({sentStats.total})
+          </TabsTrigger>
+          <TabsTrigger value="received" className="flex items-center gap-1.5 relative">
+            <ArrowDownLeft className="h-3.5 w-3.5" />
+            Received ({receivedStats.total})
+            {receivedActionCount > 0 && (
+              <span className="ml-1 w-4 h-4 rounded-full bg-blue-500 text-[10px] text-white flex items-center justify-center">
+                {receivedActionCount}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="mt-4">
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredInvoices.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="py-12 text-center">
-                <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-base font-semibold text-foreground mb-2">No invoices</h3>
-                <p className="text-sm text-muted-foreground mb-4">Create your first invoice to get started.</p>
-                <Link to="/create">
-                  <Button><Plus className="mr-2 h-4 w-4" />Create Invoice</Button>
-                </Link>
+        {/* ======= SENT TAB ======= */}
+        <TabsContent value="sent" className="mt-4 space-y-4">
+          {/* Sent stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Pending Release</p>
+                {formatStat(sentStats.pendingReleaseUSDC, sentStats.pendingReleaseSOL).map((l, i) => (
+                  <p key={i} className={`text-base font-semibold leading-snug ${l === '0' ? 'text-muted-foreground' : 'text-amber-500'}`}>{l}</p>
+                ))}
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-3">
-              {filteredInvoices.map((invoice) => {
-                const inv = invoice.account;
-                const total = fromSmallestUnit(inv.amount, inv.tokenType);
-                const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
-                const progressPercent = total > 0 ? (paid / total) * 100 : 0;
-                const releaseable = getReleaseable(inv);
-                const schedule = inv.releaseSchedule ?? [];
-                const scheduleIdx = inv.currentReleaseIndex ?? 0;
-                const hasSchedule = schedule.length > 0;
-                const currentInstallmentBps = hasSchedule && scheduleIdx < schedule.length ? schedule[scheduleIdx] : null;
-                const currentInstallmentAmount = currentInstallmentBps !== null
-                  ? parseFloat((paid * currentInstallmentBps / 10000).toFixed(inv.tokenType === TokenType.USDC ? 2 : 4))
-                  : releaseable;
-                const installmentsTotal = schedule.length;
-                const isDisputed = inv.status === InvoiceStatus.Disputed;
-                const releaseRequested = !!inv.completionRequestedAt;
-                const releaseReady = isReleaseReady(inv);
-                const secondsRemaining = getAutoReleaseSecondsRemaining(inv);
-                const canRequestRelease = (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid)
-                  && !isDisputed && !releaseRequested && releaseable > 0;
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">In Escrow</p>
+                <p className="text-2xl font-semibold text-blue-500">{sentStats.inEscrow}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Released</p>
+                <p className="text-2xl font-semibold text-green-500">{sentStats.released}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Invoices</p>
+                <p className="text-2xl font-semibold text-foreground">{sentStats.total}</p>
+                <div className="flex gap-2 mt-1 flex-wrap">
+                  <span className="text-xs text-muted-foreground">{sentStats.unpaid} unpaid</span>
+                  {sentStats.disputed > 0 && <><span className="text-xs text-muted-foreground">•</span><span className="text-xs text-amber-500">{sentStats.disputed} disputed</span></>}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-                const borderColor = isDisputed ? 'border-l-amber-500' :
-                  inv.status === InvoiceStatus.Unpaid ? 'border-l-orange-400' :
-                  inv.status === InvoiceStatus.PartiallyPaid ? 'border-l-blue-400' :
-                  inv.status === InvoiceStatus.FullyPaid ? 'border-l-blue-500' :
-                  'border-l-green-400';
+          {/* Sent filter tabs */}
+          <Tabs value={sentFilter} onValueChange={setSentFilter}>
+            <TabsList className="bg-muted flex-wrap h-auto gap-1">
+              <TabsTrigger value="all">All ({sentStats.total})</TabsTrigger>
+              <TabsTrigger value="unpaid">Unpaid ({sentStats.unpaid})</TabsTrigger>
+              <TabsTrigger value="escrow">In Escrow ({sentStats.inEscrow})</TabsTrigger>
+              <TabsTrigger value="released">Released ({sentStats.released})</TabsTrigger>
+              {sentStats.disputed > 0 && <TabsTrigger value="disputed" className="text-amber-500">Disputed ({sentStats.disputed})</TabsTrigger>}
+            </TabsList>
+            <TabsContent value={sentFilter} className="mt-3">
+              {loading ? (
+                <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : filteredSent.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="py-12 text-center">
+                    <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-base font-semibold text-foreground mb-2">No invoices yet</h3>
+                    <Link to="/create"><Button><Plus className="mr-2 h-4 w-4" />Create Invoice</Button></Link>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">{filteredSent.map(renderSentCard)}</div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
 
-                return (
-                  <Card key={inv.invoiceId} className={`clean-card border-l-4 ${borderColor}`}>
-                    <CardContent className="p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          {/* ID + Status badges */}
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <span className="font-mono text-xs text-muted-foreground">{inv.invoiceId}</span>
+        {/* ======= RECEIVED TAB ======= */}
+        <TabsContent value="received" className="mt-4 space-y-4">
+          {/* Received stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Total Paid</p>
+                {formatStat(receivedStats.totalPaidUSDC, receivedStats.totalPaidSOL).map((l, i) => (
+                  <p key={i} className="text-base font-semibold text-foreground leading-snug">{l}</p>
+                ))}
+              </CardContent>
+            </Card>
+            <Card className={receivedActionCount > 0 ? 'border-l-4 border-l-blue-500' : ''}>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Needs Approval</p>
+                <p className={`text-2xl font-semibold ${receivedActionCount > 0 ? 'text-blue-500' : 'text-muted-foreground'}`}>{receivedActionCount}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Released</p>
+                <p className="text-2xl font-semibold text-green-500">{receivedStats.released}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Invoices</p>
+                <p className="text-2xl font-semibold text-foreground">{receivedStats.total}</p>
+                {receivedStats.disputed > 0 && <p className="text-xs text-amber-500 mt-1">{receivedStats.disputed} disputed</p>}
+              </CardContent>
+            </Card>
+          </div>
 
-                            {/* Status badge */}
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                              isDisputed ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                              inv.status === InvoiceStatus.Unpaid ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                              inv.status === InvoiceStatus.PartiallyPaid ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                              inv.status === InvoiceStatus.FullyPaid ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                              'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            }`}>
-                              {isDisputed && <><AlertTriangle className="h-3 w-3" /> Disputed</>}
-                              {!isDisputed && inv.status === InvoiceStatus.Unpaid && <><Clock className="h-3 w-3" /> Unpaid</>}
-                              {!isDisputed && inv.status === InvoiceStatus.PartiallyPaid && <><Clock className="h-3 w-3" /> Partial</>}
-                              {!isDisputed && inv.status === InvoiceStatus.FullyPaid && <><Check className="h-3 w-3" /> Paid</>}
-                              {!isDisputed && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" /> Released</>}
-                            </span>
-
-                            <Badge className={`text-xs ${inv.tokenType === TokenType.USDC ? 'token-usdc' : 'token-sol'}`}>
-                              {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
-                            </Badge>
-                          </div>
-
-                          {/* Amount */}
-                          <p className="text-lg font-semibold text-foreground mb-1">
-                            {formatAmount(inv.amount, inv.tokenType)}
-                          </p>
-
-                          {inv.description && (
-                            <p className="text-xs font-medium text-foreground mb-0.5 truncate">{inv.description}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground">
-                            {inv.clientEmail} • {formatDate(inv.createdAt)}
-                          </p>
-
-                          {/* Installment info */}
-                          {hasSchedule && !isDisputed && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                              Next: {formatAmount(currentInstallmentAmount, inv.tokenType)} ({currentInstallmentBps !== null ? currentInstallmentBps / 100 : 0}%) — installment {scheduleIdx + 1} of {installmentsTotal}
-                            </p>
-                          )}
-
-                          {/* Dispute notice */}
-                          {isDisputed && (
-                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                              Funds frozen — dispute under review
-                            </p>
-                          )}
-
-                          {/* Release requested — countdown */}
-                          {releaseRequested && !isDisputed && !releaseReady && (
-                            <p className="text-xs text-blue-500 mt-1">
-                              Release requested · {formatCountdown(secondsRemaining)}
-                            </p>
-                          )}
-
-                          {/* Release ready */}
-                          {releaseRequested && !isDisputed && releaseReady && (
-                            <p className="text-xs text-green-500 mt-1">
-                              {inv.clientApproved ? 'Client approved — ready to release' : 'Timeout passed — ready to release'}
-                            </p>
-                          )}
-
-                          {/* Progress bar */}
-                          {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
-                            <div className="mt-2">
-                              <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                                <span>Paid: {formatAmount(inv.amountPaid, inv.tokenType)}</span>
-                                <span>{progressPercent.toFixed(0)}%</span>
-                              </div>
-                              <div className="progress-bar h-1.5">
-                                <div className={`progress-bar-fill h-full ${isDisputed ? 'bg-amber-500' : ''}`} style={{ width: `${progressPercent}%` }} />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="flex flex-col gap-2 items-end">
-                          <Button variant="outline" size="sm" onClick={() => handleCopyLink(inv.invoiceId)}>
-                            <Copy className="h-3.5 w-3.5 mr-1" />
-                            Copy Link
-                          </Button>
-
-                          {/* Step 1: Request Release button — before any request is made */}
-                          {canRequestRelease && (
-                            <div className="flex flex-col items-end gap-1">
-                              {hasSchedule && (
-                                <div className="flex items-center gap-1">
-                                  {schedule.map((_: number, i: number) => (
-                                    <span key={i} className={`w-2 h-2 rounded-full ${i < scheduleIdx ? 'bg-green-400' : i === scheduleIdx ? 'bg-amber-400' : 'bg-muted-foreground/30'}`} />
-                                  ))}
-                                  <span className="text-xs text-muted-foreground ml-1">{scheduleIdx + 1}/{installmentsTotal}</span>
-                                </div>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-blue-400 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                                onClick={() => handleRequestRelease(inv)}
-                                disabled={requesting === inv.invoiceId}
-                              >
-                                {requesting === inv.invoiceId ? (
-                                  <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Requesting...</>
-                                ) : (
-                                  <><SendHorizonal className="h-3.5 w-3.5 mr-1" />Request Release</>
-                                )}
-                              </Button>
-                            </div>
-                          )}
-
-                          {/* Step 2: Release button — after request made and approved/timeout passed */}
-                          {releaseRequested && !isDisputed && releaseReady && releaseable > 0 && (
-                            <div className="flex flex-col items-end gap-1">
-                              {hasSchedule && (
-                                <div className="flex items-center gap-1">
-                                  {schedule.map((_: number, i: number) => (
-                                    <span key={i} className={`w-2 h-2 rounded-full ${i < scheduleIdx ? 'bg-green-400' : i === scheduleIdx ? 'bg-amber-400' : 'bg-muted-foreground/30'}`} />
-                                  ))}
-                                  <span className="text-xs text-muted-foreground ml-1">{scheduleIdx + 1}/{installmentsTotal}</span>
-                                </div>
-                              )}
-                              <Button
-                                size="sm"
-                                className="bg-accent hover:bg-accent/90 text-accent-foreground"
-                                onClick={() => openReleaseModal(inv)}
-                                disabled={releasing === inv.invoiceId}
-                              >
-                                <Check className="h-3.5 w-3.5 mr-1" />
-                                {hasSchedule
-                                  ? `Release ${formatAmount(currentInstallmentAmount, inv.tokenType)}`
-                                  : `Release ${formatAmount(releaseable, inv.tokenType)}`
-                                }
-                              </Button>
-                            </div>
-                          )}
-
-                          {/* Waiting for client — request sent but not yet approved/timed out */}
-                          {releaseRequested && !isDisputed && !releaseReady && (
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted text-xs text-muted-foreground">
-                              <Clock className="h-3.5 w-3.5" />
-                              Awaiting client
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          {/* Received filter tabs */}
+          <Tabs value={receivedFilter} onValueChange={setReceivedFilter}>
+            <TabsList className="bg-muted flex-wrap h-auto gap-1">
+              <TabsTrigger value="all">All ({receivedStats.total})</TabsTrigger>
+              {receivedStats.awaitingApproval > 0 && <TabsTrigger value="pending" className="text-blue-500">Action needed ({receivedStats.awaitingApproval})</TabsTrigger>}
+              <TabsTrigger value="released">Released ({receivedStats.released})</TabsTrigger>
+              {receivedStats.disputed > 0 && <TabsTrigger value="disputed" className="text-amber-500">Disputed ({receivedStats.disputed})</TabsTrigger>}
+            </TabsList>
+            <TabsContent value={receivedFilter} className="mt-3">
+              {loading ? (
+                <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+              ) : filteredReceived.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="py-12 text-center">
+                    <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-sm text-muted-foreground">No invoices paid from this wallet yet.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">{filteredReceived.map(renderReceivedCard)}</div>
+              )}
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
 
@@ -621,7 +766,6 @@ const Dashboard: React.FC = () => {
         />
       )}
 
-      {/* Notification History Panel */}
       {showHistory && <NotificationHistory onClose={() => setShowHistory(false)} />}
     </div>
   );

@@ -935,6 +935,69 @@ export class EscrowPaySDK {
    * Fetch live SOL/USD price from Pyth Hermes REST API (free, no API key)
    * Returns null if unavailable — caller falls back to 1% fee
    */
+  /**
+   * Fetch all invoices where the connected wallet is the CLIENT who paid
+   * Used for the "Received" tab in the unified dashboard
+   */
+  async fetchInvoicesByClient(client?: PublicKey): Promise<SDKResult<Array<{ publicKey: PublicKey; account: InvoiceData }>>> {
+    const targetClient = client || this.provider.publicKey;
+    if (!targetClient) return { success: false, error: 'No client provided' };
+    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
+    try {
+      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+
+      // Try Anchor accessor first
+      try {
+        const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
+        if (invoiceAccessor) {
+          const allInvoices = await invoiceAccessor.all();
+          if (allInvoices?.length) {
+            const filtered = allInvoices.filter((inv: any) => {
+              try {
+                const clientField = inv?.account?.client;
+                if (!clientField) return false;
+                const clientKey = clientField.toString ? clientField.toString() : String(clientField);
+                return clientKey === targetClient.toString();
+              } catch { return false; }
+            });
+            const mapped = filtered.map((inv: any) => {
+              const parsed = this.parseInvoiceData(inv.account);
+              return { publicKey: inv.publicKey, account: parsed as InvoiceData };
+            }).filter((inv: any) => inv.account !== null);
+            return { success: true, data: mapped };
+          }
+        }
+      } catch (anchorError) {
+        console.log('Anchor fetchAll failed for client invoices:', anchorError);
+      }
+
+      // Fallback: getProgramAccounts — client field offset
+      // Invoice layout: 8 disc + 1 bump + 1 escrow_bump + 4+32 invoice_id + 32 creator + 1 option + 32 client = offset 115
+      const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
+        filters: [
+          { memcmp: { offset: 115, bytes: targetClient.toBase58() } },
+        ],
+      });
+
+      if (!accounts?.length) return { success: true, data: [] };
+
+      const mapped = accounts.map((acc) => {
+        try {
+          const decoded = this.decodeInvoiceAccount(acc.account.data);
+          const parsed = this.parseInvoiceData(decoded);
+          if (parsed) return { publicKey: acc.pubkey, account: parsed };
+        } catch { return null; }
+        return null;
+      }).filter(Boolean) as Array<{ publicKey: PublicKey; account: InvoiceData }>;
+
+      return { success: true, data: mapped };
+    } catch (error: any) {
+      this.logError('fetchInvoicesByClient', error);
+      return { success: false, error: this.parseError(error) };
+    }
+  }
+
+
   async getSolPriceUsd(): Promise<number | null> {
     try {
       const res = await fetch(

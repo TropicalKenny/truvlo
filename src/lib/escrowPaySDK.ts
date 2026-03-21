@@ -26,7 +26,10 @@ export const USDC_MINT_MAINNET = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4w
 
 // Platform Treasury (from smart contract)
 export const PLATFORM_TREASURY = new PublicKey("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
-export const PLATFORM_FEE_BPS = 100; // 1%
+export const PLATFORM_FEE_BPS = 100; // 1% above 00
+export const PLATFORM_FLAT_FEE_USD = 2; //  flat below 00
+export const PLATFORM_FEE_THRESHOLD_USD = 200; // 00 threshold
+export const PYTH_SOL_USD_FEED_ID = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
 
 const RENT_SYSVAR_ID = new PublicKey("SysvarRent111111111111111111111111111111111");
 
@@ -42,6 +45,7 @@ export enum InvoiceStatus {
   PartiallyPaid = 1,
   FullyPaid = 2,
   Released = 3,
+  Disputed = 4,
 }
 
 // Type Definitions
@@ -63,6 +67,9 @@ export interface InvoiceData {
   releasedAt: BN | null;
   releaseSchedule: number[];
   currentReleaseIndex: number;
+  completionRequestedAt: BN | null;
+  clientApproved: boolean;
+  disputeRaisedAt: BN | null;
 }
 
 export interface CreateInvoiceParams {
@@ -236,6 +243,9 @@ export class EscrowPaySDK {
         releasedAt: raw.releasedAt ?? raw.released_at ?? null,
         releaseSchedule: raw.releaseSchedule ?? raw.release_schedule ?? [],
         currentReleaseIndex: raw.currentReleaseIndex ?? raw.current_release_index ?? 0,
+        completionRequestedAt: raw.completionRequestedAt ?? raw.completion_requested_at ?? null,
+        clientApproved: raw.clientApproved ?? raw.client_approved ?? false,
+        disputeRaisedAt: raw.disputeRaisedAt ?? raw.dispute_raised_at ?? null,
       };
     } catch (e) {
       console.error('Failed to parse invoice data:', e);
@@ -246,15 +256,42 @@ export class EscrowPaySDK {
   /**
    * Calculate payment breakdown with platform fee
    */
-  calculatePaymentBreakdown(paymentAmount: number, tokenType: TokenType): PaymentBreakdown {
-    const feePercentage = PLATFORM_FEE_BPS / 100;
-    const platformFee = paymentAmount * (PLATFORM_FEE_BPS / 10000);
-    const totalPayable = paymentAmount + platformFee;
+  calculatePaymentBreakdown(paymentAmount: number, tokenType: TokenType, solPriceUsd?: number): PaymentBreakdown {
+    let platformFee: number;
+    let feePercentage: number;
     
+    if (tokenType === TokenType.USDC) {
+      // USDC: exact dollar comparison
+      if (paymentAmount < PLATFORM_FEE_THRESHOLD_USD) {
+        platformFee = PLATFORM_FLAT_FEE_USD;
+        feePercentage = (PLATFORM_FLAT_FEE_USD / paymentAmount) * 100;
+      } else {
+        platformFee = paymentAmount * (PLATFORM_FEE_BPS / 10000);
+        feePercentage = PLATFORM_FEE_BPS / 100;
+      }
+    } else {
+      // SOL: use live price if available, fallback to 1%
+      if (solPriceUsd && solPriceUsd > 0) {
+        const valueUsd = paymentAmount * solPriceUsd;
+        if (valueUsd < PLATFORM_FEE_THRESHOLD_USD) {
+          platformFee = PLATFORM_FLAT_FEE_USD / solPriceUsd; //  in SOL
+          feePercentage = (platformFee / paymentAmount) * 100;
+        } else {
+          platformFee = paymentAmount * (PLATFORM_FEE_BPS / 10000);
+          feePercentage = PLATFORM_FEE_BPS / 100;
+        }
+      } else {
+        // Fallback: always 1% if no price available
+        platformFee = paymentAmount * (PLATFORM_FEE_BPS / 10000);
+        feePercentage = PLATFORM_FEE_BPS / 100;
+      }
+    }
+    
+    const totalPayable = paymentAmount + platformFee;
     return {
       invoiceAmount: paymentAmount,
-      platformFee: Math.round(platformFee * 1000000) / 1000000,
-      totalPayable: Math.round(totalPayable * 1000000) / 1000000,
+      platformFee: parseFloat(platformFee.toFixed(tokenType === TokenType.USDC ? 6 : 9)),
+      totalPayable: parseFloat(totalPayable.toFixed(tokenType === TokenType.USDC ? 6 : 9)),
       feePercentage,
     };
   }
@@ -575,7 +612,8 @@ export class EscrowPaySDK {
     invoiceId: string, 
     creatorPubkey: PublicKey, 
     paymentAmount: number,
-    tokenType: TokenType
+    tokenType: TokenType,
+    solPriceUsd?: number
   ): Promise<SDKResult<{ signature: string; breakdown: PaymentBreakdown }>> {
     if (!this.provider.publicKey) {
       return { success: false, error: "Wallet not connected" };
@@ -592,13 +630,18 @@ export class EscrowPaySDK {
 
       const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
       const paymentSmallestUnit = this.toSmallestUnit(paymentAmount, tokenType);
-      const breakdown = this.calculatePaymentBreakdown(paymentAmount, tokenType);
+      // Fetch SOL price if not provided and token is SOL
+      const resolvedSolPrice = tokenType === TokenType.SOL && !solPriceUsd
+        ? await this.getSolPriceUsd()
+        : solPriceUsd ?? null;
+      const breakdown = this.calculatePaymentBreakdown(paymentAmount, tokenType, resolvedSolPrice ?? undefined);
 
       let tx: string;
 
       if (tokenType === TokenType.SOL) {
+        const feeSmallestUnit = this.toSmallestUnit(breakdown.platformFee, TokenType.SOL);
         tx = await this.program.methods
-          .payInvoiceSol(invoiceId, paymentSmallestUnit)
+          .payInvoiceSol(invoiceId, paymentSmallestUnit, feeSmallestUnit)
           .accounts({
             invoice: invoiceAddress,
             platformTreasury: PLATFORM_TREASURY,
@@ -882,6 +925,139 @@ export class EscrowPaySDK {
       currency: 'USD',
       minimumFractionDigits: 2,
     }).format(amount);
+  }
+
+  // ============================================================
+  // PYTH PRICE FEED
+  // ============================================================
+
+  /**
+   * Fetch live SOL/USD price from Pyth Hermes REST API (free, no API key)
+   * Returns null if unavailable — caller falls back to 1% fee
+   */
+  async getSolPriceUsd(): Promise<number | null> {
+    try {
+      const res = await fetch(
+        `https://hermes.pyth.network/v2/updates/price/latest?ids[]=${PYTH_SOL_USD_FEED_ID}`
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const price = data?.parsed?.[0]?.price;
+      if (!price) return null;
+      return parseFloat(price.price) * Math.pow(10, price.expo);
+    } catch {
+      return null;
+    }
+  }
+
+  // ============================================================
+  // DUAL APPROVAL FLOW
+  // ============================================================
+
+  /**
+   * Creator requests release for current installment
+   * Starts the 7-day client approval window
+   */
+  async requestRelease(
+    invoiceId: string,
+    tokenType: TokenType
+  ): Promise<SDKResult<{ signature: string }>> {
+    if (!this.provider.publicKey) return { success: false, error: 'Wallet not connected' };
+    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
+    try {
+      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+      const [invoiceAddress] = await this.getInvoicePDA(invoiceId, this.provider.publicKey);
+      const tx = await this.program.methods
+        .requestRelease(invoiceId)
+        .accounts({
+          invoice: invoiceAddress,
+          creator: this.provider.publicKey,
+        })
+        .rpc();
+      return { success: true, data: { signature: tx } };
+    } catch (error: any) {
+      this.logError('requestRelease', error);
+      return { success: false, error: this.parseError(error) };
+    }
+  }
+
+  /**
+   * Client approves release — funds can now be released to creator
+   */
+  async approveRelease(
+    invoiceId: string,
+    creatorPubkey: PublicKey
+  ): Promise<SDKResult<{ signature: string }>> {
+    if (!this.provider.publicKey) return { success: false, error: 'Wallet not connected' };
+    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
+    try {
+      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+      const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
+      const tx = await this.program.methods
+        .approveRelease(invoiceId)
+        .accounts({
+          invoice: invoiceAddress,
+          client: this.provider.publicKey,
+        })
+        .rpc();
+      return { success: true, data: { signature: tx } };
+    } catch (error: any) {
+      this.logError('approveRelease', error);
+      return { success: false, error: this.parseError(error) };
+    }
+  }
+
+  /**
+   * Client raises a dispute — freezes remaining unreleased funds
+   */
+  async raiseDispute(
+    invoiceId: string,
+    creatorPubkey: PublicKey
+  ): Promise<SDKResult<{ signature: string }>> {
+    if (!this.provider.publicKey) return { success: false, error: 'Wallet not connected' };
+    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
+    try {
+      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+      const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
+      const tx = await this.program.methods
+        .raiseDispute(invoiceId)
+        .accounts({
+          invoice: invoiceAddress,
+          client: this.provider.publicKey,
+        })
+        .rpc();
+      return { success: true, data: { signature: tx } };
+    } catch (error: any) {
+      this.logError('raiseDispute', error);
+      return { success: false, error: this.parseError(error) };
+    }
+  }
+
+  // ============================================================
+  // HELPER: Check if 7-day auto-release timeout has passed
+  // ============================================================
+
+  /**
+   * Returns true if the auto-release timeout has passed for a given invoice
+   * (7 days after completionRequestedAt)
+   */
+  isAutoReleaseReady(invoice: import('./escrowPaySDK').InvoiceData): boolean {
+    if (!invoice.completionRequestedAt) return false;
+    const requestedAt = invoice.completionRequestedAt.toNumber();
+    const now = Math.floor(Date.now() / 1000);
+    return now - requestedAt > 7 * 24 * 60 * 60;
+  }
+
+  /**
+   * Returns seconds remaining until auto-release (0 if already passed)
+   */
+  autoReleaseSecondsRemaining(invoice: import('./escrowPaySDK').InvoiceData): number {
+    if (!invoice.completionRequestedAt) return -1;
+    const requestedAt = invoice.completionRequestedAt.toNumber();
+    const now = Math.floor(Date.now() / 1000);
+    const elapsed = now - requestedAt;
+    const timeout = 7 * 24 * 60 * 60;
+    return Math.max(0, timeout - elapsed);
   }
 
   /**

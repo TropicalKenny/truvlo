@@ -942,8 +942,9 @@ export class EscrowPaySDK {
    * Returns null if unavailable — caller falls back to 1% fee
    */
   /**
-   * Fetch all invoices where the connected wallet is the CLIENT who paid
-   * Used for the "Received" tab in the unified dashboard
+   * Fetch all invoices where the connected wallet is the CLIENT who paid.
+   * Uses fetchAll + client-side filter because invoice_id is variable-length,
+   * making memcmp byte offsets unreliable for the client field.
    */
   async fetchInvoicesByClient(client?: PublicKey): Promise<SDKResult<Array<{ publicKey: PublicKey; account: InvoiceData }>>> {
     const targetClient = client || this.provider.publicKey;
@@ -952,7 +953,9 @@ export class EscrowPaySDK {
     try {
       if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
 
-      // Try Anchor accessor first
+      const targetStr = targetClient.toString();
+
+      // Try Anchor accessor first — fetch all, filter client-side
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
@@ -962,8 +965,9 @@ export class EscrowPaySDK {
               try {
                 const clientField = inv?.account?.client;
                 if (!clientField) return false;
+                // Handle both Option<Pubkey> unwrapped and raw pubkey
                 const clientKey = clientField.toString ? clientField.toString() : String(clientField);
-                return clientKey === targetClient.toString();
+                return clientKey === targetStr;
               } catch { return false; }
             });
             const mapped = filtered.map((inv: any) => {
@@ -974,16 +978,13 @@ export class EscrowPaySDK {
           }
         }
       } catch (anchorError) {
-        console.log('Anchor fetchAll failed for client invoices:', anchorError);
+        console.log('Anchor fetchAll failed for client invoices, trying RPC fallback:', anchorError);
       }
 
-      // Fallback: getProgramAccounts — client field offset
-      // Invoice layout: 8 disc + 1 bump + 1 escrow_bump + 4+32 invoice_id + 32 creator + 1 option + 32 client = offset 115
-      const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
-        filters: [
-          { memcmp: { offset: 115, bytes: targetClient.toBase58() } },
-        ],
-      });
+      // Fallback: fetch ALL program accounts, decode and filter client-side
+      // We cannot use memcmp here because invoice_id is variable-length String,
+      // meaning the client pubkey offset shifts per invoice.
+      const accounts = await this.provider.connection.getProgramAccounts(this.programId);
 
       if (!accounts?.length) return { success: true, data: [] };
 
@@ -991,9 +992,12 @@ export class EscrowPaySDK {
         try {
           const decoded = this.decodeInvoiceAccount(acc.account.data);
           const parsed = this.parseInvoiceData(decoded);
-          if (parsed) return { publicKey: acc.pubkey, account: parsed };
+          if (!parsed) return null;
+          // Filter: client field must match target wallet
+          if (!parsed.client) return null;
+          if (parsed.client.toString() !== targetStr) return null;
+          return { publicKey: acc.pubkey, account: parsed };
         } catch { return null; }
-        return null;
       }).filter(Boolean) as Array<{ publicKey: PublicKey; account: InvoiceData }>;
 
       return { success: true, data: mapped };

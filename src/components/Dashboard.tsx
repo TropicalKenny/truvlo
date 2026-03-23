@@ -5,7 +5,8 @@ import { useConnection } from '@solana/wallet-adapter-react';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
-  RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp, ArrowDownLeft, ExternalLink
+  RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp,
+  ArrowDownLeft, ExternalLink, Wallet
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,18 +40,23 @@ const Dashboard: React.FC = () => {
   const { toast } = useToast();
   const { unreadCount, addNotification, markAllAsRead } = useNotifications();
 
-  // Separate invoice lists for each role
+  // All invoices you created
   const [sentInvoices, setSentInvoices] = useState<InvoiceWithKey[]>([]);
+  // Invoices you created that have been paid (money received)
   const [receivedInvoices, setReceivedInvoices] = useState<InvoiceWithKey[]>([]);
+  // Invoices where you are the client who paid
+  const [clientInvoices, setClientInvoices] = useState<InvoiceWithKey[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [releasing, setReleasing] = useState<string | null>(null);
   const [requesting, setRequesting] = useState<string | null>(null);
   const [approving, setApproving] = useState<string | null>(null);
   const [disputing, setDisputing] = useState<string | null>(null);
 
-  const [roleTab, setRoleTab] = useState<'sent' | 'received'>('sent');
+  const [roleTab, setRoleTab] = useState<'sent' | 'received' | 'client'>('sent');
   const [sentFilter, setSentFilter] = useState('all');
   const [receivedFilter, setReceivedFilter] = useState('all');
+  const [clientSection, setClientSection] = useState<'action' | 'history'>('action');
   const [notifOpen, setNotifOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
@@ -84,24 +90,40 @@ const Dashboard: React.FC = () => {
 
   const fetchAll = useCallback(async () => {
     if (!sdk || !connected || !sdk.isInitialized()) {
-      setSentInvoices([]); setReceivedInvoices([]); setLoading(false); return;
+      setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]); setLoading(false); return;
     }
     setLoading(true);
     try {
-      const [sentResult, receivedResult] = await Promise.all([
+      const [creatorResult, clientResult] = await Promise.all([
         sdk.fetchInvoicesByCreator(),
         sdk.fetchInvoicesByClient(),
       ]);
+
       const sort = (arr: InvoiceWithKey[]) =>
         arr.sort((a, b) => {
           const at = a.account.createdAt.toNumber ? a.account.createdAt.toNumber() : 0;
           const bt = b.account.createdAt.toNumber ? b.account.createdAt.toNumber() : 0;
           return bt - at;
         });
-      if (sentResult.success && sentResult.data) setSentInvoices(sort(sentResult.data));
-      if (receivedResult.success && receivedResult.data) setReceivedInvoices(sort(receivedResult.data));
-    } catch { setSentInvoices([]); setReceivedInvoices([]); }
-    finally { setLoading(false); }
+
+      if (creatorResult.success && creatorResult.data) {
+        const all = sort(creatorResult.data);
+        setSentInvoices(all);
+        // Received = creator invoices that have been paid (money in escrow or released)
+        setReceivedInvoices(all.filter(i =>
+          i.account.status === InvoiceStatus.PartiallyPaid ||
+          i.account.status === InvoiceStatus.FullyPaid ||
+          i.account.status === InvoiceStatus.Released ||
+          i.account.status === InvoiceStatus.Disputed
+        ));
+      }
+
+      if (clientResult.success && clientResult.data) {
+        setClientInvoices(sort(clientResult.data));
+      }
+    } catch {
+      setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
+    } finally { setLoading(false); }
   }, [sdk, connected]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -118,14 +140,12 @@ const Dashboard: React.FC = () => {
   const fromSmallestUnit = (amount: any, tokenType: TokenType) => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     try {
-      // Use BigInt to avoid floating point precision loss (e.g. 1 SOL showing as 0.9999)
       const raw = amount?.toNumber ? amount.toNumber() : Number(amount ?? 0);
       const int = BigInt(Math.round(raw));
       const divisor = BigInt(10 ** decimals);
       const whole = int / divisor;
       const remainder = int % divisor;
-      const fracStr = remainder.toString().padStart(decimals, '0');
-      return parseFloat(`${whole}.${fracStr}`);
+      return parseFloat(`${whole}.${remainder.toString().padStart(decimals, '0')}`);
     } catch { return 0; }
   };
 
@@ -150,15 +170,17 @@ const Dashboard: React.FC = () => {
     return lines.length > 0 ? lines : ['0'];
   };
 
-  const getReleaseable = (invoice: InvoiceData) => {
-    const paid = fromSmallestUnit(invoice.amountPaid, invoice.tokenType);
-    const released = fromSmallestUnit(invoice.amountReleased, invoice.tokenType);
+  const getReleaseable = (inv: InvoiceData) => {
+    const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
+    const released = fromSmallestUnit(inv.amountReleased, inv.tokenType);
     return Math.max(0, paid - released);
   };
 
   const getSecondsRemaining = (inv: InvoiceData): number => {
     if (!inv.completionRequestedAt) return -1;
-    const req = inv.completionRequestedAt.toNumber ? inv.completionRequestedAt.toNumber() : Number(inv.completionRequestedAt);
+    const req = inv.completionRequestedAt.toNumber
+      ? inv.completionRequestedAt.toNumber()
+      : Number(inv.completionRequestedAt);
     return Math.max(0, 7 * 24 * 60 * 60 - (now - req));
   };
 
@@ -166,7 +188,7 @@ const Dashboard: React.FC = () => {
     inv.clientApproved || (!!inv.completionRequestedAt && getSecondsRemaining(inv) === 0);
 
   // ============================================================
-  // ACTIONS — CREATOR (SENT)
+  // CREATOR ACTIONS
   // ============================================================
 
   const handleRequestRelease = async (inv: InvoiceData) => {
@@ -175,7 +197,6 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.requestRelease(inv.invoiceId, inv.tokenType);
       if (result.success) {
-        // Send email notification to client
         try {
           await fetch('/api/notify-client', {
             method: 'POST',
@@ -186,25 +207,18 @@ const Dashboard: React.FC = () => {
               creatorWallet: publicKey.toBase58(),
               amount: formatAmount(inv.amountPaid, inv.tokenType),
               description: inv.description || '',
-              senderName: inv.senderName || '',
               invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey.toBase58()}`,
             }),
           });
-        } catch { /* email failure is non-blocking */ }
-
-        toast({ title: 'Release requested', description: 'Client has been notified by email.' });
-        addNotification({
-          type: 'info',
-          title: 'Release Requested',
-          message: `7-day window started for ${inv.invoiceId}. Email sent to ${inv.clientEmail}.`,
-        });
+        } catch { /* non-blocking */ }
+        toast({ title: 'Release requested', description: 'Client notified by email.' });
+        addNotification({ type: 'info', title: 'Release Requested', message: `7-day window started for ${inv.invoiceId}.` });
         await fetchAll();
       } else {
         toast({ title: 'Request failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
-    } catch (error: unknown) {
-      const msg = error instanceof Error && error.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.';
-      toast({ title: 'Request failed', description: msg, variant: 'destructive' });
+    } catch (e: unknown) {
+      toast({ title: 'Request failed', description: e instanceof Error && e.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
     } finally { setRequesting(null); }
   };
 
@@ -229,33 +243,26 @@ const Dashboard: React.FC = () => {
       const result = await sdk.releaseFunds(releaseModal.invoiceId, releaseModal.releaseableAmount, releaseModal.tokenType);
       if (result.success) {
         toast({ title: 'Funds released to wallet' });
-        const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
         const decimals = releaseModal.tokenType === TokenType.USDC ? 2 : 4;
-        addNotification({
-          type: 'success',
-          title: 'Funds Released',
-          message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}`,
-        });
+        const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
+        addNotification({ type: 'success', title: 'Funds Released', message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}` });
         await fetchAll();
       } else {
         toast({ title: 'Release failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
-    } catch (error: unknown) {
-      toast({ title: 'Release failed', description: error instanceof Error && error.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
+    } catch (e: unknown) {
+      toast({ title: 'Release failed', description: e instanceof Error && e.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
     } finally { setReleasing(null); setReleaseModal(null); }
   };
 
-  const handleCopyLink = async (invoiceId: string, creatorKey?: string) => {
-    const creator = creatorKey || publicKey?.toBase58();
-    const url = `${window.location.origin}/invoice/${invoiceId}/${creator}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast({ title: 'Link copied' });
-    } catch { toast({ title: 'Failed to copy', variant: 'destructive' }); }
+  const handleCopyLink = async (invoiceId: string) => {
+    const url = `${window.location.origin}/invoice/${invoiceId}/${publicKey?.toBase58()}`;
+    try { await navigator.clipboard.writeText(url); toast({ title: 'Link copied' }); }
+    catch { toast({ title: 'Failed to copy', variant: 'destructive' }); }
   };
 
   // ============================================================
-  // ACTIONS — CLIENT (RECEIVED)
+  // CLIENT ACTIONS
   // ============================================================
 
   const handleApprove = async (inv: InvoiceData) => {
@@ -264,14 +271,14 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.approveRelease(inv.invoiceId, inv.creator);
       if (result.success) {
-        toast({ title: 'Release approved', description: 'The creator can now withdraw the funds.' });
+        toast({ title: 'Release approved' });
         addNotification({ type: 'success', title: 'Release Approved', message: `You approved release for ${inv.invoiceId}.` });
         await fetchAll();
       } else {
         toast({ title: 'Approval failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
-    } catch (error: unknown) {
-      toast({ title: 'Approval failed', description: error instanceof Error && error.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
+    } catch (e: unknown) {
+      toast({ title: 'Approval failed', description: e instanceof Error && e.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
     } finally { setApproving(null); }
   };
 
@@ -281,14 +288,14 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.raiseDispute(inv.invoiceId, inv.creator);
       if (result.success) {
-        toast({ title: 'Dispute raised', description: 'Funds are frozen. A mediator will review your case.' });
-        addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}. Funds frozen pending review.` });
+        toast({ title: 'Dispute raised', description: 'Funds frozen. Mediator will review.' });
+        addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
         await fetchAll();
       } else {
         toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
-    } catch (error: unknown) {
-      toast({ title: 'Dispute failed', description: error instanceof Error && error.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
+    } catch (e: unknown) {
+      toast({ title: 'Dispute failed', description: e instanceof Error && e.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
     } finally { setDisputing(null); }
   };
 
@@ -310,19 +317,40 @@ const Dashboard: React.FC = () => {
 
   const receivedStats = {
     total: receivedInvoices.length,
-    awaitingApproval: receivedInvoices.filter(i => !!i.account.completionRequestedAt && !i.account.clientApproved && i.account.status !== InvoiceStatus.Disputed).length,
-    disputed: receivedInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length,
+    inEscrow: receivedInvoices.filter(i => i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid).length,
     released: receivedInvoices.filter(i => i.account.status === InvoiceStatus.Released).length,
-    totalPaidUSDC: receivedInvoices.filter(i => i.account.tokenType === TokenType.USDC)
+    disputed: receivedInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length,
+    totalReceivedUSDC: receivedInvoices.filter(i => i.account.tokenType === TokenType.USDC)
       .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.USDC), 0),
-    totalPaidSOL: receivedInvoices.filter(i => i.account.tokenType === TokenType.SOL)
+    totalReceivedSOL: receivedInvoices.filter(i => i.account.tokenType === TokenType.SOL)
       .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.SOL), 0),
+    inEscrowUSDC: receivedInvoices.filter(i => (i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid) && i.account.tokenType === TokenType.USDC)
+      .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.USDC) - fromSmallestUnit(i.account.amountReleased, TokenType.USDC), 0),
+    inEscrowSOL: receivedInvoices.filter(i => (i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid) && i.account.tokenType === TokenType.SOL)
+      .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.SOL) - fromSmallestUnit(i.account.amountReleased, TokenType.SOL), 0),
   };
 
-  // Action-needed badge on Received tab
-  const receivedActionCount = receivedStats.awaitingApproval;
+  // Client stats
+  const awaitingAction = clientInvoices.filter(i =>
+    !!i.account.completionRequestedAt &&
+    !i.account.clientApproved &&
+    i.account.status !== InvoiceStatus.Disputed &&
+    getSecondsRemaining(i.account) > 0
+  );
+  const paymentHistory = clientInvoices; // all invoices client paid
 
-  // Filter invoices
+  const clientStats = {
+    total: clientInvoices.length,
+    awaitingAction: awaitingAction.length,
+    totalPaidUSDC: clientInvoices.filter(i => i.account.tokenType === TokenType.USDC)
+      .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.USDC), 0),
+    totalPaidSOL: clientInvoices.filter(i => i.account.tokenType === TokenType.SOL)
+      .reduce((s, i) => s + fromSmallestUnit(i.account.amountPaid, TokenType.SOL), 0),
+    released: clientInvoices.filter(i => i.account.status === InvoiceStatus.Released).length,
+    disputed: clientInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length,
+  };
+
+  // Filtered lists
   const filteredSent = sentFilter === 'all' ? sentInvoices : sentInvoices.filter(i => {
     if (sentFilter === 'unpaid') return i.account.status === InvoiceStatus.Unpaid;
     if (sentFilter === 'escrow') return i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid;
@@ -332,9 +360,9 @@ const Dashboard: React.FC = () => {
   });
 
   const filteredReceived = receivedFilter === 'all' ? receivedInvoices : receivedInvoices.filter(i => {
-    if (receivedFilter === 'pending') return !!i.account.completionRequestedAt && !i.account.clientApproved;
-    if (receivedFilter === 'disputed') return i.account.status === InvoiceStatus.Disputed;
+    if (receivedFilter === 'escrow') return i.account.status === InvoiceStatus.PartiallyPaid || i.account.status === InvoiceStatus.FullyPaid;
     if (receivedFilter === 'released') return i.account.status === InvoiceStatus.Released;
+    if (receivedFilter === 'disputed') return i.account.status === InvoiceStatus.Disputed;
     return true;
   });
 
@@ -350,10 +378,10 @@ const Dashboard: React.FC = () => {
   }
 
   // ============================================================
-  // SHARED CARD RENDERER
+  // SHARED CARD RENDERERS
   // ============================================================
 
-  const renderSentCard = (invoice: InvoiceWithKey) => {
+  const renderCreatorCard = (invoice: InvoiceWithKey) => {
     const inv = invoice.account;
     const total = fromSmallestUnit(inv.amount, inv.tokenType);
     const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
@@ -362,9 +390,9 @@ const Dashboard: React.FC = () => {
     const schedule = inv.releaseSchedule ?? [];
     const scheduleIdx = inv.currentReleaseIndex ?? 0;
     const hasSchedule = schedule.length > 0;
-    const currentInstallmentBps = hasSchedule && scheduleIdx < schedule.length ? schedule[scheduleIdx] : null;
-    const currentInstallmentAmount = currentInstallmentBps !== null
-      ? parseFloat((paid * currentInstallmentBps / 10000).toFixed(inv.tokenType === TokenType.USDC ? 2 : 4))
+    const currentBps = hasSchedule && scheduleIdx < schedule.length ? schedule[scheduleIdx] : null;
+    const currentInstallment = currentBps !== null
+      ? parseFloat((paid * currentBps / 10000).toFixed(inv.tokenType === TokenType.USDC ? 2 : 4))
       : releaseable;
     const isDisputed = inv.status === InvoiceStatus.Disputed;
     const releaseRequested = !!inv.completionRequestedAt;
@@ -406,7 +434,7 @@ const Dashboard: React.FC = () => {
               <p className="text-xs text-muted-foreground">{inv.clientEmail} • {formatDate(inv.createdAt)}</p>
               {hasSchedule && !isDisputed && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Next: {formatAmount(currentInstallmentAmount, inv.tokenType)} ({currentInstallmentBps !== null ? currentInstallmentBps / 100 : 0}%) — installment {scheduleIdx + 1} of {schedule.length}
+                  Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) — installment {scheduleIdx + 1} of {schedule.length}
                 </p>
               )}
               {isDisputed && <p className="text-xs text-amber-500 mt-1">Funds frozen — dispute under review</p>}
@@ -456,7 +484,7 @@ const Dashboard: React.FC = () => {
                   <Button size="sm" className="bg-accent hover:bg-accent/90 text-accent-foreground"
                     onClick={() => openReleaseModal(inv)} disabled={releasing === inv.invoiceId}>
                     <Check className="h-3.5 w-3.5 mr-1" />
-                    {hasSchedule ? `Release ${formatAmount(currentInstallmentAmount, inv.tokenType)}` : `Release ${formatAmount(releaseable, inv.tokenType)}`}
+                    {hasSchedule ? `Release ${formatAmount(currentInstallment, inv.tokenType)}` : `Release ${formatAmount(releaseable, inv.tokenType)}`}
                   </Button>
                 </div>
               )}
@@ -472,11 +500,11 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  const renderReceivedCard = (invoice: InvoiceWithKey) => {
+  const renderClientCard = (invoice: InvoiceWithKey, showActions: boolean) => {
     const inv = invoice.account;
-    const total = fromSmallestUnit(inv.amount, inv.tokenType);
     const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
     const released = fromSmallestUnit(inv.amountReleased, inv.tokenType);
+    const total = fromSmallestUnit(inv.amount, inv.tokenType);
     const progressPercent = total > 0 ? (paid / total) * 100 : 0;
     const schedule = inv.releaseSchedule ?? [];
     const scheduleIdx = inv.currentReleaseIndex ?? 0;
@@ -484,8 +512,7 @@ const Dashboard: React.FC = () => {
     const releaseRequested = !!inv.completionRequestedAt;
     const clientApproved = inv.clientApproved ?? false;
     const secondsLeft = getSecondsRemaining(inv);
-    const autoReleaseExpired = releaseRequested && secondsLeft === 0;
-    const needsAction = releaseRequested && !clientApproved && !isDisputed && !autoReleaseExpired;
+    const needsAction = releaseRequested && !clientApproved && !isDisputed && secondsLeft > 0;
 
     const borderColor = isDisputed ? 'border-l-amber-500' :
       needsAction ? 'border-l-blue-500' :
@@ -507,7 +534,7 @@ const Dashboard: React.FC = () => {
                 }`}>
                   {isDisputed && <><AlertTriangle className="h-3 w-3" />Disputed</>}
                   {!isDisputed && needsAction && <><Clock className="h-3 w-3" />Action needed</>}
-                  {!isDisputed && clientApproved && !needsAction && <><Check className="h-3 w-3" />Approved</>}
+                  {!isDisputed && !needsAction && clientApproved && <><Check className="h-3 w-3" />Approved</>}
                   {!isDisputed && !needsAction && !clientApproved && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Released</>}
                   {!isDisputed && !needsAction && !clientApproved && inv.status !== InvoiceStatus.Released && <><Check className="h-3 w-3" />In escrow</>}
                 </span>
@@ -522,18 +549,13 @@ const Dashboard: React.FC = () => {
                 To: {inv.creator.toBase58().slice(0, 8)}...{inv.creator.toBase58().slice(-8)} • {formatDate(inv.createdAt)}
               </p>
 
-              {/* Schedule progress */}
               {schedule.length > 1 && (
                 <p className="text-xs text-muted-foreground mt-1">
                   Installment {scheduleIdx + 1} of {schedule.length} — {formatAmount(released, inv.tokenType)} released of {formatAmount(paid, inv.tokenType)}
                 </p>
               )}
-
               {isDisputed && <p className="text-xs text-amber-500 mt-1">Funds frozen — dispute under review</p>}
               {needsAction && <p className="text-xs text-blue-500 mt-1">Creator requested release · {formatCountdown(secondsLeft)}</p>}
-              {autoReleaseExpired && !clientApproved && !isDisputed && (
-                <p className="text-xs text-amber-500 mt-1">Timeout passed — funds will auto-release shortly</p>
-              )}
               {clientApproved && !isDisputed && <p className="text-xs text-green-600 mt-1">You approved this release</p>}
 
               {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
@@ -554,11 +576,9 @@ const Dashboard: React.FC = () => {
                 onClick={() => window.open(`${window.location.origin}/invoice/${inv.invoiceId}/${inv.creator.toBase58()}`, '_blank')}>
                 <ExternalLink className="h-3.5 w-3.5 mr-1" />View Invoice
               </Button>
-
-              {needsAction && (
+              {showActions && needsAction && (
                 <div className="flex gap-2">
-                  <Button size="sm"
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white"
                     onClick={() => handleApprove(inv)}
                     disabled={approving === inv.invoiceId || disputing === inv.invoiceId}>
                     {approving === inv.invoiceId
@@ -581,6 +601,18 @@ const Dashboard: React.FC = () => {
       </Card>
     );
   };
+
+  const EmptyState = ({ message, showCreate = false }: { message: string; showCreate?: boolean }) => (
+    <Card className="border-dashed">
+      <CardContent className="py-12 text-center">
+        <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+        <p className="text-sm text-muted-foreground mb-4">{message}</p>
+        {showCreate && (
+          <Link to="/create"><Button><Plus className="mr-2 h-4 w-4" />Create Invoice</Button></Link>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   // ============================================================
   // RENDER
@@ -624,18 +656,22 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Role tabs */}
-      <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as 'sent' | 'received')}>
+      <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as 'sent' | 'received' | 'client')}>
         <TabsList className="bg-muted">
           <TabsTrigger value="sent" className="flex items-center gap-1.5">
             <ArrowUpRight className="h-3.5 w-3.5" />
             Sent ({sentStats.total})
           </TabsTrigger>
-          <TabsTrigger value="received" className="flex items-center gap-1.5 relative">
+          <TabsTrigger value="received" className="flex items-center gap-1.5">
             <ArrowDownLeft className="h-3.5 w-3.5" />
             Received ({receivedStats.total})
-            {receivedActionCount > 0 && (
+          </TabsTrigger>
+          <TabsTrigger value="client" className="flex items-center gap-1.5 relative">
+            <Wallet className="h-3.5 w-3.5" />
+            Client ({clientStats.total})
+            {clientStats.awaitingAction > 0 && (
               <span className="ml-1 w-4 h-4 rounded-full bg-blue-500 text-[10px] text-white flex items-center justify-center">
-                {receivedActionCount}
+                {clientStats.awaitingAction}
               </span>
             )}
           </TabsTrigger>
@@ -643,7 +679,6 @@ const Dashboard: React.FC = () => {
 
         {/* ======= SENT TAB ======= */}
         <TabsContent value="sent" className="mt-4 space-y-4">
-          {/* Sent stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-4">
@@ -656,13 +691,13 @@ const Dashboard: React.FC = () => {
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground mb-2">In Escrow</p>
-                <p className="text-2xl font-semibold text-blue-500">{sentStats.inEscrow}</p>
+                <p className={`text-2xl font-semibold ${sentStats.inEscrow > 0 ? 'text-blue-500' : 'text-muted-foreground'}`}>{sentStats.inEscrow}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground mb-2">Released</p>
-                <p className="text-2xl font-semibold text-green-500">{sentStats.released}</p>
+                <p className={`text-2xl font-semibold ${sentStats.released > 0 ? 'text-green-500' : 'text-muted-foreground'}`}>{sentStats.released}</p>
               </CardContent>
             </Card>
             <Card>
@@ -676,8 +711,6 @@ const Dashboard: React.FC = () => {
               </CardContent>
             </Card>
           </div>
-
-          {/* Sent filter tabs */}
           <Tabs value={sentFilter} onValueChange={setSentFilter}>
             <TabsList className="bg-muted flex-wrap h-auto gap-1">
               <TabsTrigger value="all">All ({sentStats.total})</TabsTrigger>
@@ -690,15 +723,9 @@ const Dashboard: React.FC = () => {
               {loading ? (
                 <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
               ) : filteredSent.length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="py-12 text-center">
-                    <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-base font-semibold text-foreground mb-2">No invoices yet</h3>
-                    <Link to="/create"><Button><Plus className="mr-2 h-4 w-4" />Create Invoice</Button></Link>
-                  </CardContent>
-                </Card>
+                <EmptyState message="No invoices yet." showCreate />
               ) : (
-                <div className="space-y-3">{filteredSent.map(renderSentCard)}</div>
+                <div className="space-y-3">{filteredSent.map(renderCreatorCard)}</div>
               )}
             </TabsContent>
           </Tabs>
@@ -706,42 +733,41 @@ const Dashboard: React.FC = () => {
 
         {/* ======= RECEIVED TAB ======= */}
         <TabsContent value="received" className="mt-4 space-y-4">
-          {/* Received stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-2">Total Paid</p>
-                {formatStat(receivedStats.totalPaidUSDC, receivedStats.totalPaidSOL).map((l, i) => (
+                <p className="text-xs text-muted-foreground mb-2">Total Received</p>
+                {formatStat(receivedStats.totalReceivedUSDC, receivedStats.totalReceivedSOL).map((l, i) => (
                   <p key={i} className="text-base font-semibold text-foreground leading-snug">{l}</p>
                 ))}
               </CardContent>
             </Card>
-            <Card className={receivedActionCount > 0 ? 'border-l-4 border-l-blue-500' : ''}>
+            <Card className="border-l-4 border-l-blue-400">
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-2">Needs Approval</p>
-                <p className={`text-2xl font-semibold ${receivedActionCount > 0 ? 'text-blue-500' : 'text-muted-foreground'}`}>{receivedActionCount}</p>
+                <p className="text-xs text-muted-foreground mb-2">In Escrow</p>
+                {formatStat(receivedStats.inEscrowUSDC, receivedStats.inEscrowSOL).map((l, i) => (
+                  <p key={i} className={`text-base font-semibold leading-snug ${l === '0' ? 'text-muted-foreground' : 'text-blue-500'}`}>{l}</p>
+                ))}
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-2">Released</p>
-                <p className="text-2xl font-semibold text-green-500">{receivedStats.released}</p>
+                <p className="text-xs text-muted-foreground mb-2">Released to Wallet</p>
+                <p className={`text-2xl font-semibold ${receivedStats.released > 0 ? 'text-green-500' : 'text-muted-foreground'}`}>{receivedStats.released}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground mb-2">Invoices</p>
+                <p className="text-xs text-muted-foreground mb-2">Invoices paid</p>
                 <p className="text-2xl font-semibold text-foreground">{receivedStats.total}</p>
                 {receivedStats.disputed > 0 && <p className="text-xs text-amber-500 mt-1">{receivedStats.disputed} disputed</p>}
               </CardContent>
             </Card>
           </div>
-
-          {/* Received filter tabs */}
           <Tabs value={receivedFilter} onValueChange={setReceivedFilter}>
             <TabsList className="bg-muted flex-wrap h-auto gap-1">
               <TabsTrigger value="all">All ({receivedStats.total})</TabsTrigger>
-              {receivedStats.awaitingApproval > 0 && <TabsTrigger value="pending" className="text-blue-500">Action needed ({receivedStats.awaitingApproval})</TabsTrigger>}
+              <TabsTrigger value="escrow">In Escrow ({receivedStats.inEscrow})</TabsTrigger>
               <TabsTrigger value="released">Released ({receivedStats.released})</TabsTrigger>
               {receivedStats.disputed > 0 && <TabsTrigger value="disputed" className="text-amber-500">Disputed ({receivedStats.disputed})</TabsTrigger>}
             </TabsList>
@@ -749,17 +775,86 @@ const Dashboard: React.FC = () => {
               {loading ? (
                 <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
               ) : filteredReceived.length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="py-12 text-center">
-                    <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-sm text-muted-foreground">No invoices paid from this wallet yet.</p>
-                  </CardContent>
-                </Card>
+                <EmptyState message="No paid invoices yet. Once a client pays, it appears here." />
               ) : (
-                <div className="space-y-3">{filteredReceived.map(renderReceivedCard)}</div>
+                <div className="space-y-3">{filteredReceived.map(renderCreatorCard)}</div>
               )}
             </TabsContent>
           </Tabs>
+        </TabsContent>
+
+        {/* ======= CLIENT TAB ======= */}
+        <TabsContent value="client" className="mt-4 space-y-4">
+          {/* Client stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Total Paid Out</p>
+                {formatStat(clientStats.totalPaidUSDC, clientStats.totalPaidSOL).map((l, i) => (
+                  <p key={i} className="text-base font-semibold text-foreground leading-snug">{l}</p>
+                ))}
+              </CardContent>
+            </Card>
+            <Card className={clientStats.awaitingAction > 0 ? 'border-l-4 border-l-blue-500' : ''}>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Awaiting Action</p>
+                <p className={`text-2xl font-semibold ${clientStats.awaitingAction > 0 ? 'text-blue-500' : 'text-muted-foreground'}`}>{clientStats.awaitingAction}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Released</p>
+                <p className={`text-2xl font-semibold ${clientStats.released > 0 ? 'text-green-500' : 'text-muted-foreground'}`}>{clientStats.released}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2">Invoices paid</p>
+                <p className="text-2xl font-semibold text-foreground">{clientStats.total}</p>
+                {clientStats.disputed > 0 && <p className="text-xs text-amber-500 mt-1">{clientStats.disputed} disputed</p>}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Two sections toggle */}
+          <div className="flex gap-2">
+            <Button
+              variant={clientSection === 'action' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setClientSection('action')}
+              className="relative"
+            >
+              Awaiting Approval
+              {clientStats.awaitingAction > 0 && (
+                <span className="ml-2 w-4 h-4 rounded-full bg-blue-500 text-[10px] text-white flex items-center justify-center">
+                  {clientStats.awaitingAction}
+                </span>
+              )}
+            </Button>
+            <Button
+              variant={clientSection === 'history' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setClientSection('history')}
+            >
+              Payment History ({clientStats.total})
+            </Button>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          ) : clientSection === 'action' ? (
+            awaitingAction.length === 0 ? (
+              <EmptyState message="No invoices awaiting your approval right now." />
+            ) : (
+              <div className="space-y-3">{awaitingAction.map(i => renderClientCard(i, true))}</div>
+            )
+          ) : (
+            paymentHistory.length === 0 ? (
+              <EmptyState message="No payment history yet. Invoices you pay will appear here." />
+            ) : (
+              <div className="space-y-3">{paymentHistory.map(i => renderClientCard(i, false))}</div>
+            )
+          )}
         </TabsContent>
       </Tabs>
 

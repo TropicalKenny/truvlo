@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { invoiceId, clientEmail, creatorWallet, amount, invoiceUrl } = req.body;
+  const { invoiceId, clientEmail, creatorWallet, amount, description, senderName, invoiceUrl } = req.body;
 
   if (!invoiceId || !clientEmail || !creatorWallet || !amount || !invoiceUrl) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -58,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 Release requested
               </h2>
               <p style="margin:0 0 24px;font-size:15px;color:#94A3B8;line-height:1.6;">
-                The creator has marked work as complete and requested release of funds from escrow.
+                ${senderName ? `<strong style="color:#F8FAFC;">${senderName}</strong> has marked work as complete and is requesting release of funds from escrow.` : 'The creator has marked work as complete and requested release of funds from escrow.'}
               </p>
 
               <!-- Invoice details -->
@@ -76,6 +76,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     <p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#F8FAFC;letter-spacing:-0.02em;">${amount}</p>
                   </td>
                 </tr>
+                ${description ? `
+                <tr>
+                  <td style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);">
+                    <span style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Work description</span>
+                    <p style="margin:4px 0 0;font-size:14px;color:#F8FAFC;">${description}</p>
+                  </td>
+                </tr>` : ''}
                 <tr>
                   <td style="padding:16px 20px;">
                     <span style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Creator</span>
@@ -145,7 +152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         from: `Truvlo <${FROM_EMAIL}>`,
         to: [clientEmail],
-        subject: `Release requested — ${amount} locked in escrow (${invoiceId})`,
+        subject: `Release requested — ${senderName || shortCreator} is asking for payment (${invoiceId})`,
         html: emailHtml,
       }),
     });

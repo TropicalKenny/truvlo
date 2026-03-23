@@ -5,7 +5,7 @@ import { useConnection } from '@solana/wallet-adapter-react';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
-  RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp, ArrowDownLeft
+  RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp, ArrowDownLeft, ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -118,8 +118,14 @@ const Dashboard: React.FC = () => {
   const fromSmallestUnit = (amount: any, tokenType: TokenType) => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     try {
-      const val = amount.toNumber ? amount.toNumber() : Number(amount);
-      return parseFloat((val / Math.pow(10, decimals)).toFixed(decimals));
+      // Use BigInt to avoid floating point precision loss (e.g. 1 SOL showing as 0.9999)
+      const raw = amount?.toNumber ? amount.toNumber() : Number(amount ?? 0);
+      const int = BigInt(Math.round(raw));
+      const divisor = BigInt(10 ** decimals);
+      const whole = int / divisor;
+      const remainder = int % divisor;
+      const fracStr = remainder.toString().padStart(decimals, '0');
+      return parseFloat(`${whole}.${fracStr}`);
     } catch { return 0; }
   };
 
@@ -179,6 +185,8 @@ const Dashboard: React.FC = () => {
               clientEmail: inv.clientEmail,
               creatorWallet: publicKey.toBase58(),
               amount: formatAmount(inv.amountPaid, inv.tokenType),
+              description: inv.description || '',
+              senderName: inv.senderName || '',
               invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey.toBase58()}`,
             }),
           });
@@ -543,8 +551,8 @@ const Dashboard: React.FC = () => {
 
             <div className="flex flex-col gap-2 items-end">
               <Button variant="outline" size="sm"
-                onClick={() => handleCopyLink(inv.invoiceId, inv.creator.toBase58())}>
-                <Copy className="h-3.5 w-3.5 mr-1" />View Invoice
+                onClick={() => window.open(`${window.location.origin}/invoice/${inv.invoiceId}/${inv.creator.toBase58()}`, '_blank')}>
+                <ExternalLink className="h-3.5 w-3.5 mr-1" />View Invoice
               </Button>
 
               {needsAction && (

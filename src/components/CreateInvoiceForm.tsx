@@ -12,8 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { EscrowPaySDK, TokenType } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 /**
  * Safely convert any error to a string message
@@ -57,6 +55,7 @@ const CreateInvoiceForm: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [clientEmail, setClientEmail] = useState('');
+  const [senderName, setSenderName] = useState('');
   const [tokenType, setTokenType] = useState<TokenType>(TokenType.USDC);
   const [isCreating, setIsCreating] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -130,37 +129,26 @@ const CreateInvoiceForm: React.FC = () => {
         });
         toast({ title: 'Invoice created' });
         
-        // Send email notification to client (only if Supabase is configured)
-        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-          try {
-            const emailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-invoice-email`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-              },
-              body: JSON.stringify({
-                clientEmail: clientEmail.trim(),
-                invoiceId: result.data.invoiceId,
-                amount: amountNum,
-                tokenType: tokenType === TokenType.USDC ? 'USDC' : 'SOL',
-                description: description.trim(),
-                paymentUrl: invoiceUrl,
-                creatorAddress: publicKey?.toBase58(),
-              }),
-            });
-
-            const emailData = await emailRes.json();
-            if (emailRes.ok) {
-              toast({ title: 'Email sent to client' });
-            } else {
-              console.error('Email sending failed:', emailData);
-              toast({ title: 'Email failed to send', description: emailData?.error || 'Unknown error', variant: 'destructive' });
-            }
-          } catch (emailErr) {
-            console.warn('Failed to send email notification:', emailErr);
-            // Don't show error toast - invoice was created successfully
-          }
+        // Send invoice email to client via Vercel API
+        try {
+          await fetch('/api/send-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              invoiceId: result.data.invoiceId,
+              clientEmail: clientEmail.trim(),
+              creatorWallet: publicKey?.toBase58(),
+              senderName: senderName.trim(),
+              amount: amountNum,
+              tokenType: tokenType === TokenType.USDC ? 'USDC' : 'SOL',
+              description: description.trim(),
+              invoiceUrl,
+            }),
+          });
+          toast({ title: 'Invoice created', description: `Payment link sent to ${clientEmail.trim()}` });
+        } catch {
+          // Email failure is non-blocking — invoice was created successfully
+          toast({ title: 'Invoice created', description: 'Copy the link below to share with your client.' });
         }
       } else {
         // result.error should always be a string from SDK
@@ -316,6 +304,20 @@ const CreateInvoiceForm: React.FC = () => {
             />
           </div>
           
+          {/* Your Name / Company */}
+          <div className="space-y-2">
+            <Label htmlFor="senderName" className="text-sm font-medium">Your name or company</Label>
+            <Input
+              id="senderName"
+              type="text"
+              placeholder="e.g. Kenny Fafimiye or Truvlo Studio"
+              value={senderName}
+              onChange={(e) => setSenderName(e.target.value)}
+              className="clean-input"
+            />
+            <p className="text-xs text-muted-foreground">Shown to the client so they know who sent the invoice</p>
+          </div>
+
           {/* Client Email */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-sm font-medium">Client Email</Label>

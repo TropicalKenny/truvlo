@@ -961,12 +961,31 @@ export class EscrowPaySDK {
         if (invoiceAccessor) {
           const allInvoices = await invoiceAccessor.all();
           if (allInvoices?.length) {
+            // Debug: log first invoice to inspect client field shape
+            if (allInvoices.length > 0) {
+              const sample = allInvoices[0]?.account;
+              console.log('[fetchInvoicesByClient] sample client field:', JSON.stringify(sample?.client), 'target:', targetStr);
+            }
             const filtered = allInvoices.filter((inv: any) => {
               try {
                 const clientField = inv?.account?.client;
                 if (!clientField) return false;
-                // Handle both Option<Pubkey> unwrapped and raw pubkey
-                const clientKey = clientField.toString ? clientField.toString() : String(clientField);
+                // Anchor Option<Pubkey> can come as:
+                // 1. PublicKey directly (most common)
+                // 2. { key: PublicKey } (some versions)
+                // 3. String already
+                let clientKey: string;
+                if (typeof clientField === 'string') {
+                  clientKey = clientField;
+                } else if (clientField.toBase58) {
+                  clientKey = clientField.toBase58();
+                } else if (clientField.toString) {
+                  clientKey = clientField.toString();
+                } else if (clientField.key) {
+                  clientKey = clientField.key.toString();
+                } else {
+                  clientKey = String(clientField);
+                }
                 return clientKey === targetStr;
               } catch { return false; }
             });

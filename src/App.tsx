@@ -17,6 +17,7 @@ import CreateInvoicePage from './pages/CreateInvoicePage';
 import PaymentPage from './pages/PaymentPage';
 import DashboardPage from './pages/DashboardPage';
 import InvalidInvoicePage from './pages/InvalidInvoicePage';
+import ApprovePage from './pages/ApprovePage';
 import { NotificationProvider } from './components/NotificationProvider';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
@@ -45,6 +46,7 @@ const App = () => {
               <Route path="/invoice/:invoiceId" element={<InvalidInvoicePage />} />
               <Route path="/pay/:invoiceId" element={<InvalidInvoicePage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/approve/:invoiceId/:creator" element={<ApprovePage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <Toaster />

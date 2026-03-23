@@ -11,6 +11,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { invoiceId, clientEmail, creatorWallet, amount, description, senderName, invoiceUrl } = req.body;
+  // Direct approve/dispute URL — faster for client
+  const approveUrl = invoiceUrl.replace('/invoice/', '/approve/');
 
   if (!invoiceId || !clientEmail || !creatorWallet || !amount || !invoiceUrl) {
     return res.status(400).json({ error: 'Missing required fields' });
@@ -109,17 +111,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
                 <tr>
                   <td align="center">
-                    <a href="${invoiceUrl}"
+                    <a href="${approveUrl}"
                       style="display:inline-block;background:#2DD4BF;color:#0D1117;font-size:15px;font-weight:500;
                              text-decoration:none;padding:14px 32px;border-radius:8px;letter-spacing:-0.01em;">
-                      Review &amp; Respond
+                      Approve or Dispute
                     </a>
                   </td>
                 </tr>
               </table>
 
               <p style="margin:0;font-size:12px;color:#64748B;text-align:center;line-height:1.6;">
-                Or copy this link: <a href="${invoiceUrl}" style="color:#2DD4BF;">${invoiceUrl}</a>
+                Or copy this link: <a href="${approveUrl}" style="color:#2DD4BF;">${approveUrl}</a>
               </p>
             </td>
           </tr>

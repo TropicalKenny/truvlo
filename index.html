@@ -2,10 +2,51 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/truvlo-favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Escrow-protected invoicing for modern businesses. Send invoices, accept USDC or SOL payments, and release funds securely with smart contract escrow." />
-    <title>EscrowPay — Secure Crypto Invoicing</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><path d='M16 7a9 9 0 0 0-9 9 9 9 0 0 0 9 9 9 9 0 0 0 9-9 9 9 0 0 0-9-9zm0 3a2.5 2.5 0 0 1 2.5 2.5v.5h1a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1h1v-.5A2.5 2.5 0 0 1 16 10zm0 2a.5.5 0 0 0-.5.5v.5h1v-.5A.5.5 0 0 0 16 12z' fill='white'/></svg>" />
+
+    <title>Truvlo — Escrow Invoicing for Global Freelancers</title>
+    <meta name="description" content="Send escrow-protected invoices on Solana. Funds lock on-chain when your client pays. Release when work is done. Built for cross-border B2B freelancers." />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Truvlo — Escrow Invoicing for Global Freelancers" />
+    <meta property="og:description" content="Send escrow-protected invoices on Solana. Funds lock on-chain when your client pays. Release when work is done." />
+    <meta property="og:url" content="https://truvlo.app" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://truvlo.app/og-image.png" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Truvlo — Escrow Invoicing for Global Freelancers" />
+    <meta name="twitter:description" content="Send escrow-protected invoices on Solana. Funds lock on-chain when your client pays." />
+    <meta name="twitter:image" content="https://truvlo.app/og-image.png" />
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://truvlo.app" />
+
+    <!-- Fonts: preconnect first, then load -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- DNS prefetch for Solana/Pyth -->
+    <link rel="dns-prefetch" href="//api.devnet.solana.com" />
+    <link rel="dns-prefetch" href="//hermes.pyth.network" />
+    <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+
+    <!-- Organization schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Truvlo",
+      "url": "https://truvlo.app",
+      "description": "Escrow-protected invoicing on Solana for cross-border B2B freelancers"
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

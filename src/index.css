@@ -1,291 +1,302 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* EscrowPay Design System - Enterprise Fintech */
-
 @layer base {
   :root {
-    /* Background & Surfaces - Clean, minimal */
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 217 28% 7%;
+    --foreground: 210 40% 98%;
 
-    /* Card surfaces */
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card: 215 27% 11%;
+    --card-foreground: 210 40% 98%;
 
-    /* Popover */
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover: 215 27% 11%;
+    --popover-foreground: 210 40% 98%;
 
-    /* Primary - Calm blue accent */
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 174 69% 51%;
+    --primary-foreground: 217 28% 7%;
 
-    /* Secondary - Dark text */
-    --secondary: 222 47% 11%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 215 25% 14%;
+    --secondary-foreground: 210 40% 98%;
 
-    /* Muted - Subtle gray */
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 215 27% 11%;
+    --muted-foreground: 215 20% 60%;
 
-    /* Status Colors - Professional */
-    --accent: 142 76% 36%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 174 69% 51%;
+    --accent-foreground: 217 28% 7%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --destructive: 0 86% 60%;
+    --destructive-foreground: 210 40% 98%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --border: 215 20% 20%;
+    --input: 215 25% 14%;
+    --ring: 174 69% 51%;
 
-    /* Info/Escrow state */
-    --info: 217 91% 60%;
-    --info-foreground: 0 0% 100%;
-
-    /* Borders & Inputs - Subtle */
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
-
-    --radius: 0.625rem;
-
-    /* Sidebar */
-    --sidebar-background: 0 0% 99%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 217 91% 60%;
+    --radius: 0.75rem;
   }
 }
 
 @layer base {
   * {
-    border-color: hsl(var(--border));
+    @apply border-border;
+    box-sizing: border-box;
   }
 
   html {
-    scroll-behavior: smooth;
+    background-color: #0D1117;
   }
 
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    background-color: #0D1117;
+    color: #F8FAFC;
+    font-family: 'DM Sans', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    line-height: 1.6;
   }
 
+  /* Headings default to Space Grotesk */
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Inter', system-ui, sans-serif;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-  }
-
-  h1 {
-    font-size: 3rem;
-    line-height: 1.1;
-  }
-
-  h2 {
-    font-size: 1.5rem;
+    font-family: 'Space Grotesk', sans-serif;
   }
 }
 
-@layer components {
-  /* Clean Wallet Button */
-  .wallet-adapter-button {
-    background: hsl(var(--secondary)) !important;
-    border: none !important;
-    border-radius: 0.5rem !important;
-    font-family: 'Inter', sans-serif !important;
-    font-weight: 500 !important;
-    font-size: 0.875rem !important;
-    padding: 0.5rem 1rem !important;
-    height: 40px !important;
-    transition: all 0.15s ease-out !important;
-    box-shadow: none !important;
-  }
+/* ===========================
+   WALLET ADAPTER OVERRIDES
+   =========================== */
 
-  .wallet-adapter-button:hover {
-    background: hsl(222 47% 20%) !important;
-    transform: translateY(0) !important;
-  }
+.wallet-adapter-button {
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #F8FAFC !important;
+  font-family: 'DM Sans', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  border-radius: 8px !important;
+  padding: 8px 16px !important;
+  height: 40px !important;
+  transition: all 150ms ease !important;
+  line-height: 1 !important;
+}
 
-  .wallet-adapter-button-trigger {
-    background: hsl(var(--secondary)) !important;
-  }
+.wallet-adapter-button:hover {
+  opacity: 0.9 !important;
+  background: rgba(45, 212, 191, 0.08) !important;
+  border-color: rgba(45, 212, 191, 0.25) !important;
+}
 
-  .wallet-adapter-modal-wrapper {
-    font-family: 'Inter', sans-serif !important;
-  }
+.wallet-adapter-button:not([disabled]):hover {
+  background: rgba(45, 212, 191, 0.08) !important;
+  border-color: rgba(45, 212, 191, 0.25) !important;
+}
 
-  /* Subtle animations only */
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
+.wallet-adapter-button-trigger {
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #F8FAFC !important;
+  font-family: 'DM Sans', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  border-radius: 8px !important;
+  padding: 8px 16px !important;
+  height: 40px !important;
+}
 
-  .animate-fade-in {
-    animation: fade-in 0.2s ease-out;
-  }
+/* Modal */
+.wallet-adapter-modal-wrapper {
+  background: #161B22 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+}
 
-  .animate-slide-up {
-    animation: fade-in 0.2s ease-out;
-  }
+.wallet-adapter-modal-title {
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-weight: 700 !important;
+  color: #F8FAFC !important;
+  font-size: 1.25rem !important;
+}
 
-  /* Minimal Card */
-  .clean-card {
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    border-radius: var(--radius);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    transition: box-shadow 0.15s ease-out;
-  }
+.wallet-adapter-modal-list {
+  margin: 0 !important;
+}
 
-  .clean-card:hover {
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  }
-  
-  /* Status Badges - Subtle, minimal */
-  .status-unpaid {
-    background-color: hsl(215 16% 47% / 0.1);
-    color: hsl(215 16% 47%);
-    border: none;
-    font-weight: 400;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-  }
+.wallet-adapter-modal-list li {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
 
-  .status-partial {
-    background-color: hsl(38 92% 50% / 0.1);
-    color: hsl(38 92% 35%);
-    border: none;
-    font-weight: 400;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-  }
+.wallet-adapter-modal-list-more {
+  color: #94A3B8 !important;
+  font-family: 'DM Sans', sans-serif !important;
+}
 
-  .status-paid {
-    background-color: hsl(217 91% 60% / 0.1);
-    color: hsl(217 91% 50%);
-    border: none;
-    font-weight: 400;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-  }
+.wallet-adapter-modal-list li button {
+  background: transparent !important;
+  border-radius: 8px !important;
+  transition: background 150ms ease !important;
+}
 
-  .status-released {
-    background-color: hsl(142 76% 36% / 0.1);
-    color: hsl(142 76% 36%);
-    border: none;
-    font-weight: 400;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-  }
+.wallet-adapter-modal-list li button:hover {
+  background: rgba(45, 212, 191, 0.06) !important;
+}
 
-  /* Token badges */
-  .token-usdc {
-    background-color: hsl(217 91% 60% / 0.1);
-    color: hsl(217 91% 50%);
-    border: none;
-    font-weight: 400;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-  }
+.wallet-adapter-modal-list li button span {
+  color: #F8FAFC !important;
+  font-family: 'DM Sans', sans-serif !important;
+  font-size: 14px !important;
+}
 
-  .token-sol {
-    background-color: hsl(142 76% 36% / 0.1);
-    color: hsl(142 76% 36%);
-    border: none;
-    font-weight: 400;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-  }
+.wallet-adapter-modal-overlay {
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+}
 
-  /* Progress bar - Minimal */
-  .progress-bar {
-    background: hsl(var(--muted));
-    border: none;
-    border-radius: 9999px;
-    overflow: hidden;
-    height: 6px;
-  }
+.wallet-adapter-modal-button-close {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-radius: 50% !important;
+  color: #94A3B8 !important;
+  transition: all 150ms ease !important;
+}
 
-  .progress-bar-fill {
-    background: hsl(var(--primary));
-    transition: width 0.3s ease-out;
-    border: none;
-  }
+.wallet-adapter-modal-button-close:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #F8FAFC !important;
+}
 
-  .progress-bar-fill-released {
-    background: hsl(var(--accent));
-  }
+/* ===========================
+   SCROLLBAR
+   =========================== */
 
-  /* Clean input focus */
-  .clean-input:focus {
-    border-color: hsl(var(--primary));
-    outline: none;
-    box-shadow: 0 0 0 3px hsl(217 91% 60% / 0.1);
-  }
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
 
-  /* Step indicator - Subtle */
-  .step-number {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: hsl(var(--muted));
-    color: hsl(var(--muted-foreground));
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 500;
-    font-size: 0.875rem;
-  }
+::-webkit-scrollbar-track {
+  background: #0D1117;
+}
 
-  .step-number-active {
-    background: hsl(var(--secondary));
-    color: hsl(var(--secondary-foreground));
-  }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
 
-  /* Fee breakdown table */
-  .fee-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid hsl(var(--border));
-    font-weight: 400;
-  }
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
 
-  .fee-row:last-child {
-    border-bottom: none;
-  }
+/* ===========================
+   SHADCN COMPONENT OVERRIDES
+   =========================== */
 
-  .fee-row-total {
-    font-weight: 500;
-    padding-top: 0.75rem;
-    margin-top: 0.5rem;
-    border-top: 1px solid hsl(var(--border));
-  }
+/* Dialog */
+[data-radix-dialog-overlay] {
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* Tabs */
+[data-state="active"][data-radix-tabs-trigger] {
+  color: #F8FAFC !important;
+  border-bottom-color: #2DD4BF !important;
+}
+
+/* Toast */
+[data-radix-toast-viewport] {
+  --viewport-padding: 16px;
+}
+
+/* ===========================
+   UTILITY CLASSES
+   =========================== */
+
+.truvlo-card {
+  background: #161B22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.truvlo-nested {
+  background: #1C2128;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.truvlo-amount {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  color: #F8FAFC;
+  letter-spacing: -0.02em;
+}
+
+.truvlo-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #94A3B8;
+  letter-spacing: 0.01em;
+}
+
+.truvlo-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #94A3B8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.truvlo-btn-primary {
+  background: #2DD4BF;
+  color: #0D1117;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  border-radius: 8px;
+  padding: 12px 24px;
+  transition: opacity 150ms ease;
+  border: none;
+  cursor: pointer;
+}
+
+.truvlo-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.truvlo-btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #F8FAFC;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  border-radius: 8px;
+  padding: 12px 24px;
+  transition: opacity 150ms ease;
+  cursor: pointer;
+}
+
+.truvlo-btn-secondary:hover {
+  opacity: 0.8;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.truvlo-input {
+  background: #1C2128;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #F8FAFC;
+  font-family: 'DM Sans', sans-serif;
+  padding: 12px 16px;
+  height: 44px;
+  width: 100%;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.truvlo-input:focus {
+  border-color: rgba(45, 212, 191, 0.25);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.08);
+}
+
+.truvlo-input::placeholder {
+  color: #64748B;
 }

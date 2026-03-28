@@ -5,14 +5,14 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Connection } from '@solana/web3.js';
-import { Loader2, AlertCircle, Check, ArrowLeft, Wallet, Shield, ExternalLink, Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
+import {
+  Loader2, AlertCircle, Check, ArrowLeft, Shield,
+  ExternalLink, Plus, Trash2, Wallet
+} from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType, PLATFORM_FEE_BPS } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
 
+// ── types — preserved exactly ──────────────────────────────────
 type PageState =
   | { type: 'loading' }
   | { type: 'error'; message: string }
@@ -22,6 +22,16 @@ type PageState =
 interface Installment {
   percentage: number;
 }
+// ───────────────────────────────────────────────────────────────
+
+const cardStyle: React.CSSProperties = {
+  maxWidth: '440px',
+  margin: '0 auto',
+  backgroundColor: '#161B22',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: '16px',
+  overflow: 'hidden',
+};
 
 const InvoicePayment: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
@@ -36,6 +46,7 @@ const InvoicePayment: React.FC = () => {
   const [installments, setInstallments] = useState<Installment[]>([{ percentage: 100 }]);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
 
+  // ── preserved exactly ──────────────────────────────────────────
   const urlParams = useMemo(() => {
     if (!invoiceId || !creator) return { valid: false, error: 'Invalid invoice link - missing parameters' };
     try {
@@ -164,22 +175,16 @@ const InvoicePayment: React.FC = () => {
     setPaying(true);
     try {
       const creatorPubkey = new PublicKey(creator);
-
-      // Step 1: Pay full amount
       const payResult = await sdk.payInvoice(invoice.invoiceId, creatorPubkey, breakdown.amount, invoice.tokenType);
       if (!payResult.success) {
         toast({ title: 'Payment failed', description: typeof payResult.error === 'string' ? payResult.error : 'Payment failed', variant: 'destructive' });
         return;
       }
-
-      // Step 2: Set release schedule on-chain (convert % to basis points)
       const scheduleBps = installments.map(i => Math.round(i.percentage * 100));
       const scheduleResult = await sdk.setReleaseSchedule(invoice.invoiceId, creatorPubkey, scheduleBps);
       if (!scheduleResult.success) {
         toast({ title: 'Schedule not set', description: 'Payment succeeded but release schedule failed. Creator can release freely.', variant: 'destructive' });
       }
-
-      // Show success
       const updated = await sdk.fetchInvoice(invoice.invoiceId, creatorPubkey);
       setPageState({
         type: 'payment_success',
@@ -197,97 +202,149 @@ const InvoicePayment: React.FC = () => {
       setPaying(false);
     }
   };
+  // ───────────────────────────────────────────────────────────────
 
-  // ==================== RENDER ====================
-
+  // ── LOADING ─────────────────────────────────────────────────────
   if (pageState.type === 'loading') {
     return (
-      <Card className="max-w-md mx-auto">
-        <CardContent className="py-12 flex flex-col items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-          <p className="text-sm text-muted-foreground">Loading invoice...</p>
-          {sdkInitError && <p className="text-xs text-destructive mt-2">{sdkInitError}</p>}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (pageState.type === 'error') {
-    return (
-      <Card className="max-w-md mx-auto">
-        <CardContent className="py-12 text-center">
-          <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">Invoice Not Found</h3>
-          <p className="text-sm text-muted-foreground mb-4">{pageState.message}</p>
-          <p className="text-xs text-muted-foreground mb-4 font-mono">ID: {invoiceId || 'N/A'}</p>
-          <Button variant="outline" onClick={() => navigate('/')}><ArrowLeft className="mr-2 h-4 w-4" />Go Home</Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (pageState.type === 'payment_success') {
-    const { invoice, paidAmount, txSignature } = pageState;
-    return (
-      <div className="max-w-md mx-auto">
-        <Card>
-          <CardContent className="py-10 text-center">
-            <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
-              <Check className="h-8 w-8 text-green-500" />
-            </div>
-            <h2 className="text-2xl font-semibold text-foreground mb-2">Payment Sent!</h2>
-            <p className="text-sm text-muted-foreground mb-6">
-              <span className="font-medium text-foreground">{formatAmount(paidAmount, invoice.tokenType)}</span> deposited into escrow.
-            </p>
-            <div className="p-4 rounded-lg bg-muted text-left space-y-2 mb-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Invoice</span>
-                <span className="font-mono text-foreground">{invoice.invoiceId}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Amount paid</span>
-                <span className="text-foreground">{formatAmount(paidAmount, invoice.tokenType)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Installments</span>
-                <span className="text-foreground">{installments.length}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <span className="text-green-600 font-medium">In escrow</span>
-              </div>
-            </div>
-            {installments.length > 1 && (
-              <div className="p-3 rounded-lg bg-muted text-left mb-4">
-                <p className="text-xs font-medium text-foreground mb-2">Release schedule</p>
-                {installments.map((inst, i) => (
-                  <div key={i} className="flex justify-between text-xs text-muted-foreground py-0.5">
-                    <span>Installment {i + 1}</span>
-                    <span>{inst.percentage}% — {formatAmount(paidAmount * inst.percentage / 100, invoice.tokenType)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 text-left mb-6">
-              <Shield className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                Funds are secured on-chain. The creator can only release according to the schedule you set.
-              </p>
-            </div>
-            {txSignature && (
-              <a href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1 text-xs text-primary hover:underline mb-6">
-                View on Solana Explorer <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-            <Button className="w-full" onClick={() => navigate('/')}>Done</Button>
-          </CardContent>
-        </Card>
+      <div style={cardStyle}>
+        <div className="p-12 flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#2DD4BF' }} />
+          <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>Loading invoice...</p>
+          {sdkInitError && <p style={{ color: '#EF4444', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>{sdkInitError}</p>}
+        </div>
       </div>
     );
   }
 
-  // Invoice Loaded
+  // ── ERROR ────────────────────────────────────────────────────────
+  if (pageState.type === 'error') {
+    return (
+      <div style={cardStyle}>
+        <div className="p-10 flex flex-col items-center gap-4 text-center">
+          <AlertCircle className="h-10 w-10" style={{ color: '#EF4444' }} />
+          <div>
+            <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1.125rem', color: '#F8FAFC', marginBottom: '8px' }}>
+              Invoice Not Found
+            </h3>
+            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', marginBottom: '6px' }}>
+              {pageState.message}
+            </p>
+            <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '11px', color: '#64748B', marginBottom: '24px' }}>
+              ID: {invoiceId || 'N/A'}
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-opacity duration-150 hover:opacity-80"
+            style={{
+              backgroundColor: 'transparent',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: '#F8FAFC',
+              fontFamily: '"DM Sans", sans-serif',
+              cursor: 'pointer',
+            }}
+          >
+            <ArrowLeft className="h-4 w-4" />Go Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SUCCESS ──────────────────────────────────────────────────────
+  if (pageState.type === 'payment_success') {
+    const { invoice, paidAmount, txSignature } = pageState;
+    return (
+      <div style={cardStyle}>
+        <div className="p-10 flex flex-col items-center gap-4 text-center">
+          <div
+            className="w-16 h-16 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(34,197,94,0.1)' }}
+          >
+            <Check className="h-8 w-8" style={{ color: '#22C55E' }} />
+          </div>
+
+          <div>
+            <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.5rem', color: '#F8FAFC', letterSpacing: '-0.01em', marginBottom: '8px' }}>
+              Funds Secured
+            </h2>
+            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', marginBottom: '24px' }}>
+              <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{formatAmount(paidAmount, invoice.tokenType)}</span> deposited into escrow.
+            </p>
+          </div>
+
+          {/* Summary */}
+          <div className="w-full rounded-lg p-4 text-left space-y-2.5" style={{ backgroundColor: '#1C2128' }}>
+            {[
+              { label: 'Amount paid', value: formatAmount(paidAmount, invoice.tokenType) },
+              { label: 'Installments', value: String(installments.length) },
+              { label: 'Status', value: 'In escrow', highlight: true },
+            ].map(({ label, value, highlight }) => (
+              <div key={label} className="flex justify-between text-sm">
+                <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>{label}</span>
+                <span style={{ color: highlight ? '#4ADE80' : '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontWeight: highlight ? 500 : 400 }}>{value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Schedule summary */}
+          {installments.length > 1 && (
+            <div className="w-full rounded-lg p-4 text-left" style={{ backgroundColor: '#1C2128' }}>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500, color: '#F8FAFC', marginBottom: '8px' }}>Release schedule</p>
+              {installments.map((inst, i) => (
+                <div key={i} className="flex justify-between py-0.5">
+                  <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>Installment {i + 1}</span>
+                  <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>
+                    {inst.percentage}% — {formatAmount(paidAmount * inst.percentage / 100, invoice.tokenType)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Escrow note */}
+          <div
+            className="w-full rounded-lg p-4 flex items-start gap-3 text-left"
+            style={{ backgroundColor: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)' }}
+          >
+            <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#38BDF8' }} />
+            <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
+              Funds are secured on-chain. The creator can only release according to the schedule you set.
+            </p>
+          </div>
+
+          {txSignature && (
+            <a
+              href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs transition-opacity duration-150 hover:opacity-70"
+              style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
+            >
+              View on Solana Explorer <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+
+          <button
+            onClick={() => navigate('/')}
+            className="w-full rounded-lg py-3 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
+            style={{
+              backgroundColor: '#2DD4BF',
+              color: '#0D1117',
+              fontFamily: '"DM Sans", sans-serif',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── INVOICE LOADED ───────────────────────────────────────────────
   const invoice = pageState.invoice;
   const totalAmount = fromSmallestUnit(invoice.amount, invoice.tokenType);
   const paidAmount = fromSmallestUnit(invoice.amountPaid, invoice.tokenType);
@@ -296,169 +353,290 @@ const InvoicePayment: React.FC = () => {
   const breakdown = calculateBreakdown(invoice);
   const isPaid = invoice.status === InvoiceStatus.FullyPaid || invoice.status === InvoiceStatus.Released;
   const isPartiallyPaid = invoice.status === InvoiceStatus.PartiallyPaid;
+  const symbol = invoice.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
+
+  const statusBadge = {
+    [InvoiceStatus.Unpaid]: { label: 'Pending', bg: 'rgba(249,115,22,0.1)', color: '#FB923C' },
+    [InvoiceStatus.PartiallyPaid]: { label: 'Partial', bg: 'rgba(59,130,246,0.1)', color: '#93C5FD' },
+    [InvoiceStatus.FullyPaid]: { label: 'In Escrow', bg: 'rgba(59,130,246,0.1)', color: '#93C5FD' },
+    [InvoiceStatus.Released]: { label: 'Released', bg: 'rgba(34,197,94,0.1)', color: '#4ADE80' },
+    [InvoiceStatus.Disputed]: { label: 'Disputed', bg: 'rgba(245,158,11,0.1)', color: '#FCD34D' },
+  }[invoice.status] ?? { label: 'Unknown', bg: 'rgba(255,255,255,0.06)', color: '#94A3B8' };
 
   return (
-    <div className="max-w-md mx-auto">
-      <Card>
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-foreground">Invoice {invoice.invoiceId}</span>
-            <span className={`px-2 py-1 rounded text-xs font-medium ${
-              invoice.status === InvoiceStatus.Unpaid ? 'status-unpaid' :
-              invoice.status === InvoiceStatus.PartiallyPaid ? 'status-partial' :
-              invoice.status === InvoiceStatus.FullyPaid ? 'status-paid' : 'status-released'
-            }`}>
-              {invoice.status === InvoiceStatus.Unpaid ? 'Unpaid' :
-               invoice.status === InvoiceStatus.PartiallyPaid ? 'Partially Paid' :
-               invoice.status === InvoiceStatus.FullyPaid ? 'Paid' : 'Released'}
-            </span>
-          </div>
-          <div className="mb-4">
-            <p className="text-xs text-muted-foreground mb-1">Total Amount</p>
-            <p className="text-3xl font-semibold text-foreground">{formatAmount(totalAmount, invoice.tokenType)}</p>
-          </div>
-          {(isPartiallyPaid || isPaid) && (
-            <div className="mb-4">
-              <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>Paid: {formatAmount(paidAmount, invoice.tokenType)}</span>
-                <span>{progressPercent.toFixed(0)}%</span>
-              </div>
-              <div className="progress-bar h-2">
-                <div className={`progress-bar-fill h-full ${invoice.status === InvoiceStatus.Released ? 'progress-bar-fill-released' : ''}`}
-                  style={{ width: `${progressPercent}%` }} />
-              </div>
-            </div>
-          )}
-          <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${invoice.tokenType === TokenType.USDC ? 'token-usdc' : 'token-sol'}`}>
-            {invoice.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
+    <div style={cardStyle}>
+      {/* Invoice header */}
+      <div className="p-7 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center justify-between mb-5">
+          <span
+            style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: '12px',
+              color: '#94A3B8',
+            }}
+          >
+            {invoice.invoiceId}
+          </span>
+          <span
+            className="px-2.5 py-0.5 rounded-full text-xs font-medium"
+            style={{ backgroundColor: statusBadge.bg, color: statusBadge.color, fontFamily: '"DM Sans", sans-serif' }}
+          >
+            {statusBadge.label}
           </span>
         </div>
 
-        <CardContent className="p-6 space-y-4">
-          <div className="space-y-3">
-            <div className="p-3 rounded bg-muted">
-              <p className="text-xs text-muted-foreground mb-0.5">From</p>
-              <p className="text-sm text-foreground font-mono truncate">
-                {creator ? `${creator.slice(0, 8)}...${creator.slice(-8)}` : 'Unknown'}
-              </p>
+        {/* Amount — dominant element (3rem+) */}
+        <p
+          style={{
+            fontFamily: '"Space Grotesk", sans-serif',
+            fontWeight: 700,
+            fontSize: '3rem',
+            color: '#F8FAFC',
+            letterSpacing: '-0.02em',
+            lineHeight: 1,
+            marginBottom: '8px',
+          }}
+        >
+          {totalAmount.toLocaleString('en-US', {
+            minimumFractionDigits: invoice.tokenType === TokenType.USDC ? 2 : 4,
+            maximumFractionDigits: invoice.tokenType === TokenType.USDC ? 2 : 4,
+          })}
+          <span style={{ fontSize: '1.125rem', color: '#64748B', marginLeft: '8px', fontWeight: 500 }}>{symbol}</span>
+        </p>
+
+        {/* Progress bar for partial */}
+        {(isPartiallyPaid || isPaid) && (
+          <div className="mt-4">
+            <div className="flex justify-between text-xs mb-1.5" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+              <span>Paid: {formatAmount(paidAmount, invoice.tokenType)}</span>
+              <span>{progressPercent.toFixed(0)}%</span>
             </div>
-            {invoice.description && (
-              <div className="p-3 rounded bg-muted">
-                <p className="text-xs text-muted-foreground mb-0.5">Description</p>
-                <p className="text-sm text-foreground">{invoice.description}</p>
-              </div>
-            )}
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${progressPercent}%`,
+                  backgroundColor: invoice.status === InvoiceStatus.Released ? '#22C55E' : '#3B82F6',
+                }}
+              />
+            </div>
           </div>
+        )}
 
-          {!isPaid && remaining > 0 && (
-            <>
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20">
-                <Shield className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  Your payment is held securely in a smart contract. You decide how funds are released to the creator.
-                </p>
-              </div>
+        <div className="mt-4">
+          <span
+            className="px-2.5 py-0.5 rounded-full text-xs font-medium"
+            style={{
+              backgroundColor: invoice.tokenType === TokenType.USDC ? 'rgba(34,197,94,0.1)' : 'rgba(56,189,248,0.1)',
+              color: invoice.tokenType === TokenType.USDC ? '#4ADE80' : '#7DD3FC',
+              fontFamily: '"DM Sans", sans-serif',
+            }}
+          >
+            {invoice.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
+          </span>
+        </div>
+      </div>
 
-              {/* Release Schedule Builder */}
-              <div className="border border-border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <Label className="text-sm font-medium">Release schedule</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">How should funds be released to the creator?</p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addInstallment} disabled={installments.length >= 10}>
-                    <Plus className="h-3 w-3 mr-1" />Add
-                  </Button>
-                </div>
-
-                <div className="space-y-2 mb-3">
-                  {installments.map((inst, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-20 flex-shrink-0">Installment {idx + 1}</span>
-                      <div className="relative flex-1">
-                        <Input
-                          type="number"
-                          value={inst.percentage || ''}
-                          onChange={(e) => updateInstallment(idx, parseFloat(e.target.value) || 0)}
-                          placeholder="0"
-                          min="1"
-                          max="100"
-                          className="pr-7 h-8 text-sm"
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground w-24 text-right flex-shrink-0">
-                        {inst.percentage > 0 ? formatAmount(breakdown.amount * inst.percentage / 100, invoice.tokenType) : '—'}
-                      </span>
-                      {installments.length > 1 && (
-                        <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeInstallment(idx)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className={`flex justify-between text-xs font-medium pt-2 border-t border-border ${totalPercentage === 100 ? 'text-green-600' : 'text-destructive'}`}>
-                  <span>Total</span>
-                  <span>{totalPercentage}% {totalPercentage === 100 ? '✓' : `(need ${100 - totalPercentage > 0 ? '+' : ''}${100 - totalPercentage}%)`}</span>
-                </div>
-                {scheduleError && <p className="text-xs text-destructive mt-2">{scheduleError}</p>}
-              </div>
-
-              {/* Payment Breakdown */}
-              <div className="border-t border-border pt-4">
-                <Label className="text-sm font-medium mb-2 block">Payment Amount</Label>
-                <div className="p-3 rounded bg-muted space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Amount</span>
-                    <span className="text-foreground">{formatAmount(breakdown.amount, invoice.tokenType)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Platform Fee (1%)</span>
-                    <span className="text-foreground">{formatAmount(breakdown.fee, invoice.tokenType)}</span>
-                  </div>
-                  <div className="flex justify-between font-medium pt-2 border-t border-border">
-                    <span className="text-foreground">Total</span>
-                    <span className="text-foreground">{formatAmount(breakdown.total, invoice.tokenType)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                {!connected ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-center gap-2 p-3 rounded bg-muted">
-                      <Wallet className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Connect wallet to pay</span>
-                    </div>
-                    <WalletMultiButton className="!w-full !justify-center !bg-primary !text-primary-foreground hover:!bg-primary/90 !rounded-md !h-10" />
-                  </div>
-                ) : (
-                  <Button onClick={handlePay} disabled={paying || breakdown.amount <= 0 || totalPercentage !== 100} className="w-full">
-                    {paying ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>) : `Pay ${formatAmount(breakdown.total, invoice.tokenType)}`}
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-
-          {isPaid && (
-            <div className="text-center py-4">
-              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
-                <Check className="h-6 w-6 text-green-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-1">
-                {invoice.status === InvoiceStatus.Released ? 'Payment Complete' : 'Fully Paid'}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {invoice.status === InvoiceStatus.Released ? 'Funds have been released to the creator.' : 'This invoice has been fully paid. Awaiting release.'}
-              </p>
+      {/* Body */}
+      <div className="p-6 space-y-4">
+        {/* Creator & description */}
+        <div className="space-y-3">
+          <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+            <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px' }}>From</p>
+            <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#F8FAFC' }}>
+              {creator ? `${creator.slice(0, 6)}...${creator.slice(-6)}` : 'Unknown'}
+            </p>
+          </div>
+          {invoice.description && (
+            <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+              <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px' }}>Description</p>
+              <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>{invoice.description}</p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Pay section — only if not yet fully paid */}
+        {!isPaid && remaining > 0 && (
+          <>
+            {/* Escrow info banner */}
+            <div
+              className="rounded-lg p-3.5 flex items-start gap-3"
+              style={{ backgroundColor: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)' }}
+            >
+              <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#38BDF8' }} />
+              <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
+                Your payment is held securely in a smart contract. You decide how funds are released to the creator.
+              </p>
+            </div>
+
+            {/* Release schedule builder */}
+            <div
+              className="rounded-lg p-4"
+              style={{ border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'transparent' }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: 500, color: '#F8FAFC' }}>Release schedule</p>
+                  <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#64748B', marginTop: '2px' }}>How should funds be released to the creator?</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addInstallment}
+                  disabled={installments.length >= 10}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity duration-150 hover:opacity-80 disabled:opacity-40"
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: '#94A3B8',
+                    fontFamily: '"DM Sans", sans-serif',
+                    cursor: installments.length >= 10 ? 'default' : 'pointer',
+                  }}
+                >
+                  <Plus className="h-3 w-3" />Add
+                </button>
+              </div>
+
+              <div className="space-y-2 mb-3">
+                {installments.map((inst, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#64748B', width: '80px', flexShrink: 0 }}>
+                      Installment {idx + 1}
+                    </span>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        value={inst.percentage || ''}
+                        onChange={(e) => updateInstallment(idx, parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        min="1"
+                        max="100"
+                        style={{
+                          width: '100%',
+                          backgroundColor: '#1C2128',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '6px',
+                          color: '#F8FAFC',
+                          fontFamily: '"DM Sans", sans-serif',
+                          fontSize: '13px',
+                          padding: '6px 28px 6px 10px',
+                          height: '34px',
+                          outline: 'none',
+                        }}
+                      />
+                      <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748B', fontSize: '12px' }}>%</span>
+                    </div>
+                    <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#64748B', width: '88px', textAlign: 'right', flexShrink: 0 }}>
+                      {inst.percentage > 0 ? formatAmount(breakdown.amount * inst.percentage / 100, invoice.tokenType) : '—'}
+                    </span>
+                    {installments.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeInstallment(idx)}
+                        className="flex-shrink-0 transition-opacity duration-150 hover:opacity-60"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '4px' }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div
+                className="flex justify-between text-xs font-medium pt-2 border-t"
+                style={{
+                  borderColor: 'rgba(255,255,255,0.06)',
+                  color: totalPercentage === 100 ? '#4ADE80' : '#EF4444',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >
+                <span>Total</span>
+                <span>{totalPercentage}% {totalPercentage === 100 ? '✓' : `(need ${100 - totalPercentage > 0 ? '+' : ''}${100 - totalPercentage}%)`}</span>
+              </div>
+              {scheduleError && (
+                <p style={{ color: '#EF4444', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', marginTop: '8px' }}>{scheduleError}</p>
+              )}
+            </div>
+
+            {/* Payment breakdown */}
+            <div>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>
+                Payment Amount
+              </p>
+              <div className="rounded-lg p-4 space-y-2.5" style={{ backgroundColor: '#1C2128' }}>
+                {[
+                  { label: 'Amount', value: formatAmount(breakdown.amount, invoice.tokenType) },
+                  { label: 'Platform Fee (1%)', value: formatAmount(breakdown.fee, invoice.tokenType) },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex justify-between text-sm">
+                    <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>{label}</span>
+                    <span style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif' }}>{value}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-sm font-medium pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                  <span style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif' }}>Total</span>
+                  <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, color: '#F8FAFC' }}>{formatAmount(breakdown.total, invoice.tokenType)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Pay button / wallet connect */}
+            <div className="pt-1">
+              {!connected ? (
+                <div className="space-y-3">
+                  <div
+                    className="flex items-center justify-center gap-2 rounded-lg p-3.5"
+                    style={{ backgroundColor: '#1C2128' }}
+                  >
+                    <Wallet className="h-4 w-4" style={{ color: '#64748B' }} />
+                    <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
+                      Connect to continue
+                    </span>
+                  </div>
+                  <WalletMultiButton style={{ width: '100%', justifyContent: 'center' }} />
+                </div>
+              ) : (
+                <button
+                  onClick={handlePay}
+                  disabled={paying || breakdown.amount <= 0 || totalPercentage !== 100}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
+                  style={{
+                    backgroundColor: '#2DD4BF',
+                    color: '#0D1117',
+                    fontFamily: '"DM Sans", sans-serif',
+                    border: 'none',
+                    cursor: paying ? 'default' : 'pointer',
+                  }}
+                >
+                  {paying
+                    ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
+                    : `Lock Funds — ${formatAmount(breakdown.total, invoice.tokenType)}`}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Already paid state */}
+        {isPaid && (
+          <div className="py-6 text-center">
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
+              style={{ backgroundColor: 'rgba(34,197,94,0.1)' }}
+            >
+              <Check className="h-6 w-6" style={{ color: '#22C55E' }} />
+            </div>
+            <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1.125rem', color: '#F8FAFC', marginBottom: '6px' }}>
+              {invoice.status === InvoiceStatus.Released ? 'Payment Complete' : 'Funds Secured'}
+            </h3>
+            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', lineHeight: 1.5 }}>
+              {invoice.status === InvoiceStatus.Released
+                ? 'Funds have been released to the creator.'
+                : 'This invoice has been fully paid. Awaiting release.'}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,83 +1,309 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Lock, ArrowRight } from 'lucide-react';
 
 const Hero: React.FC = () => {
-  const { connected } = useWallet();
-
   return (
-    <section className="py-20 lg:py-32">
-      <div className="container">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
-          {/* Left - Text */}
-          <div className="max-w-xl">
-            <h1 className="text-4xl sm:text-5xl font-semibold text-foreground mb-6 leading-tight tracking-tight">
-              Escrow-protected invoicing for modern businesses
+    <section
+      className="relative overflow-hidden"
+      style={{ backgroundColor: '#0D1117' }}
+    >
+      {/* Subtle grid texture — not decorative, just depth */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
+          backgroundSize: '64px 64px',
+        }}
+      />
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-16 md:pt-16 md:pb-24">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-12 md:gap-8 items-center">
+
+          {/* Left — text (7/12) */}
+          <div className="md:col-span-7 flex flex-col gap-7">
+            {/* Eyebrow */}
+            <div className="inline-flex items-center gap-2 w-fit">
+              <span
+                className="text-xs font-medium uppercase tracking-widest"
+                style={{
+                  color: '#2DD4BF',
+                  fontFamily: '"DM Sans", sans-serif',
+                  letterSpacing: '0.1em',
+                }}
+              >
+                Built on Solana
+              </span>
+              <div
+                className="h-px w-8"
+                style={{ backgroundColor: 'rgba(45,212,191,0.4)' }}
+              />
+            </div>
+
+            {/* Headline — ONE italic word */}
+            <h1
+              className="text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.05] tracking-tight"
+              style={{
+                fontFamily: '"Space Grotesk", sans-serif',
+                fontWeight: 700,
+                color: '#F8FAFC',
+                letterSpacing: '-0.025em',
+              }}
+            >
+              Invoices your clients{' '}
+              <em
+                className="not-italic"
+                style={{ fontStyle: 'italic', color: '#F8FAFC' }}
+              >
+                actually
+              </em>{' '}
+              pay.
             </h1>
 
-            <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
-              Send invoices, accept USDC or SOL payments, and release funds securely with smart contract escrow. Simple, transparent, and trustless.
+            {/* Sub-headline */}
+            <p
+              className="text-lg leading-relaxed max-w-xl"
+              style={{
+                color: '#94A3B8',
+                fontFamily: '"DM Sans", sans-serif',
+                fontWeight: 400,
+              }}
+            >
+              Escrow-protected invoicing on Solana. Lock funds on-chain when your
+              client pays. Release to your wallet when the work is done.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              {connected ? (
-                <Link to="/create">
-                  <Button size="lg" className="w-full sm:w-auto bg-secondary hover:bg-secondary/90 text-secondary-foreground">
-                    Create invoice
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
-              ) : (
-                <Button size="lg" disabled className="w-full sm:w-auto">
-                  Connect wallet to start
-                </Button>
-              )}
-
-              <Link to="/dashboard">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                  View dashboard
-                </Button>
+            {/* CTAs */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-1">
+              <Link
+                to="/create"
+                className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-opacity duration-150 hover:opacity-90"
+                style={{
+                  backgroundColor: '#2DD4BF',
+                  color: '#0D1117',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontWeight: 500,
+                  fontSize: '15px',
+                  padding: '13px 28px',
+                  textDecoration: 'none',
+                }}
+              >
+                Create Invoice
+                <ArrowRight size={16} />
               </Link>
+              <Link
+                to="/dashboard"
+                className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-80"
+                style={{
+                  backgroundColor: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  color: '#F8FAFC',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontWeight: 500,
+                  fontSize: '15px',
+                  padding: '13px 28px',
+                  textDecoration: 'none',
+                }}
+              >
+                Open Dashboard
+              </Link>
+            </div>
+
+            {/* Trust signal */}
+            <div className="flex items-center gap-6 pt-2">
+              {[
+                { label: 'On-chain escrow', icon: '🔒' },
+                { label: 'USDC + SOL', icon: '⚡' },
+                { label: 'Dual approval', icon: '✓' },
+              ].map(({ label, icon }) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <span className="text-xs">{icon}</span>
+                  <span
+                    className="text-xs"
+                    style={{
+                      color: '#64748B',
+                      fontFamily: '"DM Sans", sans-serif',
+                    }}
+                  >
+                    {label}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Right - Invoice Card */}
-          <div className="flex justify-center lg:justify-end">
-            <div className="w-full max-w-md">
-              <div className="clean-card p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <span className="text-sm font-medium text-muted-foreground">Invoice</span>
-                  <span className="status-unpaid">
-                    Awaiting payment
-                  </span>
+          {/* Right — invoice card mockup (5/12) — GRID BREAK ELEMENT */}
+          <div className="md:col-span-5 flex items-center justify-center md:justify-end">
+            <div
+              className="relative w-full max-w-sm rounded-xl p-7"
+              style={{
+                backgroundColor: '#161B22',
+                border: '1px solid rgba(255,255,255,0.08)',
+                // Slight upward offset — the grid break
+                marginTop: '-24px',
+              }}
+            >
+              {/* Card header */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p
+                    className="text-xs uppercase tracking-widest mb-1"
+                    style={{
+                      color: '#64748B',
+                      fontFamily: '"DM Sans", sans-serif',
+                      letterSpacing: '0.08em',
+                    }}
+                  >
+                    Invoice Amount
+                  </p>
+                  {/* THE DOMINANT ELEMENT — 3.5rem, nothing competes */}
+                  <p
+                    style={{
+                      fontFamily: '"Space Grotesk", sans-serif',
+                      fontWeight: 700,
+                      fontSize: '3.5rem',
+                      color: '#F8FAFC',
+                      letterSpacing: '-0.02em',
+                      lineHeight: 1,
+                    }}
+                  >
+                    $2,847
+                    <span style={{ fontSize: '2rem', color: '#94A3B8' }}>
+                      .50
+                    </span>
+                  </p>
                 </div>
-
-                <div className="mb-6">
-                  <p className="text-xs text-muted-foreground mb-1">Amount</p>
-                  <p className="text-3xl font-semibold text-foreground">$2,500.00</p>
-                  <p className="text-sm text-muted-foreground mt-1">USDC</p>
-                </div>
-
-                <div className="space-y-3 mb-6">
-                  <div className="p-3 rounded-lg bg-muted">
-                    <p className="text-xs text-muted-foreground mb-0.5">Client</p>
-                    <p className="text-sm text-foreground">client@company.com</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted">
-                    <p className="text-xs text-muted-foreground mb-0.5">Description</p>
-                    <p className="text-sm text-foreground">Website redesign - Phase 1</p>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-border">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Created Jan 23, 2026</span>
-                    <span className="text-primary font-medium">Escrow ready</span>
-                  </div>
+                {/* Lock icon — teal, occurrence 1 of 3 */}
+                <div
+                  className="w-11 h-11 rounded-lg flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}
+                >
+                  <Lock size={20} style={{ color: '#2DD4BF' }} />
                 </div>
               </div>
+
+              {/* Status */}
+              <div className="flex items-center justify-between mb-5">
+                <span
+                  className="text-xs font-medium px-2.5 py-1 rounded-full"
+                  style={{
+                    backgroundColor: 'rgba(59,130,246,0.12)',
+                    color: '#93C5FD',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                >
+                  In Escrow
+                </span>
+                <span
+                  className="text-xs"
+                  style={{
+                    color: '#64748B',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                >
+                  Mar 19, 2026
+                </span>
+              </div>
+
+              {/* Divider */}
+              <div
+                className="mb-5"
+                style={{
+                  height: '1px',
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                }}
+              />
+
+              {/* Invoice details */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-xs uppercase tracking-wider"
+                    style={{
+                      color: '#64748B',
+                      fontFamily: '"DM Sans", sans-serif',
+                    }}
+                  >
+                    From
+                  </span>
+                  <span
+                    className="text-sm font-medium"
+                    style={{
+                      color: '#F8FAFC',
+                      fontFamily: '"DM Sans", sans-serif',
+                    }}
+                  >
+                    Sarah K.
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-xs uppercase tracking-wider"
+                    style={{
+                      color: '#64748B',
+                      fontFamily: '"DM Sans", sans-serif',
+                    }}
+                  >
+                    Client
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: '"JetBrains Mono", monospace',
+                      fontSize: '13px',
+                      color: '#94A3B8',
+                    }}
+                  >
+                    7iLf...vx1p
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-xs uppercase tracking-wider"
+                    style={{
+                      color: '#64748B',
+                      fontFamily: '"DM Sans", sans-serif',
+                    }}
+                  >
+                    Description
+                  </span>
+                  <span
+                    className="text-sm"
+                    style={{
+                      color: '#94A3B8',
+                      fontFamily: '"DM Sans", sans-serif',
+                    }}
+                  >
+                    Brand identity + web
+                  </span>
+                </div>
+              </div>
+
+              {/* Release bar */}
+              <div
+                className="mt-6 rounded-lg p-3 flex items-center justify-between"
+                style={{ backgroundColor: '#1C2128' }}
+              >
+                <span
+                  className="text-xs"
+                  style={{
+                    color: '#94A3B8',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                >
+                  Awaiting client approval
+                </span>
+                <div
+                  className="w-2 h-2 rounded-full animate-pulse"
+                  style={{ backgroundColor: '#38BDF8' }}
+                />
+              </div>
+
+              {/* Teal top accent line */}
+              <div
+                className="absolute top-0 left-6 right-6 h-[2px] rounded-b"
+                style={{ backgroundColor: '#2DD4BF', opacity: 0.6 }}
+              />
             </div>
           </div>
         </div>

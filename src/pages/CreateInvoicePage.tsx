@@ -5,18 +5,29 @@ import CreateInvoiceForm from '@/components/CreateInvoiceForm';
 
 const CreateInvoicePage: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
       <Header />
-      <main className="flex-1 container py-10">
-        <div className="max-w-md mx-auto mb-6 text-center">
-          <h1 className="text-2xl font-semibold text-foreground mb-2">
-            Create Invoice
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Send an escrow-protected invoice to your client
-          </p>
+      <main className="flex-1 w-full px-4 sm:px-6 py-12">
+        <div style={{ maxWidth: '448px', margin: '0 auto' }}>
+          <div className="mb-8 text-center">
+            <h1
+              style={{
+                fontFamily: '"Space Grotesk", sans-serif',
+                fontWeight: 700,
+                fontSize: '1.75rem',
+                color: '#F8FAFC',
+                letterSpacing: '-0.02em',
+                marginBottom: '8px',
+              }}
+            >
+              Create Invoice
+            </h1>
+            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '15px' }}>
+              Send an escrow-protected invoice to your client.
+            </p>
+          </div>
+          <CreateInvoiceForm />
         </div>
-        <CreateInvoiceForm />
       </main>
       <Footer />
     </div>

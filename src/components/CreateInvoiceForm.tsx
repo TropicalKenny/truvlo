@@ -4,54 +4,99 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { Loader2, Copy, ExternalLink, Check } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { EscrowPaySDK, TokenType } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
 
-
-/**
- * Safely convert any error to a string message
- */
+// ── preserved exactly ──────────────────────────────────────────
 function getErrorMessage(error: unknown): string {
   if (!error) return 'Unknown error';
   if (typeof error === 'string') return error;
-  
-  // Check for Error object
-  if (error instanceof Error) {
-    return error.message || 'An error occurred';
-  }
-  
-  // Check for object with message
+  if (error instanceof Error) return error.message || 'An error occurred';
   if (typeof error === 'object') {
     const obj = error as Record<string, any>;
     if (typeof obj.message === 'string') return obj.message;
     if (typeof obj.msg === 'string') return obj.msg;
     if (typeof obj.error === 'string') return obj.error;
-    
-    // Try to stringify
     try {
       const str = JSON.stringify(error);
-      if (str && str !== '{}') {
-        return str.length > 150 ? str.substring(0, 150) + '...' : str;
-      }
-    } catch {
-      // Ignore
-    }
+      if (str && str !== '{}') return str.length > 150 ? str.substring(0, 150) + '...' : str;
+    } catch { /* ignore */ }
   }
-  
   return 'An error occurred';
 }
+// ───────────────────────────────────────────────────────────────
+
+// Shared input style
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  backgroundColor: '#1C2128',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: '8px',
+  color: '#F8FAFC',
+  fontFamily: '"DM Sans", sans-serif',
+  fontSize: '14px',
+  padding: '10px 14px',
+  height: '44px',
+  outline: 'none',
+  transition: 'border-color 150ms ease, box-shadow 150ms ease',
+};
+
+const textareaStyle: React.CSSProperties = {
+  ...inputStyle,
+  height: 'auto',
+  minHeight: '88px',
+  resize: 'none',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontFamily: '"DM Sans", sans-serif',
+  fontSize: '12px',
+  fontWeight: 500,
+  color: '#94A3B8',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  marginBottom: '6px',
+};
+
+const DarkInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      {...props}
+      style={{
+        ...inputStyle,
+        borderColor: focused ? 'rgba(45,212,191,0.3)' : 'rgba(255,255,255,0.08)',
+        boxShadow: focused ? '0 0 0 3px rgba(45,212,191,0.08)' : 'none',
+      }}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+    />
+  );
+};
+
+const DarkTextarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <textarea
+      {...props}
+      style={{
+        ...textareaStyle,
+        borderColor: focused ? 'rgba(45,212,191,0.3)' : 'rgba(255,255,255,0.08)',
+        boxShadow: focused ? '0 0 0 3px rgba(45,212,191,0.08)' : 'none',
+      }}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+    />
+  );
+};
 
 const CreateInvoiceForm: React.FC = () => {
   const { connection } = useConnection();
   const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -64,6 +109,7 @@ const CreateInvoiceForm: React.FC = () => {
     signature: string;
   } | null>(null);
 
+  // ── SDK init — preserved exactly ───────────────────────────────
   const sdk = useMemo(() => {
     if (!publicKey || !signTransaction || !signAllTransactions) return null;
     const provider = new AnchorProvider(
@@ -78,40 +124,38 @@ const CreateInvoiceForm: React.FC = () => {
     return instance;
   }, [connection, publicKey, signTransaction, signAllTransactions]);
 
+  // ── submit — preserved exactly ──────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!sdk || !connected || !publicKey) {
       toast({ title: 'Wallet not connected', variant: 'destructive' });
       return;
     }
-
     if (!sdk.isInitialized()) {
       toast({ title: 'SDK not initialized', description: sdk.getInitError() || 'Please try again', variant: 'destructive' });
       return;
     }
-    
+
     const amountNum = parseFloat(amount);
     if (isNaN(amountNum) || amountNum <= 0) {
       toast({ title: 'Enter a valid amount', variant: 'destructive' });
       return;
     }
-    
     if (!description.trim()) {
       toast({ title: 'Description required', variant: 'destructive' });
       return;
     }
-    
     if (!clientEmail.trim() || !clientEmail.includes('@')) {
       toast({ title: 'Valid email required', variant: 'destructive' });
       return;
     }
-    
+
     setIsCreating(true);
-    
+
     try {
       const invoiceId = sdk.generateInvoiceId();
-      
+
       const result = await sdk.createInvoice({
         invoiceId,
         amount: amountNum,
@@ -119,17 +163,16 @@ const CreateInvoiceForm: React.FC = () => {
         clientEmail: clientEmail.trim(),
         tokenType,
       });
-      
+
       if (result.success && result.data) {
         const invoiceUrl = `${window.location.origin}/invoice/${result.data.invoiceId}/${publicKey?.toBase58()}`;
-        
+
         setCreatedInvoice({
           invoiceId: result.data.invoiceId,
           signature: result.data.signature,
         });
-        toast({ title: 'Invoice created' });
-        
-        // Send invoice email to client via Vercel API
+        toast({ title: 'Invoice ready to send' });
+
         try {
           await fetch('/api/send-invoice', {
             method: 'POST',
@@ -145,13 +188,11 @@ const CreateInvoiceForm: React.FC = () => {
               invoiceUrl,
             }),
           });
-          toast({ title: 'Invoice created', description: `Payment link sent to ${clientEmail.trim()}` });
+          toast({ title: 'Invoice ready to send', description: `Payment link sent to ${clientEmail.trim()}` });
         } catch {
-          // Email failure is non-blocking — invoice was created successfully
-          toast({ title: 'Invoice created', description: 'Copy the link below to share with your client.' });
+          toast({ title: 'Invoice ready to send', description: 'Copy the link below to share with your client.' });
         }
       } else {
-        // result.error should always be a string from SDK
         const errorMsg = getErrorMessage(result.error);
         console.log('Create invoice failed:', errorMsg);
         toast({ title: 'Failed', description: errorMsg, variant: 'destructive' });
@@ -159,22 +200,19 @@ const CreateInvoiceForm: React.FC = () => {
     } catch (error: unknown) {
       console.error('Create invoice exception:', error);
       const errorMsg = getErrorMessage(error);
-      
-      // Check for common error patterns
       let displayMsg = errorMsg;
       if (errorMsg.includes('User rejected') || errorMsg.includes('rejected the request')) {
         displayMsg = 'Transaction cancelled.';
       } else if (errorMsg.toLowerCase().includes('insufficient')) {
         displayMsg = 'Insufficient balance.';
       }
-      
-      toast({ title: 'Error', description: displayMsg, variant: 'destructive' });
+      toast({ title: 'Something went wrong — try again', description: displayMsg, variant: 'destructive' });
     } finally {
       setIsCreating(false);
     }
   };
 
-  const invoiceUrl = createdInvoice 
+  const invoiceUrl = createdInvoice
     ? `${window.location.origin}/invoice/${createdInvoice.invoiceId}/${publicKey?.toBase58()}`
     : '';
 
@@ -188,179 +226,293 @@ const CreateInvoiceForm: React.FC = () => {
     }
   };
 
+  // ── not connected ───────────────────────────────────────────────
   if (!connected) {
     return (
-      <Card className="max-w-md mx-auto">
-        <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground">Connect your wallet to create an invoice.</p>
-        </CardContent>
-      </Card>
+      <div
+        className="w-full rounded-xl p-12 text-center"
+        style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
+          Connect to continue — then create your first escrow invoice.
+        </p>
+      </div>
     );
   }
 
+  // ── success state ───────────────────────────────────────────────
   if (createdInvoice) {
     return (
-      <Card className="max-w-md mx-auto">
-        <CardContent className="py-8">
-          <div className="text-center mb-6">
-            <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
-              <Check className="h-6 w-6 text-accent" />
-            </div>
-            <h3 className="text-xl font-semibold text-foreground mb-1">Invoice Created</h3>
-            <p className="text-sm text-muted-foreground">Share this link with your client</p>
+      <div
+        className="w-full rounded-xl p-8"
+        style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <div className="text-center mb-7">
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}
+          >
+            <Check className="h-7 w-7" style={{ color: '#2DD4BF' }} />
           </div>
-          
-          <div className="space-y-4">
-            <div className="p-3 rounded bg-muted">
-              <p className="text-xs text-muted-foreground mb-1">Invoice ID</p>
-              <p className="font-mono font-medium text-foreground">{createdInvoice.invoiceId}</p>
-            </div>
-            
-            <div className="p-3 rounded bg-muted">
-              <p className="text-xs text-muted-foreground mb-1">Payment Link</p>
-              <p className="text-xs font-mono text-foreground break-all mb-2">{invoiceUrl}</p>
-              <Button onClick={handleCopy} className="w-full" size="sm">
-                {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-                {copied ? 'Copied' : 'Copy Link'}
-              </Button>
-            </div>
-            
-            <a
-              href={`https://explorer.solana.com/tx/${createdInvoice.signature}?cluster=devnet`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1 text-xs text-primary hover:underline"
+          <h3
+            style={{
+              fontFamily: '"Space Grotesk", sans-serif',
+              fontWeight: 700,
+              fontSize: '1.375rem',
+              color: '#F8FAFC',
+              letterSpacing: '-0.01em',
+              marginBottom: '6px',
+            }}
+          >
+            Invoice ready to send
+          </h3>
+          <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
+            Share this link with your client to lock funds in escrow.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {/* Invoice ID */}
+          <div className="rounded-lg p-4" style={{ backgroundColor: '#1C2128' }}>
+            <p style={labelStyle}>Invoice ID</p>
+            <p
+              style={{
+                fontFamily: '"JetBrains Mono", monospace',
+                fontSize: '13px',
+                color: '#F8FAFC',
+                letterSpacing: '0.02em',
+              }}
             >
-              View on Solana Explorer
-              <ExternalLink className="h-3 w-3" />
-            </a>
+              {createdInvoice.invoiceId}
+            </p>
           </div>
-          
-          <div className="flex gap-3 mt-6">
-            <Button variant="outline" className="flex-1" onClick={() => {
+
+          {/* Payment link */}
+          <div className="rounded-lg p-4" style={{ backgroundColor: '#1C2128' }}>
+            <p style={labelStyle}>Payment Link</p>
+            <p
+              className="break-all mb-3"
+              style={{
+                fontFamily: '"JetBrains Mono", monospace',
+                fontSize: '11px',
+                color: '#94A3B8',
+                lineHeight: 1.6,
+              }}
+            >
+              {invoiceUrl}
+            </p>
+            <button
+              onClick={handleCopy}
+              className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
+              style={{
+                backgroundColor: '#2DD4BF',
+                color: '#0D1117',
+                fontFamily: '"DM Sans", sans-serif',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Copied!' : 'Copy Link'}
+            </button>
+          </div>
+
+          {/* Explorer link */}
+          <a
+            href={`https://explorer.solana.com/tx/${createdInvoice.signature}?cluster=devnet`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 text-xs transition-opacity duration-150 hover:opacity-70"
+            style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
+          >
+            View on Solana Explorer
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+
+        <div className="flex gap-3 mt-7">
+          <button
+            onClick={() => {
               setCreatedInvoice(null);
               setAmount('');
               setDescription('');
               setClientEmail('');
-            }}>
-              Create Another
-            </Button>
-            <Button className="flex-1" onClick={() => navigate('/dashboard')}>
-              Dashboard
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+              setSenderName('');
+            }}
+            className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-opacity duration-150 hover:opacity-80"
+            style={{
+              backgroundColor: 'transparent',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: '#F8FAFC',
+              fontFamily: '"DM Sans", sans-serif',
+              cursor: 'pointer',
+            }}
+          >
+            Create Another
+          </button>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
+            style={{
+              backgroundColor: '#2DD4BF',
+              color: '#0D1117',
+              fontFamily: '"DM Sans", sans-serif',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            Open Dashboard
+          </button>
+        </div>
+      </div>
     );
   }
 
+  // ── form ────────────────────────────────────────────────────────
   return (
-    <Card className="max-w-md mx-auto">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-xl">Create Invoice</CardTitle>
-        <CardDescription>Create an escrow-protected invoice</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Token Type */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Token</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={tokenType === TokenType.USDC ? 'default' : 'outline'}
-                size="sm"
-                className={tokenType === TokenType.USDC ? 'bg-secondary' : ''}
-                onClick={() => setTokenType(TokenType.USDC)}
-              >
-                USDC
-              </Button>
-              <Button
-                type="button"
-                variant={tokenType === TokenType.SOL ? 'default' : 'outline'}
-                size="sm"
-                className={tokenType === TokenType.SOL ? 'bg-secondary' : ''}
-                onClick={() => setTokenType(TokenType.SOL)}
-              >
-                SOL
-              </Button>
-            </div>
-          </div>
-          
-          {/* Amount */}
-          <div className="space-y-2">
-            <Label htmlFor="amount" className="text-sm font-medium">
-              Amount ({tokenType === TokenType.USDC ? 'USDC' : 'SOL'})
-            </Label>
-            <Input
-              id="amount"
-              type="number"
-              step={tokenType === TokenType.USDC ? '0.01' : '0.0001'}
-              min="0"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="clean-input"
-            />
-          </div>
-          
-          {/* Your Name / Company */}
-          <div className="space-y-2">
-            <Label htmlFor="senderName" className="text-sm font-medium">Your name or company</Label>
-            <Input
-              id="senderName"
-              type="text"
-              placeholder="e.g. Kenny Fafimiye or Truvlo Studio"
-              value={senderName}
-              onChange={(e) => setSenderName(e.target.value)}
-              className="clean-input"
-            />
-            <p className="text-xs text-muted-foreground">Shown to the client so they know who sent the invoice</p>
-          </div>
+    <div
+      className="w-full rounded-xl p-8"
+      style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+    >
+      {/* Header */}
+      <div className="mb-7">
+        <h2
+          style={{
+            fontFamily: '"Space Grotesk", sans-serif',
+            fontWeight: 700,
+            fontSize: '1.5rem',
+            color: '#F8FAFC',
+            letterSpacing: '-0.02em',
+            marginBottom: '6px',
+          }}
+        >
+          New Invoice
+        </h2>
+        <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
+          Funds lock on-chain when your client pays.
+        </p>
+      </div>
 
-          {/* Client Email */}
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-sm font-medium">Client Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="client@company.com"
-              value={clientEmail}
-              onChange={(e) => setClientEmail(e.target.value)}
-              className="clean-input"
-            />
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Token selector */}
+        <div>
+          <label style={labelStyle}>Token</label>
+          <div className="flex gap-2">
+            {([TokenType.USDC, TokenType.SOL] as const).map((t) => {
+              const active = tokenType === t;
+              const label = t === TokenType.USDC ? 'USDC' : 'SOL';
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTokenType(t)}
+                  className="px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+                  style={{
+                    backgroundColor: active ? 'rgba(45,212,191,0.1)' : '#1C2128',
+                    border: active ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                    color: active ? '#2DD4BF' : '#94A3B8',
+                    fontFamily: '"DM Sans", sans-serif',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-          
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description" className="text-sm font-medium">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe the work or services..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="min-h-[80px] clean-input resize-none"
-            />
-          </div>
-          
-          {/* Info */}
-          <div className="p-3 rounded bg-muted text-xs text-muted-foreground">
-            <p>A 1% platform fee will be added when your client pays. You will receive 100% of the invoice amount.</p>
-          </div>
-          
-          <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90" disabled={isCreating}>
-            {isCreating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              'Create Invoice'
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+
+        {/* Amount */}
+        <div>
+          <label htmlFor="amount" style={labelStyle}>
+            Amount ({tokenType === TokenType.USDC ? 'USDC' : 'SOL'})
+          </label>
+          <DarkInput
+            id="amount"
+            type="number"
+            step={tokenType === TokenType.USDC ? '0.01' : '0.0001'}
+            min="0"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </div>
+
+        {/* Sender name */}
+        <div>
+          <label htmlFor="senderName" style={labelStyle}>Your name or company</label>
+          <DarkInput
+            id="senderName"
+            type="text"
+            placeholder="e.g. Kenny Fafimiye or Truvlo Studio"
+            value={senderName}
+            onChange={(e) => setSenderName(e.target.value)}
+          />
+          <p
+            className="mt-1.5"
+            style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}
+          >
+            Shown to the client so they know who sent the invoice
+          </p>
+        </div>
+
+        {/* Client email */}
+        <div>
+          <label htmlFor="email" style={labelStyle}>Client Email</label>
+          <DarkInput
+            id="email"
+            type="email"
+            placeholder="client@company.com"
+            value={clientEmail}
+            onChange={(e) => setClientEmail(e.target.value)}
+          />
+        </div>
+
+        {/* Description */}
+        <div>
+          <label htmlFor="description" style={labelStyle}>Description</label>
+          <DarkTextarea
+            id="description"
+            placeholder="Describe the work or services..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+
+        {/* Fee info */}
+        <div
+          className="rounded-lg p-3.5"
+          style={{ backgroundColor: '#1C2128' }}
+        >
+          <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
+            You receive 100% of the invoice amount. Your client pays a 1% platform fee (flat $2 below $200).
+          </p>
+        </div>
+
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={isCreating}
+          className="w-full flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-60"
+          style={{
+            backgroundColor: '#2DD4BF',
+            color: '#0D1117',
+            fontFamily: '"DM Sans", sans-serif',
+            border: 'none',
+            cursor: isCreating ? 'default' : 'pointer',
+          }}
+        >
+          {isCreating ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            'Create Invoice'
+          )}
+        </button>
+      </form>
+    </div>
   );
 };
 

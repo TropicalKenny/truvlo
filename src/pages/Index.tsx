@@ -7,7 +7,7 @@ import Footer from '@/components/Footer';
 
 const Index: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
       <Header />
       <main className="flex-1">
         <Hero />

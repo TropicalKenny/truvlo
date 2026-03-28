@@ -1,54 +1,129 @@
 import React from 'react';
-import { FileText, ShieldCheck, Unlock } from 'lucide-react';
 
 const steps = [
   {
-    icon: FileText,
-    step: '01',
-    title: 'Create an invoice',
-    description: 'Set the amount in USDC or SOL, add a description, and enter your client\'s email. A unique payment link is generated instantly.',
+    number: '01',
+    title: 'Create',
+    description:
+      'Connect your wallet, set the amount, add your client\'s email. Invoice is on-chain in seconds.',
   },
   {
-    icon: ShieldCheck,
-    step: '02',
-    title: 'Client pays into escrow',
-    description: 'Your client clicks the link and pays. Funds are locked in a smart contract on Solana — neither party can touch them until work is approved.',
+    number: '02',
+    title: 'Lock',
+    description:
+      'Your client receives a payment link. They lock funds in escrow. You\'re protected from the start.',
   },
   {
-    icon: Unlock,
-    step: '03',
-    title: 'Release when ready',
-    description: 'Once the work is delivered and approved, you release the funds to your wallet. No middleman, no chargebacks, no delays.',
+    number: '03',
+    title: 'Release',
+    description:
+      'Request release when work is done. Client approves — funds go straight to your wallet.',
   },
 ];
 
 const HowItWorks: React.FC = () => {
   return (
-    <section className="py-20 border-t border-border">
-      <div className="container max-w-4xl mx-auto px-4">
-        <div className="text-center mb-14">
-          <h2 className="text-3xl font-semibold text-foreground mb-3">How it works</h2>
-          <p className="text-muted-foreground text-base max-w-xl mx-auto">
-            Three steps from invoice to payment — fully on-chain, fully trustless.
+    <section
+      className="py-24"
+      style={{ backgroundColor: '#161B22' }}
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        {/* Heading */}
+        <div className="text-center mb-16">
+          <h2
+            className="text-3xl md:text-4xl mb-4"
+            style={{
+              fontFamily: '"Space Grotesk", sans-serif',
+              fontWeight: 700,
+              color: '#F8FAFC',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            How{' '}
+            <em
+              style={{
+                fontStyle: 'italic',
+                color: '#2DD4BF',
+                fontFamily: '"Space Grotesk", sans-serif',
+              }}
+            >
+              Truvlo
+            </em>{' '}
+            works
+          </h2>
+          <p
+            className="text-base max-w-md mx-auto"
+            style={{
+              color: '#64748B',
+              fontFamily: '"DM Sans", sans-serif',
+            }}
+          >
+            Three steps. Fully on-chain. No middlemen holding your money.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-          {/* Connector line (desktop only) */}
-          <div className="hidden md:block absolute top-8 left-[calc(16.66%+1rem)] right-[calc(16.66%+1rem)] h-px bg-border" />
+        {/* Steps */}
+        <div className="relative grid grid-cols-1 md:grid-cols-3 gap-0">
+          {steps.map((step, i) => (
+            <div key={step.number} className="relative flex flex-col">
+              {/* Connecting line between steps (desktop) */}
+              {i < steps.length - 1 && (
+                <div
+                  className="hidden md:block absolute top-10 left-1/2 w-full h-px"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    transform: 'translateX(50%)',
+                    zIndex: 0,
+                  }}
+                />
+              )}
 
-          {steps.map(({ icon: Icon, step, title, description }) => (
-            <div key={step} className="flex flex-col items-center text-center relative">
-              <div className="relative mb-5">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                  <Icon className="h-7 w-7 text-primary" />
+              <div
+                className="relative rounded-xl p-8 mx-2 md:mx-3 flex flex-col gap-4"
+                style={{
+                  backgroundColor: '#0D1117',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  zIndex: 1,
+                }}
+              >
+                {/* Step number — large, faded teal */}
+                <div
+                  style={{
+                    fontFamily: '"Space Grotesk", sans-serif',
+                    fontWeight: 700,
+                    fontSize: '3rem',
+                    color: 'rgba(45,212,191,0.15)',
+                    lineHeight: 1,
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  {step.number}
                 </div>
-                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center">
-                  {parseInt(step)}
-                </span>
+
+                {/* Title */}
+                <h3
+                  style={{
+                    fontFamily: '"Space Grotesk", sans-serif',
+                    fontWeight: 500,
+                    fontSize: '1.125rem',
+                    color: '#F8FAFC',
+                    marginTop: '-8px',
+                  }}
+                >
+                  {step.title}
+                </h3>
+
+                {/* Description */}
+                <p
+                  className="text-sm leading-relaxed"
+                  style={{
+                    color: '#94A3B8',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                >
+                  {step.description}
+                </p>
               </div>
-              <h3 className="text-base font-semibold text-foreground mb-2">{title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
             </div>
           ))}
         </div>

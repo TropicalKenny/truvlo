@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowUpRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -25,35 +25,133 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
   amount,
   isReleasing,
 }) => {
+  // amount may be "Installment 1 of 1 (100%)" or "500 USDC" etc.
+  // Detect if it's an installment label and split it
+  const isInstallmentLabel = amount.toLowerCase().startsWith('installment');
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md border"
+        style={{
+          backgroundColor: '#161B22',
+          borderColor: 'rgba(255,255,255,0.08)',
+        }}
+      >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-foreground">
-            <AlertTriangle className="h-5 w-5 text-warning" />
-            Confirm Release
+          <DialogTitle
+            className="flex items-center gap-2"
+            style={{
+              fontFamily: '"Space Grotesk", sans-serif',
+              fontWeight: 500,
+              color: '#F8FAFC',
+            }}
+          >
+            <ArrowUpRight className="h-5 w-5" style={{ color: '#2DD4BF' }} />
+            Release to Wallet
           </DialogTitle>
-          <DialogDescription className="text-muted-foreground">
-            You are about to release <span className="font-medium text-foreground">{amount}</span> from escrow.
+          <DialogDescription
+            style={{
+              fontFamily: '"DM Sans", sans-serif',
+              color: '#94A3B8',
+            }}
+          >
+            The client has already approved this release. Funds will be
+            transferred directly to your wallet — this cannot be undone.
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="py-4">
-          <div className="p-4 rounded bg-muted">
-            <p className="text-sm text-foreground leading-relaxed">
-              Release funds only after work is completed. This action cannot be undone.
-            </p>
-          </div>
+
+        {/* Amount display */}
+        <div
+          className="rounded-lg p-5 text-center my-2"
+          style={{ backgroundColor: '#1C2128' }}
+        >
+          {isInstallmentLabel ? (
+            <>
+              <p
+                className="text-xs uppercase tracking-widest mb-1"
+                style={{
+                  color: '#64748B',
+                  fontFamily: '"DM Sans", sans-serif',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                Releasing
+              </p>
+              <p
+                style={{
+                  fontFamily: '"Space Grotesk", sans-serif',
+                  fontWeight: 700,
+                  fontSize: '1.25rem',
+                  color: '#F8FAFC',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {amount}
+              </p>
+            </>
+          ) : (
+            <>
+              <p
+                className="text-xs uppercase tracking-widest mb-2"
+                style={{
+                  color: '#64748B',
+                  fontFamily: '"DM Sans", sans-serif',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                Release amount
+              </p>
+              <p
+                style={{
+                  fontFamily: '"Space Grotesk", sans-serif',
+                  fontWeight: 700,
+                  fontSize: '2rem',
+                  color: '#2DD4BF',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {amount}
+              </p>
+            </>
+          )}
         </div>
-        
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={onClose} disabled={isReleasing}>
+
+        <p
+          className="text-sm text-center"
+          style={{
+            color: '#64748B',
+            fontFamily: '"DM Sans", sans-serif',
+          }}
+        >
+          Funds go straight to your connected wallet. No further approval needed.
+        </p>
+
+        <DialogFooter className="flex gap-2 sm:gap-2">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={isReleasing}
+            className="flex-1 border font-medium transition-opacity duration-150 hover:opacity-80"
+            style={{
+              backgroundColor: 'transparent',
+              borderColor: 'rgba(255,255,255,0.12)',
+              color: '#F8FAFC',
+              fontFamily: '"DM Sans", sans-serif',
+            }}
+          >
             Cancel
           </Button>
-          <Button 
-            onClick={onConfirm} 
+          <Button
+            onClick={onConfirm}
             disabled={isReleasing}
-            className="bg-accent hover:bg-accent/90 text-accent-foreground"
+            className="flex-1 font-medium transition-opacity duration-150 hover:opacity-90"
+            style={{
+              backgroundColor: '#2DD4BF',
+              color: '#0D1117',
+              fontFamily: '"DM Sans", sans-serif',
+              border: 'none',
+            }}
           >
             {isReleasing ? (
               <>
@@ -61,7 +159,7 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
                 Releasing...
               </>
             ) : (
-              'Confirm Release'
+              'Release to Wallet'
             )}
           </Button>
         </DialogFooter>
@@ -71,3 +169,4 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
 };
 
 export default ReleaseModal;
+

@@ -1,0 +1,478 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { useConnection } from '@solana/wallet-adapter-react';
+import { AnchorProvider } from '@coral-xyz/anchor';
+import { PublicKey, Connection } from '@solana/web3.js';
+import { ExternalLink, AlertCircle, Loader2, Shield, Zap, TrendingUp, Calendar, Info } from 'lucide-react';
+import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
+import TruvloLogo from '@/components/TruvloLogo';
+
+// ── helpers ────────────────────────────────────────────────────
+
+function fromSmallestUnit(amount: any, tokenType: TokenType): number {
+  const decimals = tokenType === TokenType.USDC ? 6 : 9;
+  try {
+    const raw = amount?.toNumber ? amount.toNumber() : Number(amount ?? 0);
+    const int = BigInt(Math.round(raw));
+    const divisor = BigInt(10 ** decimals);
+    const whole = int / divisor;
+    const remainder = int % divisor;
+    return parseFloat(`${whole}.${remainder.toString().padStart(decimals, '0')}`);
+  } catch { return 0; }
+}
+
+function getMemberSince(invoices: InvoiceData[]): string {
+  if (!invoices.length) return '—';
+  const timestamps = invoices
+    .map(i => { try { return i.createdAt.toNumber ? i.createdAt.toNumber() : Number(i.createdAt); } catch { return 0; } })
+    .filter(t => t > 0);
+  if (!timestamps.length) return '—';
+  return new Date(Math.min(...timestamps) * 1000).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function getLongestCleanStreak(invoices: InvoiceData[]): number {
+  const sorted = [...invoices].sort((a, b) => {
+    const at = a.createdAt.toNumber ? a.createdAt.toNumber() : Number(a.createdAt);
+    const bt = b.createdAt.toNumber ? b.createdAt.toNumber() : Number(b.createdAt);
+    return at - bt;
+  });
+  let max = 0, current = 0;
+  for (const inv of sorted) {
+    if (inv.status === InvoiceStatus.Released && !inv.disputeRaisedAt) {
+      current++; max = Math.max(max, current);
+    } else if (inv.disputeRaisedAt) {
+      current = 0;
+    }
+  }
+  return max;
+}
+
+// ── reputation score — deterministic, 0–1000 ──────────────────
+// Completion rate    40% → up to 400 pts
+// Activity volume    20% → up to 200 pts  (capped at 50 invoices)
+// Best streak        20% → up to 200 pts  (capped at 20 consecutive)
+// Two-sided          10% → up to 100 pts  (active as both creator AND client)
+// Dispute penalty   −10% → up to −100 pts (50 per dispute)
+
+interface ScoreBreakdown {
+  total: number;
+  completionPts: number;
+  activityPts: number;
+  streakPts: number;
+  twoSidedPts: number;
+  disputePenalty: number;
+}
+
+function calcReputationScore(
+  totalSent: number,
+  cleanCompletions: number,
+  longestStreak: number,
+  totalPaid: number,
+  disputedAsCreator: number,
+  disputedAsClient: number,
+): ScoreBreakdown {
+  const completionRate = totalSent > 0 ? cleanCompletions / totalSent : 0;
+  const completionPts = Math.round(completionRate * 400);
+  const activityPts = Math.round(Math.min(totalSent + totalPaid, 50) / 50 * 200);
+  const streakPts = Math.round(Math.min(longestStreak, 20) / 20 * 200);
+  const twoSidedPts = totalSent > 0 && totalPaid > 0 ? 100 : 0;
+  const disputePenalty = Math.min((disputedAsCreator + disputedAsClient) * 50, 100);
+  const total = Math.max(0, Math.min(1000, completionPts + activityPts + streakPts + twoSidedPts - disputePenalty));
+  return { total, completionPts, activityPts, streakPts, twoSidedPts, disputePenalty };
+}
+
+// ── read-only SDK ──────────────────────────────────────────────
+
+function createReadOnlySdk(connection: Connection): EscrowPaySDK | null {
+  try {
+    const mock = {
+      publicKey: new PublicKey('11111111111111111111111111111111'),
+      signTransaction: async (tx: any) => tx,
+      signAllTransactions: async (txs: any[]) => txs,
+    };
+    const provider = new AnchorProvider(connection, mock as any, { commitment: 'confirmed' });
+    return new EscrowPaySDK(provider);
+  } catch { return null; }
+}
+
+// ── score ring ─────────────────────────────────────────────────
+
+const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
+  const size = 160;
+  const stroke = 10;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - score / 1000);
+  const color = score >= 800 ? '#2DD4BF' : score >= 500 ? '#38BDF8' : score >= 200 ? '#F59E0B' : '#EF4444';
+
+  return (
+    <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none"
+          stroke={color} strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={circumference} strokeDashoffset={dashOffset}
+          style={{ transition: 'stroke-dashoffset 1s ease' }}
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center">
+        <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '2.5rem', color, letterSpacing: '-0.03em', lineHeight: 1 }}>
+          {score}
+        </span>
+        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+          / 1000
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// ── stat card ─────────────────────────────────────────────────
+
+const StatCard = ({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) => (
+  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}>
+    <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}>
+      {label}
+    </p>
+    <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '2rem', color: accent ? '#2DD4BF' : '#F8FAFC', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+      {value}
+    </p>
+    {sub && <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>{sub}</p>}
+  </div>
+);
+
+// ── breakdown row ──────────────────────────────────────────────
+
+const BreakdownRow = ({ label, pts, max, negative }: { label: string; pts: number; max: number; negative?: boolean }) => (
+  <div className="flex items-center gap-3">
+    <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#94A3B8', minWidth: '170px', flexShrink: 0 }}>
+      {label}
+    </span>
+    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+      <div
+        className="h-full rounded-full"
+        style={{ width: `${(Math.abs(pts) / max) * 100}%`, backgroundColor: negative ? '#EF4444' : '#2DD4BF', transition: 'width 0.8s ease' }}
+      />
+    </div>
+    <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '12px', color: negative ? '#EF4444' : '#F8FAFC', minWidth: '56px', textAlign: 'right', flexShrink: 0 }}>
+      {negative ? '−' : '+'}{Math.abs(pts)} / {max}
+    </span>
+  </div>
+);
+
+// ── types ──────────────────────────────────────────────────────
+
+type LoadState = 'loading' | 'error' | 'loaded';
+
+interface ProfileData {
+  totalSent: number;
+  cleanCompletions: number;
+  disputedAsCreator: number;
+  longestStreak: number;
+  totalPaid: number;
+  disputedAsClient: number;
+  memberSince: string;
+  walletAddress: string;
+  score: ScoreBreakdown;
+}
+
+// ── page ───────────────────────────────────────────────────────
+
+const ProfilePage: React.FC = () => {
+  const { wallet } = useParams<{ wallet: string }>();
+  const { connection } = useConnection();
+
+  const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [error, setError] = useState('');
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  const walletPubkey = useMemo(() => {
+    if (!wallet) return null;
+    try { return new PublicKey(wallet); } catch { return null; }
+  }, [wallet]);
+
+  useEffect(() => {
+    if (!walletPubkey) { setError('Invalid wallet address.'); setLoadState('error'); return; }
+
+    const load = async () => {
+      setLoadState('loading');
+      const sdk = createReadOnlySdk(connection);
+      if (!sdk) { setError('Failed to connect to Solana.'); setLoadState('error'); return; }
+
+      try {
+        const [creatorResult, clientResult] = await Promise.all([
+          sdk.fetchInvoicesByCreator(walletPubkey),
+          sdk.fetchInvoicesByClient(walletPubkey),
+        ]);
+
+        const creatorInvoices: InvoiceData[] = creatorResult.success && creatorResult.data
+          ? creatorResult.data.map(i => i.account) : [];
+        const clientInvoices: InvoiceData[] = clientResult.success && clientResult.data
+          ? clientResult.data.map(i => i.account) : [];
+
+        const cleanCompletions = creatorInvoices.filter(i => i.status === InvoiceStatus.Released && !i.disputeRaisedAt).length;
+        const disputedAsCreator = creatorInvoices.filter(i => !!i.disputeRaisedAt).length;
+        const streak = getLongestCleanStreak(creatorInvoices);
+        const disputedAsClient = clientInvoices.filter(i => !!i.disputeRaisedAt).length;
+
+        const score = calcReputationScore(
+          creatorInvoices.length, cleanCompletions, streak,
+          clientInvoices.length, disputedAsCreator, disputedAsClient,
+        );
+
+        setProfile({
+          totalSent: creatorInvoices.length,
+          cleanCompletions,
+          disputedAsCreator,
+          longestStreak: streak,
+          totalPaid: clientInvoices.length,
+          disputedAsClient,
+          memberSince: getMemberSince([...creatorInvoices, ...clientInvoices]),
+          walletAddress: walletPubkey.toBase58(),
+          score,
+        });
+        setLoadState('loaded');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load profile.');
+        setLoadState('error');
+      }
+    };
+
+    load();
+  }, [walletPubkey, connection]);
+
+  // ── loading ──────────────────────────────────────────────────
+  if (loadState === 'loading') {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#2DD4BF' }} />
+            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>Reading on-chain data...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // ── error ────────────────────────────────────────────────────
+  if (loadState === 'error' || !profile) {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+        <Header />
+        <main className="flex-1 flex items-center justify-center px-4">
+          <div className="rounded-xl p-10 text-center" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', maxWidth: '400px', width: '100%' }}>
+            <AlertCircle className="h-10 w-10 mx-auto mb-4" style={{ color: '#EF4444' }} />
+            <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1.125rem', color: '#F8FAFC', marginBottom: '8px' }}>
+              Profile not found
+            </h3>
+            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', marginBottom: '24px' }}>
+              {error || 'No on-chain activity found for this wallet.'}
+            </p>
+            <Link to="/" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-opacity duration-150 hover:opacity-80"
+              style={{ backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.12)', color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}>
+              Go Home
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  const hasCreatorActivity = profile.totalSent > 0;
+  const hasClientActivity = profile.totalPaid > 0;
+  const hasAnyActivity = hasCreatorActivity || hasClientActivity;
+  const completionRate = profile.totalSent > 0 ? Math.round((profile.cleanCompletions / profile.totalSent) * 100) : null;
+
+  return (
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+      <Header />
+      <main className="flex-1 w-full px-4 sm:px-6 py-12">
+        <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+
+          {/* ── Identity ── */}
+          <div className="flex items-start justify-between gap-4 mb-10">
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}>
+                Escrow Record
+              </p>
+              <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '1rem', color: '#F8FAFC', letterSpacing: '0.01em', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                {profile.walletAddress}
+              </p>
+              {profile.memberSince !== '—' && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Calendar className="h-3 w-3" style={{ color: '#64748B' }} />
+                  <span style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>
+                    Active since {profile.memberSince}
+                  </span>
+                </div>
+              )}
+            </div>
+            <a
+              href={`https://explorer.solana.com/address/${profile.walletAddress}?cluster=devnet`}
+              target="_blank" rel="noopener noreferrer"
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-opacity duration-150 hover:opacity-70"
+              style={{ backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
+            >
+              <ExternalLink className="h-3 w-3" />
+              Verify on-chain
+            </a>
+          </div>
+
+          {/* ── No activity ── */}
+          {!hasAnyActivity && (
+            <div className="rounded-xl p-12 text-center mb-8" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <TruvloLogo size="sm" className="mx-auto mb-4" />
+              <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
+                No on-chain escrow activity found for this wallet yet.
+              </p>
+            </div>
+          )}
+
+          {hasAnyActivity && (
+            <>
+              {/* ── Reputation score — hero ── */}
+              <div
+                className="rounded-xl p-8 mb-6 flex flex-col md:flex-row items-center gap-8"
+                style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderLeft: '4px solid #2DD4BF' }}
+              >
+                <ScoreRing score={profile.score.total} />
+
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex items-center gap-2 justify-center md:justify-start mb-2">
+                    <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.25rem', color: '#F8FAFC', letterSpacing: '-0.01em' }}>
+                      Reputation Score
+                    </p>
+                    <button
+                      onClick={() => setShowBreakdown(v => !v)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '2px', display: 'flex' }}
+                      title="How is this calculated?"
+                    >
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', lineHeight: 1.6, marginBottom: '16px' }}>
+                    Derived entirely from verified on-chain activity. Cannot be edited or faked.
+                    Used for future token distribution and airdrop eligibility.
+                  </p>
+                  <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+                    {profile.cleanCompletions > 0 && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: 'rgba(45,212,191,0.1)', color: '#2DD4BF', fontFamily: '"DM Sans", sans-serif' }}>
+                        <Shield className="h-3 w-3" />
+                        {profile.cleanCompletions} clean completion{profile.cleanCompletions !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {profile.longestStreak >= 3 && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: 'rgba(56,189,248,0.1)', color: '#38BDF8', fontFamily: '"DM Sans", sans-serif' }}>
+                        <Zap className="h-3 w-3" />
+                        {profile.longestStreak} streak
+                      </span>
+                    )}
+                    {profile.disputedAsCreator === 0 && profile.disputedAsClient === 0 && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: 'rgba(34,197,94,0.1)', color: '#4ADE80', fontFamily: '"DM Sans", sans-serif' }}>
+                        Zero disputes
+                      </span>
+                    )}
+                    {profile.score.twoSidedPts === 100 && (
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: 'rgba(249,115,22,0.1)', color: '#FB923C', fontFamily: '"DM Sans", sans-serif' }}>
+                        Two-sided
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Breakdown (expandable via ℹ️ button) ── */}
+              {showBreakdown && (
+                <div className="rounded-xl p-6 mb-6 space-y-3" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 500, fontSize: '13px', color: '#F8FAFC', marginBottom: '16px' }}>
+                    How the score is calculated
+                  </p>
+                  <BreakdownRow label="Completion rate (×400)" pts={profile.score.completionPts} max={400} />
+                  <BreakdownRow label="Activity volume (×200)" pts={profile.score.activityPts} max={200} />
+                  <BreakdownRow label="Best streak (×200)" pts={profile.score.streakPts} max={200} />
+                  <BreakdownRow label="Two-sided (×100)" pts={profile.score.twoSidedPts} max={100} />
+                  {profile.score.disputePenalty > 0 && (
+                    <BreakdownRow label="Dispute penalty (×100)" pts={profile.score.disputePenalty} max={100} negative />
+                  )}
+                  <div className="flex justify-between pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#94A3B8' }}>Total</span>
+                    <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '13px', color: '#2DD4BF' }}>
+                      {profile.score.total} / 1000
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* ── As Creator ── */}
+              {hasCreatorActivity && (
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <TrendingUp className="h-4 w-4" style={{ color: '#94A3B8' }} />
+                    <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 500, fontSize: '1rem', color: '#F8FAFC' }}>As Creator</h2>
+                    <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <StatCard label="Clean completions" value={profile.cleanCompletions} sub={`of ${profile.totalSent} sent`} accent={profile.cleanCompletions > 0} />
+                    <StatCard label="Completion rate" value={completionRate !== null ? `${completionRate}%` : '—'} sub={profile.disputedAsCreator > 0 ? `${profile.disputedAsCreator} disputed` : 'No disputes'} />
+                    <StatCard label="Best streak" value={profile.longestStreak} sub="dispute-free in a row" />
+                  </div>
+                </div>
+              )}
+
+              {/* ── As Client ── */}
+              {hasClientActivity && (
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Shield className="h-4 w-4" style={{ color: '#94A3B8' }} />
+                    <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 500, fontSize: '1rem', color: '#F8FAFC' }}>As Client</h2>
+                    <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <StatCard label="Invoices paid" value={profile.totalPaid} sub="via escrow" />
+                    <StatCard label="Disputes raised" value={profile.disputedAsClient} sub={profile.disputedAsClient === 0 ? 'Clean record' : 'as client'} />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Verification footer ── */}
+          <div className="rounded-xl p-5 flex items-start gap-4" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}>
+              <Shield className="h-4 w-4" style={{ color: '#2DD4BF' }} />
+            </div>
+            <div>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 500, fontSize: '13px', color: '#F8FAFC', marginBottom: '4px' }}>
+                This record is verified on-chain
+              </p>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#64748B', lineHeight: 1.6 }}>
+                Every figure is derived directly from the Truvlo smart contract on Solana.
+                No wallet connection required to view.{' '}
+                <a href={`https://explorer.solana.com/address/${profile.walletAddress}?cluster=devnet`}
+                  target="_blank" rel="noopener noreferrer" style={{ color: '#2DD4BF', textDecoration: 'none' }}>
+                  Verify yourself →
+                </a>
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </main>
+      <Footer />
+    </div>
+  );
+};
+
+export default ProfilePage;

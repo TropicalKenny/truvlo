@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Connection } from '@solana/web3.js';
-import { ExternalLink, AlertCircle, Loader2, Shield, Zap, TrendingUp, Calendar, Info } from 'lucide-react';
+import { ExternalLink, AlertCircle, Loader2, Shield, Zap, TrendingUp, Calendar, Info, Copy, Check } from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -50,11 +50,14 @@ function getLongestCleanStreak(invoices: InvoiceData[]): number {
 }
 
 // ── reputation score — deterministic, 0–1000 ──────────────────
-// Completion rate    40% → up to 400 pts
-// Activity volume    20% → up to 200 pts  (capped at 50 invoices)
-// Best streak        20% → up to 200 pts  (capped at 20 consecutive)
-// Two-sided          10% → up to 100 pts  (active as both creator AND client)
-// Dispute penalty   −10% → up to −100 pts (50 per dispute)
+// Completion rate    40% → up to 400 pts  (linear — based on rate, not count)
+// Activity volume    20% → up to 200 pts  (log scale — never plateaus)
+// Best streak        20% → up to 200 pts  (log scale — keeps rewarding consistency)
+// Two-sided          10% → up to 100 pts  (binary — used platform both ways)
+// Dispute penalty   −10% → up to −100 pts (50 per dispute, max 100 deducted)
+//
+// Log scale means 200 invoices scores better than 50 but not 4x better.
+// The score approaches 1000 asymptotically — always a reason to do one more.
 
 interface ScoreBreakdown {
   total: number;
@@ -73,13 +76,29 @@ function calcReputationScore(
   disputedAsCreator: number,
   disputedAsClient: number,
 ): ScoreBreakdown {
+  // 1. Completion rate — linear, based on rate not raw count (0–400)
   const completionRate = totalSent > 0 ? cleanCompletions / totalSent : 0;
   const completionPts = Math.round(completionRate * 400);
-  const activityPts = Math.round(Math.min(totalSent + totalPaid, 50) / 50 * 200);
-  const streakPts = Math.round(Math.min(longestStreak, 20) / 20 * 200);
+
+  // 2. Activity — log scale, reference point: 50 invoices ≈ 150pts, 200 ≈ 190pts (0–200)
+  const totalActivity = totalSent + totalPaid;
+  const activityPts = totalActivity > 0
+    ? Math.round(Math.log(totalActivity + 1) / Math.log(202) * 200)
+    : 0;
+
+  // 3. Streak — log scale, reference point: 20 streak ≈ 150pts, 100 ≈ 190pts (0–200)
+  const streakPts = longestStreak > 0
+    ? Math.round(Math.log(longestStreak + 1) / Math.log(202) * 200)
+    : 0;
+
+  // 4. Two-sided participation — binary (0 or 100)
   const twoSidedPts = totalSent > 0 && totalPaid > 0 ? 100 : 0;
+
+  // 5. Dispute penalty — 50pts per dispute, max 100 deducted
   const disputePenalty = Math.min((disputedAsCreator + disputedAsClient) * 50, 100);
+
   const total = Math.max(0, Math.min(1000, completionPts + activityPts + streakPts + twoSidedPts - disputePenalty));
+
   return { total, completionPts, activityPts, streakPts, twoSidedPts, disputePenalty };
 }
 
@@ -189,6 +208,7 @@ const ProfilePage: React.FC = () => {
   const [error, setError] = useState('');
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const walletPubkey = useMemo(() => {
     if (!wallet) return null;
@@ -315,15 +335,38 @@ const ProfilePage: React.FC = () => {
                 </div>
               )}
             </div>
-            <a
-              href={`https://explorer.solana.com/address/${profile.walletAddress}?cluster=devnet`}
-              target="_blank" rel="noopener noreferrer"
-              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-opacity duration-150 hover:opacity-70"
-              style={{ backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
-            >
-              <ExternalLink className="h-3 w-3" />
-              Verify on-chain
-            </a>
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              <a
+                href={`https://explorer.solana.com/address/${profile.walletAddress}?cluster=devnet`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-opacity duration-150 hover:opacity-70"
+                style={{ backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
+              >
+                <ExternalLink className="h-3 w-3" />
+                Verify on-chain
+              </a>
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(window.location.href);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  } catch { /* ignore */ }
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-all duration-150"
+                style={{
+                  backgroundColor: copied ? 'rgba(45,212,191,0.1)' : 'transparent',
+                  border: copied ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.1)',
+                  color: copied ? '#2DD4BF' : '#94A3B8',
+                  fontFamily: '"DM Sans", sans-serif',
+                  cursor: 'pointer',
+                }}
+              >
+                {copied
+                  ? <><Check className="h-3 w-3" />Copied!</>
+                  : <><Copy className="h-3 w-3" />Copy link</>}
+              </button>
+            </div>
           </div>
 
           {/* ── No activity ── */}
@@ -466,6 +509,19 @@ const ProfilePage: React.FC = () => {
                 </a>
               </p>
             </div>
+          </div>
+
+          {/* ── Wallet match warning ── */}
+          <div
+            className="rounded-xl p-4 flex items-start gap-3 mt-3"
+            style={{ backgroundColor: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}
+          >
+            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#F59E0B' }} />
+            <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#94A3B8', lineHeight: 1.6 }}>
+              <span style={{ color: '#F8FAFC', fontWeight: 500 }}>Always verify the wallet address matches. </span>
+              This profile is public — anyone can share it. Before paying an invoice, confirm the wallet shown here
+              matches the one on the invoice you received. Only the holder of the private key can send invoices from this wallet.
+            </p>
           </div>
 
         </div>

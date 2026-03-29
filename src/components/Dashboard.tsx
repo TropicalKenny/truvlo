@@ -873,16 +873,27 @@ const Dashboard: React.FC = () => {
             Dashboard
           </h1>
           {publicKey && (
-            <p
-              style={{
-                fontFamily: '"JetBrains Mono", monospace',
-                fontSize: '12px',
-                color: '#64748B',
-                marginTop: '4px',
-              }}
+            <Link
+              to={`/profile/${publicKey.toBase58()}`}
+              className="flex items-center gap-1 transition-opacity duration-150 hover:opacity-70 w-fit"
+              style={{ textDecoration: 'none' }}
+              title="View your public escrow record"
             >
-              {truncateWallet(publicKey.toBase58())}
-            </p>
+              <p
+                style={{
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: '12px',
+                  color: '#64748B',
+                  marginTop: '4px',
+                }}
+              >
+                {truncateWallet(publicKey.toBase58())}
+              </p>
+              <ExternalLink
+                className="h-3 w-3"
+                style={{ color: '#64748B', marginTop: '4px' }}
+              />
+            </Link>
           )}
         </div>
 

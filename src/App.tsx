@@ -18,6 +18,7 @@ import PaymentPage from './pages/PaymentPage';
 import DashboardPage from './pages/DashboardPage';
 import InvalidInvoicePage from './pages/InvalidInvoicePage';
 import ApprovePage from './pages/ApprovePage';
+import ProfilePage from './pages/ProfilePage';
 import { NotificationProvider } from './components/NotificationProvider';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
@@ -25,7 +26,6 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 const App = () => {
   const endpoint = useMemo(() => clusterApiUrl(WalletAdapterNetwork.Devnet), []);
 
-  // All major Solana wallets — auto-detect any connected wallet
   const wallets = useMemo(() => [
     new PhantomWalletAdapter(),
     new SolflareWalletAdapter(),
@@ -47,6 +47,7 @@ const App = () => {
               <Route path="/pay/:invoiceId" element={<InvalidInvoicePage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/approve/:invoiceId/:creator" element={<ApprovePage />} />
+              <Route path="/profile/:wallet" element={<ProfilePage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <Toaster />

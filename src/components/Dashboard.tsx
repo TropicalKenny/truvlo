@@ -125,6 +125,7 @@ const Dashboard: React.FC = () => {
     open: boolean; invoiceId: string; amount: string;
     tokenType: TokenType; releaseableAmount: number;
   } | null>(null);
+  const [profileCopied, setProfileCopied] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -944,6 +945,36 @@ const Dashboard: React.FC = () => {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
+
+          {/* Share Profile */}
+          {publicKey && (
+            <button
+              onClick={async () => {
+                const url = `${window.location.origin}/profile/${publicKey.toBase58()}`;
+                try {
+                  await navigator.clipboard.writeText(url);
+                  setProfileCopied(true);
+                  setTimeout(() => setProfileCopied(false), 2000);
+                } catch {
+                  toast({ title: 'Failed to copy', variant: 'destructive' });
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-medium transition-all duration-150"
+              style={{
+                backgroundColor: profileCopied ? 'rgba(45,212,191,0.1)' : 'transparent',
+                border: profileCopied ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.1)',
+                color: profileCopied ? '#2DD4BF' : '#94A3B8',
+                fontFamily: '"DM Sans", sans-serif',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => { if (!profileCopied) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+              onMouseLeave={e => { if (!profileCopied) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+              title="Copy your public profile link"
+            >
+              {profileCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {profileCopied ? 'Copied!' : 'Profile'}
+            </button>
+          )}
 
           {/* Create invoice */}
           <Link

@@ -40,17 +40,14 @@ pub mod workspace {
 
     // ----------------------------------------------------------
     // CREATE INVOICE — USDC
+    // description and client_email removed — stored in Supabase
     // ----------------------------------------------------------
     pub fn initialize_config(
         ctx: Context<InitializeConfig>,
         invoice_id: String,
         amount: u64,
-        description: String,
-        client_email: String,
     ) -> Result<()> {
         require!(amount > 0, ErrorCode::InvalidAmount);
-        require!(description.len() <= 256, ErrorCode::DescriptionTooLong);
-        require!(client_email.len() <= 128, ErrorCode::EmailTooLong);
         require!(invoice_id.len() <= 32, ErrorCode::InvoiceIdTooLong);
 
         let invoice = &mut ctx.accounts.invoice;
@@ -63,8 +60,6 @@ pub mod workspace {
         invoice.amount_paid = 0;
         invoice.amount_released = 0;
         invoice.token_type = TokenType::USDC;
-        invoice.description = description;
-        invoice.client_email = client_email;
         invoice.status = InvoiceStatus::Unpaid;
         invoice.created_at = Clock::get()?.unix_timestamp;
         invoice.paid_at = None;
@@ -74,22 +69,20 @@ pub mod workspace {
         invoice.completion_requested_at = None;
         invoice.client_approved = false;
         invoice.dispute_raised_at = None;
+        invoice.verdict_hash = None;
         Ok(())
     }
 
     // ----------------------------------------------------------
     // CREATE INVOICE — SOL
+    // description and client_email removed — stored in Supabase
     // ----------------------------------------------------------
     pub fn initialize_config_sol(
         ctx: Context<InitializeConfigSol>,
         invoice_id: String,
         amount: u64,
-        description: String,
-        client_email: String,
     ) -> Result<()> {
         require!(amount > 0, ErrorCode::InvalidAmount);
-        require!(description.len() <= 256, ErrorCode::DescriptionTooLong);
-        require!(client_email.len() <= 128, ErrorCode::EmailTooLong);
         require!(invoice_id.len() <= 32, ErrorCode::InvoiceIdTooLong);
 
         let invoice = &mut ctx.accounts.invoice;
@@ -102,8 +95,6 @@ pub mod workspace {
         invoice.amount_paid = 0;
         invoice.amount_released = 0;
         invoice.token_type = TokenType::SOL;
-        invoice.description = description;
-        invoice.client_email = client_email;
         invoice.status = InvoiceStatus::Unpaid;
         invoice.created_at = Clock::get()?.unix_timestamp;
         invoice.paid_at = None;
@@ -113,6 +104,7 @@ pub mod workspace {
         invoice.completion_requested_at = None;
         invoice.client_approved = false;
         invoice.dispute_raised_at = None;
+        invoice.verdict_hash = None;
         Ok(())
     }
 
@@ -287,7 +279,6 @@ pub mod workspace {
             ErrorCode::InvoiceNotReleasable
         );
         require!(invoice.status != InvoiceStatus::Disputed, ErrorCode::InvoiceDisputed);
-        // Cannot request again if already pending client response
         require!(invoice.completion_requested_at.is_none(), ErrorCode::ReleaseAlreadyRequested);
 
         let invoice = &mut ctx.accounts.invoice;
@@ -542,14 +533,12 @@ pub mod workspace {
         require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
         require!(invoice.status == InvoiceStatus::Disputed, ErrorCode::NotDisputed);
         require!(ctx.accounts.kenny.key() == PLATFORM_TREASURY, ErrorCode::Unauthorized);
-        // Validate client token account belongs to the client who paid
         if let Some(client_key) = invoice.client {
             require!(ctx.accounts.client_token.owner == client_key, ErrorCode::InvalidOwner);
         }
         require!(creator_bps as u32 + client_bps as u32 == 10000, ErrorCode::InvalidSplit);
         require!(invoice.token_type == TokenType::USDC, ErrorCode::TokenTypeMismatch);
 
-        // Funds available for split = amount_paid - amount_released
         let splittable = invoice.amount_paid
             .checked_sub(invoice.amount_released)
             .ok_or(ErrorCode::MathOverflow)?;
@@ -559,7 +548,7 @@ pub mod workspace {
             .checked_mul(creator_bps as u64).ok_or(ErrorCode::MathOverflow)?
             .checked_div(10000).ok_or(ErrorCode::MathOverflow)?;
         let client_share = splittable
-            .checked_sub(creator_share).ok_or(ErrorCode::MathOverflow)?; // Remainder goes to client
+            .checked_sub(creator_share).ok_or(ErrorCode::MathOverflow)?;
 
         let creator_key = ctx.accounts.creator.key();
         let invoice_id_bytes = invoice.invoice_id.as_bytes();
@@ -568,7 +557,6 @@ pub mod workspace {
         let seeds = &[b"escrow", invoice_id_bytes, creator_key.as_ref(), &bump_arr];
         let signer_seeds: &[&[&[u8]]] = &[seeds];
 
-        // Transfer creator's share
         if creator_share > 0 {
             token::transfer(
                 CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), Transfer {
@@ -580,7 +568,6 @@ pub mod workspace {
             )?;
         }
 
-        // Transfer client's share
         if client_share > 0 {
             token::transfer(
                 CpiContext::new_with_signer(ctx.accounts.token_program.to_account_info(), Transfer {
@@ -612,6 +599,27 @@ pub mod workspace {
             }, signer_seeds),
         )?;
 
+        Ok(())
+    }
+
+    // ----------------------------------------------------------
+    // STORE VERDICT HASH (KENNY ONLY)
+    // SHA-512 hash of the dispute verdict produced off-chain.
+    // Written on-chain after Claude reviews evidence in Supabase.
+    // Provides cryptographic proof of verdict — not just "trust me".
+    // ----------------------------------------------------------
+    pub fn store_verdict_hash(
+        ctx: Context<StoreVerdictHash>,
+        invoice_id: String,
+        hash: [u8; 64],
+    ) -> Result<()> {
+        let invoice = &ctx.accounts.invoice;
+        require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
+        require!(invoice.status == InvoiceStatus::Disputed, ErrorCode::NotDisputed);
+        require!(ctx.accounts.kenny.key() == PLATFORM_TREASURY, ErrorCode::Unauthorized);
+
+        let invoice = &mut ctx.accounts.invoice;
+        invoice.verdict_hash = Some(hash);
         Ok(())
     }
 }
@@ -667,7 +675,6 @@ pub struct PayInvoiceSol<'info> {
     /// CHECK: Platform treasury — validated by constraint
     #[account(mut, constraint = platform_treasury.key() == PLATFORM_TREASURY @ ErrorCode::InvalidTreasury)]
     pub platform_treasury: AccountInfo<'info>,
-
     #[account(mut)] pub client: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -752,6 +759,16 @@ pub struct ResolveDispute<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(invoice_id: String)]
+pub struct StoreVerdictHash<'info> {
+    #[account(mut, seeds = [b"invoice", invoice_id.as_bytes(), invoice.creator.as_ref()], bump = invoice.bump)]
+    pub invoice: Account<'info, Invoice>,
+    /// Kenny's wallet — must match PLATFORM_TREASURY
+    #[account(mut, constraint = kenny.key() == PLATFORM_TREASURY @ ErrorCode::Unauthorized)]
+    pub kenny: Signer<'info>,
+}
+
 // ============================================================
 // INVOICE ACCOUNT
 // ============================================================
@@ -760,51 +777,49 @@ pub struct ResolveDispute<'info> {
 pub struct Invoice {
     pub bump: u8,
     pub escrow_bump: u8,
-    pub invoice_id: String,               // max 32
+    pub invoice_id: String,                  // max 32
     pub creator: Pubkey,
     pub client: Option<Pubkey>,
     pub amount: u64,
     pub amount_paid: u64,
     pub amount_released: u64,
     pub token_type: TokenType,
-    pub description: String,              // max 256
-    pub client_email: String,             // max 128
     pub status: InvoiceStatus,
     pub created_at: i64,
     pub paid_at: Option<i64>,
     pub released_at: Option<i64>,
     // Release schedule
-    pub release_schedule: Vec<u16>,       // basis points, sums to 10000
+    pub release_schedule: Vec<u16>,          // basis points, sums to 10000
     pub current_release_index: u8,
     // Dual approval
     pub completion_requested_at: Option<i64>,
     pub client_approved: bool,
     // Dispute
     pub dispute_raised_at: Option<i64>,
+    pub verdict_hash: Option<[u8; 64]>,      // SHA-512 of off-chain verdict
 }
 
 impl Invoice {
     pub const LEN: usize =
-        1 +           // bump
-        1 +           // escrow_bump
-        (4 + 32) +    // invoice_id String
-        32 +          // creator Pubkey
-        (1 + 32) +    // client Option<Pubkey>
-        8 +           // amount
-        8 +           // amount_paid
-        8 +           // amount_released
-        1 +           // token_type
-        (4 + 256) +   // description String
-        (4 + 128) +   // client_email String
-        1 +           // status
-        8 +           // created_at
-        (1 + 8) +     // paid_at Option<i64>
-        (1 + 8) +     // released_at Option<i64>
+        1 +                         // bump
+        1 +                         // escrow_bump
+        (4 + 32) +                  // invoice_id String (max 32 bytes)
+        32 +                        // creator Pubkey
+        (1 + 32) +                  // client Option<Pubkey>
+        8 +                         // amount
+        8 +                         // amount_paid
+        8 +                         // amount_released
+        1 +                         // token_type
+        1 +                         // status
+        8 +                         // created_at
+        (1 + 8) +                   // paid_at Option<i64>
+        (1 + 8) +                   // released_at Option<i64>
         (4 + MAX_INSTALLMENTS * 2) + // release_schedule Vec<u16>
-        1 +           // current_release_index
-        (1 + 8) +     // completion_requested_at Option<i64>
-        1 +           // client_approved bool
-        (1 + 8);      // dispute_raised_at Option<i64>
+        1 +                         // current_release_index
+        (1 + 8) +                   // completion_requested_at Option<i64>
+        1 +                         // client_approved bool
+        (1 + 8) +                   // dispute_raised_at Option<i64>
+        (1 + 64);                   // verdict_hash Option<[u8; 64]>
 }
 
 // ============================================================
@@ -830,8 +845,6 @@ pub enum InvoiceStatus {
 #[error_code]
 pub enum ErrorCode {
     #[msg("Invalid amount")] InvalidAmount,
-    #[msg("Description too long — max 256 chars")] DescriptionTooLong,
-    #[msg("Email too long — max 128 chars")] EmailTooLong,
     #[msg("Invoice ID too long — max 32 chars")] InvoiceIdTooLong,
     #[msg("Invoice is not payable")] InvoiceNotPayable,
     #[msg("Invoice is not releasable")] InvoiceNotReleasable,

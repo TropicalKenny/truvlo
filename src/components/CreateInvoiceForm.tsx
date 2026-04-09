@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet } from '@solana/wallet-adapter-react';
 import { useConnection } from '@solana/wallet-adapter-react';
+import { usePrivy } from '@privy-io/react-auth';
+import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import { AnchorProvider } from '@coral-xyz/anchor';
+import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { Loader2, Copy, ExternalLink, Check } from 'lucide-react';
 import { EscrowPaySDK, TokenType } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
@@ -93,7 +95,11 @@ const DarkTextarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) 
 
 const CreateInvoiceForm: React.FC = () => {
   const { connection } = useConnection();
-  const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
+  const { authenticated, getAccessToken } = usePrivy();
+  const { wallets } = useSolanaWallets();
+  const privyWallet = wallets[0];
+  const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
+  const connected = authenticated && !!publicKey;
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -111,18 +117,37 @@ const CreateInvoiceForm: React.FC = () => {
 
   // ── SDK init — preserved exactly ───────────────────────────────
   const sdk = useMemo(() => {
-    if (!publicKey || !signTransaction || !signAllTransactions) return null;
-    const provider = new AnchorProvider(
-      connection,
-      { publicKey, signTransaction, signAllTransactions },
-      { commitment: 'confirmed' }
-    );
+    if (!publicKey || !privyWallet) return null;
+    const anchorWallet = {
+      publicKey,
+      signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+        const bytes = tx instanceof VersionedTransaction
+          ? tx.serialize()
+          : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+        const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+        return (tx instanceof VersionedTransaction
+          ? VersionedTransaction.deserialize(signedTransaction)
+          : Transaction.from(Buffer.from(signedTransaction))) as T;
+      },
+      signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+        return Promise.all(txs.map(async (tx) => {
+          const bytes = tx instanceof VersionedTransaction
+            ? tx.serialize()
+            : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+          const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+          return (tx instanceof VersionedTransaction
+            ? VersionedTransaction.deserialize(signedTransaction)
+            : Transaction.from(Buffer.from(signedTransaction))) as T;
+        }));
+      },
+    };
+    const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
     const instance = new EscrowPaySDK(provider);
     if (!instance.isInitialized()) {
       console.error('SDK failed to initialize:', instance.getInitError());
     }
     return instance;
-  }, [connection, publicKey, signTransaction, signAllTransactions]);
+  }, [connection, publicKey, privyWallet]);
 
   // ── submit — preserved exactly ──────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -159,8 +184,6 @@ const CreateInvoiceForm: React.FC = () => {
       const result = await sdk.createInvoice({
         invoiceId,
         amount: amountNum,
-        description: description.trim(),
-        clientEmail: clientEmail.trim(),
         tokenType,
       });
 
@@ -174,17 +197,21 @@ const CreateInvoiceForm: React.FC = () => {
         toast({ title: 'Invoice ready to send' });
 
         try {
-          await fetch('/api/send-invoice', {
+          const token = await getAccessToken();
+          await fetch('/api/create-invoice-meta', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
             body: JSON.stringify({
               invoiceId: result.data.invoiceId,
-              clientEmail: clientEmail.trim(),
               creatorWallet: publicKey?.toBase58(),
+              clientEmail: clientEmail.trim(),
               senderName: senderName.trim(),
-              amount: amountNum,
-              tokenType: tokenType === TokenType.USDC ? 'USDC' : 'SOL',
               description: description.trim(),
+              tokenType: tokenType === TokenType.USDC ? 'USDC' : 'SOL',
+              amount: amountNum,
               invoiceUrl,
             }),
           });

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { usePrivy } from '@privy-io/react-auth';
+import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import TruvloLogo from './TruvloLogo';
 
 const Header: React.FC = () => {
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
+  const { authenticated, login, logout } = usePrivy();
+  const { wallets } = useSolanaWallets();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -15,6 +18,11 @@ const Header: React.FC = () => {
 
   const isActive = (path: string) => location.pathname === path;
   const isLanding = location.pathname === '/';
+
+  const walletAddress = wallets[0]?.address;
+  const shortAddress = walletAddress
+    ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
+    : null;
 
   return (
     <header
@@ -66,9 +74,55 @@ const Header: React.FC = () => {
           </Link>
         </nav>
 
-        {/* Wallet — right */}
+        {/* Auth — right */}
         <div className="flex-shrink-0 z-10">
-          <WalletMultiButton />
+          {authenticated ? (
+            <button
+              onClick={() => logout()}
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: '#94A3B8',
+                backgroundColor: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px',
+                padding: '8px 14px',
+                cursor: 'pointer',
+                transition: 'color 150ms ease, background-color 150ms ease',
+              }}
+              onMouseEnter={e => {
+                (e.target as HTMLButtonElement).style.color = '#F8FAFC';
+                (e.target as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.1)';
+              }}
+              onMouseLeave={e => {
+                (e.target as HTMLButtonElement).style.color = '#94A3B8';
+                (e.target as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.06)';
+              }}
+            >
+              {shortAddress ?? 'Disconnect'}
+            </button>
+          ) : (
+            <button
+              onClick={() => login()}
+              style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: '#0D1117',
+                backgroundColor: '#2DD4BF',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '8px 16px',
+                cursor: 'pointer',
+                transition: 'opacity 150ms ease',
+              }}
+              onMouseEnter={e => ((e.target as HTMLButtonElement).style.opacity = '0.85')}
+              onMouseLeave={e => ((e.target as HTMLButtonElement).style.opacity = '1')}
+            >
+              Connect
+            </button>
+          )}
         </div>
       </div>
     </header>

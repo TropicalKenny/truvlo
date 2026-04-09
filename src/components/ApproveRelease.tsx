@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useWallet } from '@solana/wallet-adapter-react';
 import { useConnection } from '@solana/wallet-adapter-react';
+import { usePrivy } from '@privy-io/react-auth';
+import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import { AnchorProvider } from '@coral-xyz/anchor';
-import { PublicKey, Connection } from '@solana/web3.js';
+import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { Loader2, AlertCircle, Check, AlertTriangle, Clock } from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
@@ -40,7 +41,11 @@ const ApproveRelease: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
   const navigate = useNavigate();
   const { connection } = useConnection();
-  const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
+  const { authenticated } = usePrivy();
+  const { wallets } = useSolanaWallets();
+  const privyWallet = wallets[0];
+  const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
+  const connected = authenticated && !!publicKey;
   const { toast } = useToast();
 
   const [pageState, setPageState] = useState<PageState>({ type: 'loading' });
@@ -61,16 +66,35 @@ const ApproveRelease: React.FC = () => {
   }, [invoiceId, creator]);
 
   const sdk = useMemo(() => {
-    if (!publicKey || !signTransaction || !signAllTransactions) return null;
+    if (!publicKey || !privyWallet) return null;
     try {
-      const provider = new AnchorProvider(
-        connection,
-        { publicKey, signTransaction, signAllTransactions },
-        { commitment: 'confirmed' }
-      );
+      const anchorWallet = {
+        publicKey,
+        signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+          const bytes = tx instanceof VersionedTransaction
+            ? tx.serialize()
+            : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+          const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+          return (tx instanceof VersionedTransaction
+            ? VersionedTransaction.deserialize(signedTransaction)
+            : Transaction.from(Buffer.from(signedTransaction))) as T;
+        },
+        signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+          return Promise.all(txs.map(async (tx) => {
+            const bytes = tx instanceof VersionedTransaction
+              ? tx.serialize()
+              : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+            const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+            return (tx instanceof VersionedTransaction
+              ? VersionedTransaction.deserialize(signedTransaction)
+              : Transaction.from(Buffer.from(signedTransaction))) as T;
+          }));
+        },
+      };
+      const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
       return new EscrowPaySDK(provider);
     } catch { return null; }
-  }, [connection, publicKey, signTransaction, signAllTransactions]);
+  }, [connection, publicKey, privyWallet]);
 
   const createReadOnlySdk = (conn: Connection): EscrowPaySDK | null => {
     try {

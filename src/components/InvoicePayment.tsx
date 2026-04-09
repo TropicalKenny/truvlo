@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useConnection } from '@solana/wallet-adapter-react';
+import { usePrivy } from '@privy-io/react-auth';
+import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import { AnchorProvider } from '@coral-xyz/anchor';
-import { PublicKey, Connection } from '@solana/web3.js';
+import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 import {
   Loader2, AlertCircle, Check, ArrowLeft, Shield,
   ExternalLink, Plus, Trash2, Wallet
@@ -37,7 +37,11 @@ const InvoicePayment: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
   const navigate = useNavigate();
   const { connection } = useConnection();
-  const { publicKey, signTransaction, signAllTransactions, connected } = useWallet();
+  const { authenticated, login } = usePrivy();
+  const { wallets } = useSolanaWallets();
+  const privyWallet = wallets[0];
+  const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
+  const connected = authenticated && !!publicKey;
   const { toast } = useToast();
 
   const [pageState, setPageState] = useState<PageState>({ type: 'loading' });
@@ -58,12 +62,35 @@ const InvoicePayment: React.FC = () => {
   }, [invoiceId, creator]);
 
   const sdk = useMemo(() => {
-    if (!publicKey || !signTransaction || !signAllTransactions) return null;
+    if (!publicKey || !privyWallet) return null;
     try {
-      const provider = new AnchorProvider(connection, { publicKey, signTransaction, signAllTransactions }, { commitment: 'confirmed' });
+      const anchorWallet = {
+        publicKey,
+        signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+          const bytes = tx instanceof VersionedTransaction
+            ? tx.serialize()
+            : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+          const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+          return (tx instanceof VersionedTransaction
+            ? VersionedTransaction.deserialize(signedTransaction)
+            : Transaction.from(Buffer.from(signedTransaction))) as T;
+        },
+        signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+          return Promise.all(txs.map(async (tx) => {
+            const bytes = tx instanceof VersionedTransaction
+              ? tx.serialize()
+              : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+            const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+            return (tx instanceof VersionedTransaction
+              ? VersionedTransaction.deserialize(signedTransaction)
+              : Transaction.from(Buffer.from(signedTransaction))) as T;
+          }));
+        },
+      };
+      const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
       return new EscrowPaySDK(provider);
     } catch { return null; }
-  }, [connection, publicKey, signTransaction, signAllTransactions]);
+  }, [connection, publicKey, privyWallet]);
 
   const createReadOnlySdk = (conn: Connection): EscrowPaySDK | null => {
     try {
@@ -593,7 +620,23 @@ const InvoicePayment: React.FC = () => {
                       Connect to continue
                     </span>
                   </div>
-                  <WalletMultiButton style={{ width: '100%', justifyContent: 'center' }} />
+                  <button
+                    onClick={() => login()}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      backgroundColor: '#2DD4BF',
+                      color: '#0D1117',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Connect Wallet
+                  </button>
                 </div>
               ) : (
                 <button

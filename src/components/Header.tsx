@@ -4,6 +4,7 @@ import { usePrivy, useExportWallet } from '@privy-io/react-auth';
 import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import { Menu, X, ChevronDown, Download, LogOut } from 'lucide-react';
 import TruvloLogo from './TruvloLogo';
+import { useToast } from '@/hooks/use-toast';
 
 const Header: React.FC = () => {
   const location = useLocation();
@@ -13,6 +14,19 @@ const Header: React.FC = () => {
   const { authenticated, login, logout } = usePrivy();
   const { wallets } = useSolanaWallets();
   const { exportWallet } = useExportWallet();
+  const { toast } = useToast();
+
+  const handleExportWallet = async () => {
+    try {
+      await exportWallet();
+    } catch {
+      toast({
+        title: 'Export not available',
+        description: 'Private key export is not supported for Solana embedded wallets yet.',
+        variant: 'destructive',
+      });
+    }
+  };
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -133,7 +147,7 @@ const Header: React.FC = () => {
                   }}
                 >
                   <button
-                    onClick={() => { exportWallet(); setAuthDropdownOpen(false); }}
+                    onClick={() => { handleExportWallet(); setAuthDropdownOpen(false); }}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
                     style={{
                       color: '#94A3B8',
@@ -238,7 +252,7 @@ const Header: React.FC = () => {
               {authenticated ? (
                 <>
                   <button
-                    onClick={() => { exportWallet(); setMobileOpen(false); }}
+                    onClick={() => { handleExportWallet(); setMobileOpen(false); }}
                     className="flex items-center gap-2 py-2.5 text-sm transition-colors duration-150"
                     style={{
                       color: '#94A3B8',

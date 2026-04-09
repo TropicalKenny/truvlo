@@ -267,8 +267,11 @@ const Dashboard: React.FC = () => {
           const data = await res.json() as { display_name: string | null };
           setDisplayName(data.display_name);
           if (!data.display_name) setShowNamePrompt(true);
+          return;
         }
       } catch { /* non-blocking */ }
+      // API unavailable or errored — still show the prompt
+      setShowNamePrompt(true);
     };
     fetchProfile();
   }, [authenticated, getAccessToken]);

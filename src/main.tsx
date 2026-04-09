@@ -24,6 +24,12 @@ createRoot(rootElement).render(
         },
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
+          showWalletUIs: false,
+        },
+        solana: {
+          rpcs: {
+            'solana:devnet': 'https://api.devnet.solana.com',
+          },
         },
       }}
     >

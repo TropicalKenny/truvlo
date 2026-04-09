@@ -100,7 +100,7 @@ const DarkBadge = ({
 
 const Dashboard: React.FC = () => {
   const { connection } = useConnection();
-  const { authenticated } = usePrivy();
+  const { authenticated, getAccessToken } = usePrivy();
   const { wallets } = useSolanaWallets();
   const privyWallet = wallets[0];
   const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
@@ -131,6 +131,10 @@ const Dashboard: React.FC = () => {
     tokenType: TokenType; releaseableAmount: number;
   } | null>(null);
   const [profileCopied, setProfileCopied] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -191,8 +195,40 @@ const Dashboard: React.FC = () => {
           return bt - at;
         });
 
+      // Load last-seen state for change-based notifications
+      type SeenEntry = { status: number; clientApproved: boolean; disputed: boolean };
+      const SEEN_KEY = 'truvlo_seen_invoices';
+      let seen: Record<string, SeenEntry> = {};
+      try { seen = JSON.parse(localStorage.getItem(SEEN_KEY) ?? '{}') as Record<string, SeenEntry>; } catch { /* ignore */ }
+      const newSeen: Record<string, SeenEntry> = { ...seen };
+      const isFirstLoad = Object.keys(seen).length === 0;
+
+      const checkAndNotify = (invoices: InvoiceWithKey[], role: 'creator' | 'client') => {
+        for (const { account: inv } of invoices) {
+          const id = inv.invoiceId;
+          const prev = seen[id];
+          const statusNum = typeof inv.status === 'number' ? inv.status : (inv.status as any)?.valueOf?.() ?? -1;
+          const nowDisputed = !!inv.disputeRaisedAt;
+          newSeen[id] = { status: statusNum, clientApproved: !!inv.clientApproved, disputed: nowDisputed };
+          if (isFirstLoad || !prev) continue;
+          // Invoice paid (creator view — someone paid your invoice)
+          if (role === 'creator' && prev.status !== InvoiceStatus.FullyPaid && inv.status === InvoiceStatus.FullyPaid) {
+            addNotification({ type: 'success', title: 'Invoice paid', message: `#${id}` });
+          }
+          // Release approved (creator view — client approved release)
+          if (role === 'creator' && !prev.clientApproved && !!inv.clientApproved) {
+            addNotification({ type: 'success', title: 'Release approved', message: `#${id}` });
+          }
+          // Dispute raised (either role)
+          if (!prev.disputed && nowDisputed) {
+            addNotification({ type: 'warning', title: 'Dispute raised', message: `#${id}` });
+          }
+        }
+      };
+
       if (creatorResult.success && creatorResult.data) {
         const all = sort(creatorResult.data);
+        checkAndNotify(all, 'creator');
         setSentInvoices(all);
         setReceivedInvoices(all.filter(i =>
           i.account.status === InvoiceStatus.PartiallyPaid ||
@@ -203,12 +239,16 @@ const Dashboard: React.FC = () => {
       }
 
       if (clientResult.success && clientResult.data) {
-        setClientInvoices(sort(clientResult.data));
+        const sorted = sort(clientResult.data);
+        checkAndNotify(sorted, 'client');
+        setClientInvoices(sorted);
       }
+
+      try { localStorage.setItem(SEEN_KEY, JSON.stringify(newSeen)); } catch { /* ignore */ }
     } catch {
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
     } finally { setLoading(false); }
-  }, [sdk, connected]);
+  }, [sdk, connected, addNotification]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {
@@ -216,6 +256,41 @@ const Dashboard: React.FC = () => {
     window.addEventListener('focus', h);
     return () => window.removeEventListener('focus', h);
   }, [fetchAll]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const fetchProfile = async () => {
+      try {
+        const token = await getAccessToken();
+        const res = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json() as { display_name: string | null };
+          setDisplayName(data.display_name);
+          if (!data.display_name) setShowNamePrompt(true);
+        }
+      } catch { /* non-blocking */ }
+    };
+    fetchProfile();
+  }, [authenticated, getAccessToken]);
+
+  const handleSaveName = async () => {
+    if (!nameInput.trim()) { setShowNamePrompt(false); return; }
+    setSavingName(true);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ display_name: nameInput.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { display_name: string | null };
+        setDisplayName(data.display_name);
+        setShowNamePrompt(false);
+        toast({ title: 'Name saved' });
+      }
+    } catch { /* non-blocking */ } finally { setSavingName(false); }
+  };
 
   // ============================================================
   // HELPERS — preserved exactly
@@ -895,7 +970,7 @@ const Dashboard: React.FC = () => {
               lineHeight: 1.2,
             }}
           >
-            Dashboard
+            {displayName ? `Hey, ${displayName}` : 'Dashboard'}
           </h1>
           {publicKey && (
             <Link
@@ -919,6 +994,65 @@ const Dashboard: React.FC = () => {
                 style={{ color: '#64748B', marginTop: '4px' }}
               />
             </Link>
+          )}
+
+          {/* First-login display name prompt */}
+          {showNamePrompt && (
+            <div
+              className="flex items-center gap-2 mt-3"
+              style={{ flexWrap: 'wrap' }}
+            >
+              <input
+                type="text"
+                placeholder="Add a display name…"
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setShowNamePrompt(false); }}
+                style={{
+                  backgroundColor: '#1C2128',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: '#F8FAFC',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '13px',
+                  padding: '6px 12px',
+                  outline: 'none',
+                  width: '180px',
+                }}
+              />
+              <button
+                onClick={handleSaveName}
+                disabled={savingName || !nameInput.trim()}
+                style={{
+                  backgroundColor: '#2DD4BF',
+                  color: '#0D1117',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  opacity: savingName || !nameInput.trim() ? 0.5 : 1,
+                }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setShowNamePrompt(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748B',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  padding: '6px 4px',
+                }}
+              >
+                Skip
+              </button>
+            </div>
           )}
         </div>
 

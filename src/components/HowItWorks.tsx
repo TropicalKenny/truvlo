@@ -3,21 +3,27 @@ import React from 'react';
 const steps = [
   {
     number: '01',
-    title: 'Create',
+    title: 'Create invoice',
     description:
       'Connect your wallet, set the amount, add your client\'s email. Invoice is on-chain in seconds.',
   },
   {
     number: '02',
-    title: 'Lock',
+    title: 'Client pays',
     description:
-      'Your client receives a payment link. They lock funds in escrow. You\'re protected from the start.',
+      'Your client receives a payment link. They lock funds in escrow. You\'re protected from the moment they pay.',
   },
   {
     number: '03',
-    title: 'Release',
+    title: 'Work is done',
     description:
-      'Request release when work is done. Client approves — funds go straight to your wallet.',
+      'Deliver your work. Request release when you\'re ready. Both sides confirm everything went as agreed.',
+  },
+  {
+    number: '04',
+    title: 'Funds released',
+    description:
+      'Client approves — funds go straight to your wallet. On-chain, instant, no intermediary touching your money.',
   },
 ];
 
@@ -58,12 +64,12 @@ const HowItWorks: React.FC = () => {
               fontFamily: '"DM Sans", sans-serif',
             }}
           >
-            Three steps. Fully on-chain. No middlemen holding your money.
+            Four steps. Fully on-chain. No middlemen holding your money.
           </p>
         </div>
 
-        {/* Steps */}
-        <div className="relative grid grid-cols-1 md:grid-cols-3 gap-0">
+        {/* Steps — horizontal on desktop, vertical on mobile */}
+        <div className="relative grid grid-cols-1 md:grid-cols-4 gap-0">
           {steps.map((step, i) => (
             <div key={step.number} className="relative flex flex-col">
               {/* Connecting line between steps (desktop) */}
@@ -78,11 +84,23 @@ const HowItWorks: React.FC = () => {
                 />
               )}
 
+              {/* Vertical connector on mobile */}
+              {i < steps.length - 1 && (
+                <div
+                  className="md:hidden absolute left-10 top-full w-px h-4"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    zIndex: 0,
+                  }}
+                />
+              )}
+
               <div
-                className="relative rounded-xl p-8 mx-2 md:mx-3 flex flex-col gap-4"
+                className="relative rounded-xl p-6 mx-2 md:mx-2 flex flex-col gap-4 mb-4 md:mb-0"
                 style={{
                   backgroundColor: '#0D1117',
                   border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: '12px',
                   zIndex: 1,
                 }}
               >
@@ -91,7 +109,7 @@ const HowItWorks: React.FC = () => {
                   style={{
                     fontFamily: '"Space Grotesk", sans-serif',
                     fontWeight: 700,
-                    fontSize: '3rem',
+                    fontSize: '2.5rem',
                     color: 'rgba(45,212,191,0.15)',
                     lineHeight: 1,
                     letterSpacing: '-0.02em',
@@ -105,7 +123,7 @@ const HowItWorks: React.FC = () => {
                   style={{
                     fontFamily: '"Space Grotesk", sans-serif',
                     fontWeight: 500,
-                    fontSize: '1.125rem',
+                    fontSize: '1.0625rem',
                     color: '#F8FAFC',
                     marginTop: '-8px',
                   }}

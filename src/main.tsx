@@ -28,7 +28,7 @@ createRoot(rootElement).render(
         },
         solana: {
           rpcs: {
-            'solana:devnet': 'https://api.devnet.solana.com',
+            'solana:devnet': import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
           },
         },
       }}

@@ -14,7 +14,10 @@ import ProfilePage from './pages/ProfilePage';
 import { NotificationProvider } from './components/NotificationProvider';
 
 const App = () => {
-  const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
+  const endpoint = useMemo(
+    () => import.meta.env.VITE_SOLANA_RPC_URL || clusterApiUrl('devnet'),
+    [],
+  );
 
   return (
     <ConnectionProvider endpoint={endpoint}>

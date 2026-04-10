@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
+import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 import {
@@ -38,8 +38,7 @@ const InvoicePayment: React.FC = () => {
   const navigate = useNavigate();
   const { connection } = useConnection();
   const { authenticated, login } = usePrivy();
-  const { wallets } = useSolanaWallets();
-  const privyWallet = wallets[0];
+  const { activeWallet: privyWallet } = useActiveWallet();
   const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();

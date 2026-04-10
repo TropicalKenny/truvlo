@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useCreateWallet, useImportWallet } from '@privy-io/react-auth/solana';
+
+async function registerWallet(address: string, getAccessToken: () => Promise<string | null>) {
+  try {
+    const token = await getAccessToken();
+    await fetch('/api/register-wallet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ wallet_address: address }),
+    });
+  } catch { /* non-blocking */ }
+}
 import { Keypair } from '@solana/web3.js';
 import * as bip39 from 'bip39';
 import { derivePath } from 'ed25519-hd-key';
@@ -37,6 +48,7 @@ const inputStyle: React.CSSProperties = {
 
 const WalletOnboarding: React.FC = () => {
   const { toast } = useToast();
+  const { getAccessToken } = usePrivy();
   const { createWallet } = useCreateWallet();
   const { importWallet } = useImportWallet();
 
@@ -50,7 +62,8 @@ const WalletOnboarding: React.FC = () => {
   const handleGenerate = async () => {
     setLoading(true);
     try {
-      await createWallet();
+      const newWallet = await createWallet();
+      if (newWallet?.address) registerWallet(newWallet.address, getAccessToken);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to create wallet';
       toast({ title: 'Failed to create wallet', description: msg, variant: 'destructive' });
@@ -84,7 +97,8 @@ const WalletOnboarding: React.FC = () => {
         const keypair = Keypair.fromSeed(derivedKey);
         key = bs58.encode(keypair.secretKey);
       }
-      await importWallet({ privateKey: key });
+      const imported = await importWallet({ privateKey: key });
+      if (imported?.address) registerWallet(imported.address, getAccessToken);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Import failed';
       setError(msg.includes('already') ? 'A wallet is already linked to this key.' : msg);

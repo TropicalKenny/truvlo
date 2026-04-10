@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
-import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
+import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { Menu, X, ChevronDown, Copy, Wallet, LogOut, Settings } from 'lucide-react';
 import TruvloLogo from './TruvloLogo';
 import { useToast } from '@/hooks/use-toast';
@@ -12,11 +12,11 @@ const Header: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authDropdownOpen, setAuthDropdownOpen] = useState(false);
   const { authenticated, login, logout } = usePrivy();
-  const { wallets } = useSolanaWallets();
+  const { activeWallet } = useActiveWallet();
   const { toast } = useToast();
 
   const handleCopyAddress = async () => {
-    const address = wallets[0]?.address;
+    const address = activeWallet?.address;
     if (!address) return;
     await navigator.clipboard.writeText(address);
     toast({ title: 'Address copied' });
@@ -49,7 +49,7 @@ const Header: React.FC = () => {
   const isActive = (path: string) => location.pathname === path;
   const isLanding = location.pathname === '/';
 
-  const walletAddress = wallets[0]?.address;
+  const walletAddress = activeWallet?.address;
   const shortAddress = walletAddress
     ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
     : null;

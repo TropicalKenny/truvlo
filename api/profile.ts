@@ -30,7 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('display_name, default_token, email, created_at')
+      .select('display_name, default_token, profile_slug, email, created_at')
       .eq('privy_id', privyId)
       .maybeSingle();
 
@@ -38,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       display_name: data?.display_name ?? null,
       default_token: data?.default_token ?? 'USDC',
+      profile_slug: data?.profile_slug ?? null,
     });
   }
 

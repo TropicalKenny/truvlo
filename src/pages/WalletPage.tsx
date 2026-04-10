@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useWallets as useSolanaWallets, useImportWallet } from '@privy-io/react-auth/solana';
+import { useImportWallet } from '@privy-io/react-auth/solana';
+import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import {
   PublicKey, Transaction, VersionedTransaction,
   SystemProgram, LAMPORTS_PER_SOL,
@@ -16,7 +17,7 @@ import * as bip39 from 'bip39';
 import { derivePath } from 'ed25519-hd-key';
 import bs58 from 'bs58';
 import { QRCodeSVG } from 'qrcode.react';
-import { Copy, RefreshCw, Loader2, Check } from 'lucide-react';
+import { Copy, RefreshCw, Loader2, Check, Trash2, ExternalLink, AlertTriangle } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useToast } from '@/hooks/use-toast';
@@ -90,11 +91,33 @@ function getErrorMessage(e: unknown): string {
   return 'Unknown error';
 }
 
+async function registerWallet(address: string, getAccessToken: () => Promise<string | null>) {
+  try {
+    const token = await getAccessToken();
+    await fetch('/api/register-wallet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ wallet_address: address }),
+    });
+  } catch { /* non-blocking */ }
+}
+
+async function unregisterWallet(address: string, getAccessToken: () => Promise<string | null>) {
+  try {
+    const token = await getAccessToken();
+    await fetch('/api/register-wallet', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ wallet_address: address }),
+    });
+  } catch { /* non-blocking */ }
+}
+
 const WalletPage: React.FC = () => {
-  const { authenticated, ready } = usePrivy();
+  const { authenticated, ready, getAccessToken } = usePrivy();
   const navigate = useNavigate();
   const { connection } = useConnection();
-  const { wallets } = useSolanaWallets();
+  const { activeWallet, allWallets, setActiveWallet } = useActiveWallet();
   const { importWallet } = useImportWallet();
   const { toast } = useToast();
 
@@ -112,14 +135,32 @@ const WalletPage: React.FC = () => {
   const [importSeed, setImportSeed] = useState('');
   const [importError, setImportError] = useState('');
   const [importing, setImporting] = useState(false);
+  const [profileSlug, setProfileSlug] = useState<string | null>(null);
+  const [removeModalWallet, setRemoveModalWallet] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [showCombinedWarning, setShowCombinedWarning] = useState(false);
 
-  const privyWallet = wallets[0];
-  const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
+  const publicKey = activeWallet?.address ? new PublicKey(activeWallet.address) : null;
 
   // Auth guard
   useEffect(() => {
     if (ready && !authenticated) navigate('/', { replace: true });
   }, [ready, authenticated, navigate]);
+
+  // Load profile slug
+  useEffect(() => {
+    if (!ready || !authenticated) return;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        const res = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          setProfileSlug(data.profile_slug ?? null);
+        }
+      } catch { /* non-blocking */ }
+    })();
+  }, [ready, authenticated, getAccessToken]);
 
   // ─── balances ─────────────────────────────────────────────────────────────
   const fetchBalances = useCallback(async () => {
@@ -141,30 +182,52 @@ const WalletPage: React.FC = () => {
 
   // ─── anchor wallet for signing ────────────────────────────────────────────
   const anchorWallet = useMemo(() => {
-    if (!publicKey || !privyWallet) return null;
+    if (!publicKey || !activeWallet) return null;
     return {
       publicKey,
       signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
         const bytes = tx instanceof VersionedTransaction
           ? tx.serialize()
           : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-        const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+        const { signedTransaction } = await activeWallet.signTransaction({ transaction: bytes });
         return (tx instanceof VersionedTransaction
           ? VersionedTransaction.deserialize(signedTransaction)
           : Transaction.from(Buffer.from(signedTransaction))) as T;
       },
     };
-  }, [publicKey, privyWallet]);
+  }, [publicKey, activeWallet]);
 
   // Early return after all hooks
   if (!ready || !authenticated) return <div style={{ minHeight: '100vh', backgroundColor: '#0D1117' }} />;
 
   // ─── handlers ─────────────────────────────────────────────────────────────
   const handleCopyAddress = async () => {
-    if (!privyWallet?.address) return;
-    await navigator.clipboard.writeText(privyWallet.address);
+    if (!activeWallet?.address) return;
+    await navigator.clipboard.writeText(activeWallet.address);
     setAddressCopied(true);
     setTimeout(() => setAddressCopied(false), 2000);
+  };
+
+  const handleRemoveWallet = async () => {
+    if (!removeModalWallet) return;
+    setRemoving(true);
+    await unregisterWallet(removeModalWallet, getAccessToken);
+    toast({ title: 'Wallet removed from your account' });
+    setRemoveModalWallet(null);
+    setRemoving(false);
+  };
+
+  const handleCopySingleLink = async () => {
+    if (!activeWallet?.address) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/profile/${activeWallet.address}`);
+    toast({ title: 'Link copied' });
+  };
+
+  const handleCopyCombinedLink = async () => {
+    if (!profileSlug) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/profile/account/${profileSlug}`);
+    toast({ title: 'Combined profile link copied' });
+    setShowCombinedWarning(false);
   };
 
   const handleSend = async (e: React.FormEvent) => {
@@ -257,7 +320,8 @@ const WalletPage: React.FC = () => {
         const keypair = Keypair.fromSeed(derivedKey);
         key = bs58.encode(keypair.secretKey);
       }
-      await importWallet({ privateKey: key });
+      const imported = await importWallet({ privateKey: key });
+      if (imported?.address) registerWallet(imported.address, getAccessToken);
       toast({ title: 'Wallet imported' });
       setImportKey('');
       setImportSeed('');
@@ -282,10 +346,167 @@ const WalletPage: React.FC = () => {
             Wallet
           </h1>
           <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
-            {privyWallet?.address
-              ? `${privyWallet.address.slice(0, 6)}...${privyWallet.address.slice(-6)}`
+            {activeWallet?.address
+              ? `${activeWallet.address.slice(0, 6)}...${activeWallet.address.slice(-6)}`
               : 'No wallet connected'}
           </p>
+        </div>
+
+        {/* ── Wallet Switcher ───────────────────────────────────────────────── */}
+        <div style={sectionCard}>
+          <p style={sectionTitle}>Your Wallets</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {allWallets.length === 0 && (
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B' }}>No wallets connected.</p>
+            )}
+            {allWallets.map(w => {
+              const isActive = w.address === activeWallet?.address;
+              const short = `${w.address.slice(0, 4)}...${w.address.slice(-4)}`;
+              return (
+                <div
+                  key={w.address}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    backgroundColor: isActive ? 'rgba(45,212,191,0.05)' : '#1C2128',
+                    border: `1px solid ${isActive ? 'rgba(45,212,191,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                  }}
+                >
+                  {/* Status dot */}
+                  <div style={{
+                    width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0,
+                    backgroundColor: isActive ? '#2DD4BF' : '#334155',
+                  }} />
+
+                  {/* Address */}
+                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '13px', color: '#F8FAFC', flex: 1 }}>
+                    {short}
+                  </span>
+
+                  {/* Active badge */}
+                  {isActive && (
+                    <span style={{
+                      fontFamily: '"DM Sans", sans-serif', fontSize: '11px', fontWeight: 600,
+                      color: '#2DD4BF', backgroundColor: 'rgba(45,212,191,0.1)',
+                      border: '1px solid rgba(45,212,191,0.2)', borderRadius: '4px',
+                      padding: '2px 7px', flexShrink: 0,
+                    }}>
+                      Active
+                    </span>
+                  )}
+
+                  {/* Set as Active button */}
+                  {!isActive && (
+                    <button
+                      onClick={() => {
+                        setActiveWallet(w);
+                        toast({ title: 'Wallet switched — dashboard and invoices now use this wallet' });
+                      }}
+                      style={{
+                        fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500,
+                        color: '#94A3B8', backgroundColor: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px',
+                        padding: '4px 10px', cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >
+                      Set as Active
+                    </button>
+                  )}
+
+                  {/* View reputation link */}
+                  <Link
+                    to={`/profile/${w.address}`}
+                    style={{ color: '#64748B', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                    title="View on-chain reputation"
+                  >
+                    <ExternalLink size={13} />
+                  </Link>
+
+                  {/* Remove button (non-active only) */}
+                  {!isActive && (
+                    <button
+                      onClick={() => setRemoveModalWallet(w.address)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '2px', flexShrink: 0, display: 'flex', alignItems: 'center' }}
+                      title="Remove wallet"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Share Reputation ─────────────────────────────────────────────── */}
+        <div style={sectionCard}>
+          <p style={sectionTitle}>Share Reputation</p>
+          <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B', marginBottom: '16px' }}>
+            Send a reputation link to a client so they can verify your track record.
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* Single wallet option */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+              backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '14px',
+            }}>
+              <div>
+                <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '13px', color: '#F8FAFC', marginBottom: '2px' }}>
+                  This wallet only
+                </p>
+                <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#64748B' }}>
+                  Share reputation for your active wallet. Client sees only this address.
+                </p>
+              </div>
+              <button
+                onClick={handleCopySingleLink}
+                disabled={!activeWallet}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500,
+                  color: '#2DD4BF', backgroundColor: 'rgba(45,212,191,0.08)',
+                  border: '1px solid rgba(45,212,191,0.2)', borderRadius: '6px',
+                  padding: '6px 12px', cursor: activeWallet ? 'pointer' : 'not-allowed',
+                  opacity: activeWallet ? 1 : 0.5, flexShrink: 0,
+                }}
+              >
+                <Copy size={12} /> Copy Link
+              </button>
+            </div>
+
+            {/* Combined option */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+              backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '14px',
+            }}>
+              <div>
+                <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '13px', color: '#F8FAFC', marginBottom: '2px' }}>
+                  All wallets (combined)
+                </p>
+                <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#64748B' }}>
+                  Share your full reputation across all linked wallets.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCombinedWarning(true)}
+                disabled={!profileSlug}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500,
+                  color: '#94A3B8', backgroundColor: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px',
+                  padding: '6px 12px', cursor: profileSlug ? 'pointer' : 'not-allowed',
+                  opacity: profileSlug ? 1 : 0.5, flexShrink: 0,
+                }}
+              >
+                <Copy size={12} /> Copy Link
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* ── Balances ─────────────────────────────────────────────────────── */}
@@ -320,7 +541,7 @@ const WalletPage: React.FC = () => {
           <p style={sectionTitle}>Receive</p>
           <div style={{ backgroundColor: '#1C2128', borderRadius: '8px', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
             <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#94A3B8', wordBreak: 'break-all', flex: 1 }}>
-              {privyWallet?.address ?? '—'}
+              {activeWallet?.address ?? '—'}
             </p>
             <button
               onClick={handleCopyAddress}
@@ -419,7 +640,7 @@ const WalletPage: React.FC = () => {
         <div style={sectionCard}>
           <p style={sectionTitle}>Import Wallet</p>
           <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B', marginBottom: '16px' }}>
-            Replace your current wallet by importing an existing one.
+            Add an existing wallet to your account by importing it.
           </p>
 
           <div style={{ display: 'flex', gap: '4px', backgroundColor: '#1C2128', borderRadius: '8px', padding: '3px', marginBottom: '16px' }}>
@@ -505,6 +726,72 @@ const WalletPage: React.FC = () => {
         </div>
       </main>
       <Footer />
+
+      {/* ── Remove wallet confirmation modal ──────────────────────────────── */}
+      {removeModalWallet && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px' }}>
+            <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.1rem', color: '#F8FAFC', marginBottom: '12px' }}>
+              Remove wallet?
+            </p>
+            <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', color: '#94A3B8', marginBottom: '8px' }}>
+              <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '13px', color: '#F8FAFC' }}>
+                {removeModalWallet.slice(0, 4)}...{removeModalWallet.slice(-4)}
+              </span>
+            </p>
+            <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', color: '#94A3B8', marginBottom: '24px', lineHeight: 1.6 }}>
+              This only unlinks the wallet from your Truvlo profile. The wallet and its on-chain history are not affected.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setRemoveModalWallet(null)}
+                style={{ flex: 1, padding: '10px 0', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'transparent', color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRemoveWallet}
+                disabled={removing}
+                style={{ flex: 1, padding: '10px 0', borderRadius: '8px', border: 'none', backgroundColor: '#EF4444', color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', cursor: removing ? 'not-allowed' : 'pointer', opacity: removing ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              >
+                {removing && <Loader2 size={14} className="animate-spin" />}
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Combined profile privacy warning modal ────────────────────────── */}
+      {showCombinedWarning && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <AlertTriangle size={18} style={{ color: '#F59E0B', flexShrink: 0 }} />
+              <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1rem', color: '#F8FAFC' }}>
+                Heads up
+              </p>
+            </div>
+            <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', color: '#94A3B8', lineHeight: 1.6, marginBottom: '24px' }}>
+              Your combined profile lists all {allWallets.length} wallet{allWallets.length !== 1 ? 's' : ''} linked to your account. Anyone with this link will be able to see every wallet address and verify them on Solana. Only share this if you're comfortable disclosing all your wallets.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setShowCombinedWarning(false)}
+                style={{ flex: 1, padding: '10px 0', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'transparent', color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCopyCombinedLink}
+                style={{ flex: 1, padding: '10px 0', borderRadius: '8px', border: 'none', backgroundColor: '#2DD4BF', color: '#0D1117', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              >
+                <Copy size={14} /> Share anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

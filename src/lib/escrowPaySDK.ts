@@ -179,11 +179,11 @@ export class EscrowPaySDK {
     if (!this.coder) return null;
     try {
       return this.coder.accounts.decode('Invoice', data);
-    } catch (e) {
+    } catch {
       try {
         return this.coder.accounts.decode('invoice', data);
       } catch {
-        console.error('Failed to decode invoice account:', e);
+        // Old-schema accounts on devnet are expected to fail — skip silently
         return null;
       }
     }

@@ -112,6 +112,7 @@ const Dashboard: React.FC = () => {
   const [clientInvoices, setClientInvoices] = useState<InvoiceWithKey[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnce = useRef(false);
   const [releasing, setReleasing] = useState<string | null>(null);
   const [requesting, setRequesting] = useState<string | null>(null);
   const [approving, setApproving] = useState<string | null>(null);
@@ -259,6 +260,7 @@ const Dashboard: React.FC = () => {
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
     } finally {
       setLoading(false);
+      hasLoadedOnce.current = true;
       lastFetchedAt.current = Date.now();
     }
   }, [sdk, connected, addNotification]);
@@ -1253,7 +1255,7 @@ const Dashboard: React.FC = () => {
               {sentStats.disputed > 0 && <TabsTrigger value="disputed" style={tabTriggerStyle(sentFilter === 'disputed')}>Disputed ({sentStats.disputed})</TabsTrigger>}
             </TabsList>
             <TabsContent value={sentFilter} className="mt-3">
-              {loading ? (
+              {loading && !hasLoadedOnce.current ? (
                 <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
               ) : filteredSent.length === 0 ? (
                 <EmptyState message="No invoices yet." showCreate />
@@ -1294,7 +1296,7 @@ const Dashboard: React.FC = () => {
               {receivedStats.disputed > 0 && <TabsTrigger value="disputed" style={tabTriggerStyle(receivedFilter === 'disputed')}>Disputed ({receivedStats.disputed})</TabsTrigger>}
             </TabsList>
             <TabsContent value={receivedFilter} className="mt-3">
-              {loading ? (
+              {loading && !hasLoadedOnce.current ? (
                 <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
               ) : filteredReceived.length === 0 ? (
                 <EmptyState message="No paid invoices yet. Once a client pays, it appears here." />
@@ -1363,7 +1365,7 @@ const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {loading ? (
+          {loading && !hasLoadedOnce.current ? (
             <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
           ) : clientSection === 'action' ? (
             awaitingAction.length === 0 ? (

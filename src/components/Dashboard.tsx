@@ -186,7 +186,7 @@ const Dashboard: React.FC = () => {
     setFetchError(null);
     try {
       const fetchTimeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 15_000)
+        setTimeout(() => reject(new Error('timeout')), 10_000)
       );
       const [creatorResult, clientResult] = await Promise.race([
         Promise.all([sdk.fetchInvoicesByCreator(), sdk.fetchInvoicesByClient()]),

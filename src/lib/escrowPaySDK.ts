@@ -162,6 +162,15 @@ export class EscrowPaySDK {
     return this.initialized;
   }
 
+  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`rpc_timeout_${ms}`)), ms)
+      ),
+    ]);
+  }
+
   getInitError(): string | null {
     return this.initError;
   }
@@ -717,9 +726,10 @@ export class EscrowPaySDK {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
           // memcmp at offset 10: discriminator(8) + bump(1) + escrow_bump(1) = 10
-          const allInvoices = await invoiceAccessor.all([{
-            memcmp: { offset: 10, bytes: targetCreator.toBase58() },
-          }]);
+          const allInvoices = await this.withTimeout(
+            invoiceAccessor.all([{ memcmp: { offset: 10, bytes: targetCreator.toBase58() } }]),
+            8_000
+          );
           if (Array.isArray(allInvoices)) {
             const filtered = allInvoices.filter((inv: any) => {
               try {
@@ -780,7 +790,7 @@ export class EscrowPaySDK {
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
-          const allInvoices = await invoiceAccessor.all();
+          const allInvoices = await this.withTimeout(invoiceAccessor.all(), 8_000);
           if (Array.isArray(allInvoices)) {
             if (allInvoices.length > 0) {
               const sample = allInvoices[0]?.account;

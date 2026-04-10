@@ -1,12 +1,30 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { PrivyClient } from '@privy-io/server-auth';
+
+const privy = new PrivyClient(
+  process.env.VITE_PRIVY_APP_ID!,
+  process.env.PRIVY_APP_SECRET!
+);
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+
+async function verifyToken(req: VercelRequest): Promise<string | null> {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return null;
+  try {
+    const claims = await privy.verifyAuthToken(token);
+    return claims.userId;
+  } catch { return null; }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const userId = await verifyToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
   const { invoiceId, clientEmail, creatorWallet, amount, tokenType, description, senderName, invoiceUrl } = req.body;
 

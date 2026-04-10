@@ -377,9 +377,13 @@ const Dashboard: React.FC = () => {
       const result = await sdk.requestRelease(inv.invoiceId, inv.tokenType);
       if (result.success) {
         try {
+          const token = await getAccessToken();
           await fetch('/api/notify-client', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               clientEmail: inv.clientEmail,

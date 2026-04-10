@@ -4,7 +4,7 @@
  * Supports: USDC, SOL, Platform Fees, Milestone Payments
  */
 
-import { BN, Program, Provider, Idl, BorshCoder } from "@coral-xyz/anchor";
+import { BN, Program, Provider, Idl, BorshCoder, utils } from "@coral-xyz/anchor";
 import { 
   ASSOCIATED_TOKEN_PROGRAM_ID, 
   TOKEN_PROGRAM_ID, 
@@ -18,6 +18,10 @@ import IDL from "../idl/workspace.json";
 
 // Program ID from the deployed contract
 const PROGRAM_ID = new PublicKey(IDL.address || "12mH9wkUUvyQmhqD9A6gJzLGxEUCTZCCuddK6W9EbG2w");
+
+// Anchor discriminator for Invoice accounts — sha256("account:Invoice")[0..8]
+// Source: workspace.json accounts[0].discriminator
+const INVOICE_DISCRIMINATOR = Buffer.from([51, 194, 250, 114, 6, 104, 18, 164]);
 
 // Token Mints
 export const USDC_MINT_DEVNET = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
@@ -440,8 +444,9 @@ export class EscrowPaySDK {
       if (!(await this.testConnection())) {
         return { success: false, error: "Network unavailable" };
       }
-      if (!params.invoiceId?.trim() || params.invoiceId.length > 32) {
-        return { success: false, error: "Invalid invoice ID" };
+      const trimmedId = params.invoiceId?.trim() ?? '';
+      if (!trimmedId || trimmedId.length > 32 || !/^[a-zA-Z0-9_-]+$/.test(trimmedId)) {
+        return { success: false, error: "Invoice ID must be 1–32 characters (letters, numbers, hyphens, underscores only)" };
       }
       if (params.amount <= 0) {
         return { success: false, error: "Amount must be greater than 0" };
@@ -734,12 +739,8 @@ export class EscrowPaySDK {
 
       const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
         filters: [
-          {
-            memcmp: {
-              offset: 10,
-              bytes: targetCreator.toBase58(),
-            },
-          },
+          { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
+          { memcmp: { offset: 10, bytes: targetCreator.toBase58() } },
         ],
       });
 
@@ -815,7 +816,11 @@ export class EscrowPaySDK {
         console.log('Anchor fetchAll failed for client invoices, trying RPC fallback:', anchorError);
       }
 
-      const accounts = await this.provider.connection.getProgramAccounts(this.programId);
+      const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
+        filters: [
+          { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
+        ],
+      });
       if (!accounts?.length) return { success: true, data: [] };
 
       const mapped = accounts.map((acc) => {
@@ -845,7 +850,10 @@ export class EscrowPaySDK {
       const data = await res.json();
       const price = data?.parsed?.[0]?.price;
       if (!price) return null;
-      return parseFloat(price.price) * Math.pow(10, price.expo);
+      const computed = parseFloat(price.price) * Math.pow(10, price.expo);
+      // Reject unrealistic or malformed prices (SOL realistically $0.10–$100,000)
+      if (!isFinite(computed) || computed < 0.10 || computed > 100_000) return null;
+      return computed;
     } catch {
       return null;
     }

@@ -54,7 +54,7 @@ const DarkInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
 };
 
 const ProfileSettingsPage: React.FC = () => {
-  const { authenticated, getAccessToken } = usePrivy();
+  const { authenticated, ready, getAccessToken } = usePrivy();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -64,10 +64,11 @@ const ProfileSettingsPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!authenticated) {
-      navigate('/');
+    if (ready && !authenticated) {
+      navigate('/', { replace: true });
       return;
     }
+    if (!ready || !authenticated) return;
     (async () => {
       try {
         const token = await getAccessToken();

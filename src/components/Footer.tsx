@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import TruvloLogo from './TruvloLogo';
 
 const network = import.meta.env.VITE_SOLANA_NETWORK ?? 'Devnet';
@@ -26,32 +25,6 @@ const Footer: React.FC = () => {
             </p>
           </div>
 
-          {/* Nav links — right */}
-          <nav className="flex items-center gap-6">
-            <Link
-              to="/dashboard"
-              className="text-sm transition-colors duration-150 hover:text-white"
-              style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
-            >
-              Dashboard
-            </Link>
-            <Link
-              to="/create"
-              className="text-sm transition-colors duration-150 hover:text-white"
-              style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
-            >
-              Create Invoice
-            </Link>
-            <a
-              href="https://github.com/TropicalKenny/escrowpay"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm transition-colors duration-150 hover:text-white"
-              style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
-            >
-              GitHub
-            </a>
-          </nav>
         </div>
 
         {/* Bottom line */}

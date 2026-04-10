@@ -1,4 +1,6 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { usePrivy } from '@privy-io/react-auth';
 import { Shield, Users, AlertTriangle, Coins, Clock, Star } from 'lucide-react';
 
 const features = [
@@ -35,6 +37,9 @@ const features = [
 ];
 
 const Features: React.FC = () => {
+  const { authenticated, login } = usePrivy();
+  const navigate = useNavigate();
+
   return (
     <section
       className="py-24"
@@ -138,10 +143,10 @@ const Features: React.FC = () => {
               fontFamily: '"DM Sans", sans-serif',
             }}
           >
-            Connect your wallet and create your first escrow invoice in under a minute.
+            Log in and create your first escrow invoice in under a minute.
           </p>
-          <a
-            href="/create"
+          <button
+            onClick={() => authenticated ? navigate('/create') : login()}
             className="inline-flex items-center justify-center rounded-lg font-medium transition-opacity duration-150 hover:opacity-90"
             style={{
               backgroundColor: '#2DD4BF',
@@ -150,12 +155,13 @@ const Features: React.FC = () => {
               fontWeight: 500,
               fontSize: '15px',
               padding: '13px 32px',
-              textDecoration: 'none',
+              border: 'none',
               borderRadius: '8px',
+              cursor: 'pointer',
             }}
           >
             Create Invoice — it's free
-          </a>
+          </button>
         </div>
       </div>
     </section>

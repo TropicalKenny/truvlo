@@ -206,13 +206,13 @@ const Header: React.FC = () => {
               onClick={() => login()}
               style={{
                 fontFamily: '"DM Sans", sans-serif',
-                fontSize: '13px',
-                fontWeight: 500,
+                fontSize: '14px',
+                fontWeight: 600,
                 color: '#0D1117',
                 backgroundColor: '#2DD4BF',
                 border: 'none',
                 borderRadius: '8px',
-                padding: '8px 16px',
+                padding: '10px 22px',
                 cursor: 'pointer',
                 transition: 'opacity 150ms ease',
               }}

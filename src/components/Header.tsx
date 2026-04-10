@@ -59,11 +59,14 @@ const Header: React.FC = () => {
     ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
     : null;
 
-  const navLinks = [
-    { to: '/', label: 'Home' },
-    { to: '/dashboard', label: 'Dashboard' },
-    { to: '/create', label: 'Create Invoice' },
-  ];
+  const navLinks = authenticated
+    ? [
+        { to: '/dashboard', label: 'Dashboard' },
+        { to: '/create', label: 'Create Invoice' },
+      ]
+    : [
+        { to: '/', label: 'Home' },
+      ];
 
   return (
     <header

@@ -64,9 +64,7 @@ const Header: React.FC = () => {
         { to: '/dashboard', label: 'Dashboard' },
         { to: '/create', label: 'Create Invoice' },
       ]
-    : [
-        { to: '/', label: 'Home' },
-      ];
+    : [];
 
   return (
     <header
@@ -221,7 +219,7 @@ const Header: React.FC = () => {
               onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.85')}
               onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
             >
-              Connect
+              Login
             </button>
           )}
         </div>
@@ -331,7 +329,7 @@ const Header: React.FC = () => {
                     cursor: 'pointer',
                   }}
                 >
-                  Connect
+                  Login
                 </button>
               )}
             </div>

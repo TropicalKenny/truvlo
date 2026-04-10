@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { usePrivy } from '@privy-io/react-auth';
 import { Lock, ArrowRight } from 'lucide-react';
 
 const CYCLING_WORDS = ['actually', 'always', 'finally', 'really'];
 
 const Hero: React.FC = () => {
+  const { authenticated, login } = usePrivy();
+  const navigate = useNavigate();
   const [wordIndex, setWordIndex] = useState(0);
   const [visible, setVisible] = useState(true);
+
+  const handleCTA = (path: string) => {
+    if (authenticated) navigate(path);
+    else login();
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -98,8 +106,8 @@ const Hero: React.FC = () => {
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 pt-1">
-              <Link
-                to="/create"
+              <button
+                onClick={() => handleCTA('/create')}
                 className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-90"
                 style={{
                   backgroundColor: '#2DD4BF',
@@ -108,14 +116,15 @@ const Hero: React.FC = () => {
                   fontWeight: 500,
                   fontSize: '15px',
                   padding: '13px 28px',
-                  textDecoration: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 Create Invoice
                 <ArrowRight size={16} />
-              </Link>
-              <Link
-                to="/dashboard"
+              </button>
+              <button
+                onClick={() => handleCTA('/dashboard')}
                 className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-80"
                 style={{
                   backgroundColor: 'transparent',
@@ -125,11 +134,11 @@ const Hero: React.FC = () => {
                   fontWeight: 500,
                   fontSize: '15px',
                   padding: '13px 28px',
-                  textDecoration: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 Open Dashboard
-              </Link>
+              </button>
             </div>
 
             {/* Trust signals */}

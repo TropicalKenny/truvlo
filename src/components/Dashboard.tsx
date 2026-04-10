@@ -130,6 +130,7 @@ const Dashboard: React.FC = () => {
     tokenType: TokenType; releaseableAmount: number;
   } | null>(null);
   const lastFetchedAt = useRef<number>(0);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [profileCopied, setProfileCopied] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
@@ -182,11 +183,15 @@ const Dashboard: React.FC = () => {
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]); setLoading(false); return;
     }
     setLoading(true);
+    setFetchError(null);
     try {
-      const [creatorResult, clientResult] = await Promise.all([
-        sdk.fetchInvoicesByCreator(),
-        sdk.fetchInvoicesByClient(),
-      ]);
+      const fetchTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 15_000)
+      );
+      const [creatorResult, clientResult] = await Promise.race([
+        Promise.all([sdk.fetchInvoicesByCreator(), sdk.fetchInvoicesByClient()]),
+        fetchTimeout,
+      ]) as [Awaited<ReturnType<typeof sdk.fetchInvoicesByCreator>>, Awaited<ReturnType<typeof sdk.fetchInvoicesByClient>>];
 
       const sort = (arr: InvoiceWithKey[]) =>
         arr.sort((a, b) => {
@@ -245,7 +250,12 @@ const Dashboard: React.FC = () => {
       }
 
       try { localStorage.setItem(SEEN_KEY, JSON.stringify(newSeen)); } catch { /* ignore */ }
-    } catch {
+    } catch (e) {
+      const isTimeout = e instanceof Error && e.message === 'timeout';
+      setFetchError(isTimeout
+        ? 'Could not reach Solana — check your connection and try refreshing.'
+        : 'Failed to load invoices. Try refreshing.'
+      );
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
     } finally {
       setLoading(false);
@@ -1157,6 +1167,29 @@ const Dashboard: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {/* Error banner */}
+      {fetchError && !loading && (
+        <div
+          className="flex items-center gap-3 rounded-xl px-4 py-3 mb-2"
+          style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+        >
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" style={{ color: '#F59E0B' }} />
+          <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', flex: 1 }}>
+            {fetchError}
+          </p>
+          <button
+            onClick={() => { lastFetchedAt.current = 0; fetchAll(); }}
+            style={{
+              fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 600,
+              color: '#F59E0B', background: 'none', border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Role tabs */}
       <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as 'sent' | 'received' | 'client')}>

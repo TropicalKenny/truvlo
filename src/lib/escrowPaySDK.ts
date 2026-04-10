@@ -705,7 +705,10 @@ export class EscrowPaySDK {
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
-          const allInvoices = await invoiceAccessor.all();
+          // memcmp at offset 10: discriminator(8) + bump(1) + escrow_bump(1) = 10
+          const allInvoices = await invoiceAccessor.all([{
+            memcmp: { offset: 10, bytes: targetCreator.toBase58() },
+          }]);
           if (allInvoices?.length) {
             const filtered = allInvoices.filter((inv: any) => {
               try {

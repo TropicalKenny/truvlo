@@ -107,6 +107,13 @@ const Dashboard: React.FC = () => {
   const { toast } = useToast();
   const { unreadCount, addNotification, markAllAsRead } = useNotifications();
 
+  // Stable refs to avoid re-render loops from unstable object references
+  const privyWalletRef = useRef(privyWallet);
+  privyWalletRef.current = privyWallet;
+  const walletAddress = privyWallet?.address ?? null;
+  const addNotificationRef = useRef(addNotification);
+  addNotificationRef.current = addNotification;
+
   const [sentInvoices, setSentInvoices] = useState<InvoiceWithKey[]>([]);
   const [receivedInvoices, setReceivedInvoices] = useState<InvoiceWithKey[]>([]);
   const [clientInvoices, setClientInvoices] = useState<InvoiceWithKey[]>([]);
@@ -149,24 +156,28 @@ const Dashboard: React.FC = () => {
   };
 
   const sdk = useMemo(() => {
-    if (!publicKey || !privyWallet) return null;
+    if (!publicKey || !walletAddress) return null;
     const anchorWallet = {
       publicKey,
       signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+        const w = privyWalletRef.current;
+        if (!w) throw new Error('Wallet disconnected');
         const bytes = tx instanceof VersionedTransaction
           ? tx.serialize()
           : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-        const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+        const { signedTransaction } = await w.signTransaction({ transaction: bytes });
         return (tx instanceof VersionedTransaction
           ? VersionedTransaction.deserialize(signedTransaction)
           : Transaction.from(Buffer.from(signedTransaction))) as T;
       },
       signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+        const w = privyWalletRef.current;
+        if (!w) throw new Error('Wallet disconnected');
         return Promise.all(txs.map(async (tx) => {
           const bytes = tx instanceof VersionedTransaction
             ? tx.serialize()
             : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-          const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+          const { signedTransaction } = await w.signTransaction({ transaction: bytes });
           return (tx instanceof VersionedTransaction
             ? VersionedTransaction.deserialize(signedTransaction)
             : Transaction.from(Buffer.from(signedTransaction))) as T;
@@ -177,12 +188,16 @@ const Dashboard: React.FC = () => {
     const instance = new EscrowPaySDK(provider);
     if (!instance.isInitialized()) console.error('SDK init error:', instance.getInitError());
     return instance;
-  }, [connection, publicKey, privyWallet]);
+  }, [connection, publicKey, walletAddress]);
+
+  const isFetching = useRef(false);
 
   const fetchAll = useCallback(async () => {
+    if (isFetching.current) return; // Prevent overlapping fetches
     if (!sdk || !connected || !sdk.isInitialized()) {
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]); setLoading(false); return;
     }
+    isFetching.current = true;
     setLoading(true);
     setFetchError(null);
     try {
@@ -219,15 +234,15 @@ const Dashboard: React.FC = () => {
           if (isFirstLoad || !prev) continue;
           // Invoice paid (creator view — someone paid your invoice)
           if (role === 'creator' && prev.status !== InvoiceStatus.FullyPaid && inv.status === InvoiceStatus.FullyPaid) {
-            addNotification({ type: 'success', title: 'Invoice paid', message: `#${id}` });
+            addNotificationRef.current({ type: 'success', title: 'Invoice paid', message: `#${id}` });
           }
           // Release approved (creator view — client approved release)
           if (role === 'creator' && !prev.clientApproved && !!inv.clientApproved) {
-            addNotification({ type: 'success', title: 'Release approved', message: `#${id}` });
+            addNotificationRef.current({ type: 'success', title: 'Release approved', message: `#${id}` });
           }
           // Dispute raised (either role)
           if (!prev.disputed && nowDisputed) {
-            addNotification({ type: 'warning', title: 'Dispute raised', message: `#${id}` });
+            addNotificationRef.current({ type: 'warning', title: 'Dispute raised', message: `#${id}` });
           }
         }
       };
@@ -259,11 +274,12 @@ const Dashboard: React.FC = () => {
       );
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
     } finally {
+      isFetching.current = false;
       setLoading(false);
       hasLoadedOnce.current = true;
       lastFetchedAt.current = Date.now();
     }
-  }, [sdk, connected, addNotification]);
+  }, [sdk, connected]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {

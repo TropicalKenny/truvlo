@@ -50,8 +50,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { error } = await supabase
       .from('profiles')
-      .update({ display_name: trimmed || null })
-      .eq('privy_id', privyId);
+      .upsert(
+        { privy_id: privyId, display_name: trimmed || null },
+        { onConflict: 'privy_id' }
+      );
 
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ display_name: trimmed || null });

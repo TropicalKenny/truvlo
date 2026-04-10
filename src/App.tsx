@@ -1,17 +1,18 @@
-import React, { useMemo } from 'react';
+import React, { lazy, Suspense, useMemo } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { ConnectionProvider } from '@solana/wallet-adapter-react';
 import { clusterApiUrl } from '@solana/web3.js';
 import NotFound from './pages/NotFound';
 import Index from './pages/Index';
-import CreateInvoicePage from './pages/CreateInvoicePage';
-import PaymentPage from './pages/PaymentPage';
-import DashboardPage from './pages/DashboardPage';
-import InvalidInvoicePage from './pages/InvalidInvoicePage';
-import ApprovePage from './pages/ApprovePage';
-import ProfilePage from './pages/ProfilePage';
 import { NotificationProvider } from './components/NotificationProvider';
+
+const CreateInvoicePage  = lazy(() => import('./pages/CreateInvoicePage'));
+const PaymentPage        = lazy(() => import('./pages/PaymentPage'));
+const DashboardPage      = lazy(() => import('./pages/DashboardPage'));
+const InvalidInvoicePage = lazy(() => import('./pages/InvalidInvoicePage'));
+const ApprovePage        = lazy(() => import('./pages/ApprovePage'));
+const ProfilePage        = lazy(() => import('./pages/ProfilePage'));
 
 const App = () => {
   const endpoint = useMemo(
@@ -22,6 +23,7 @@ const App = () => {
   return (
     <ConnectionProvider endpoint={endpoint}>
       <NotificationProvider>
+        <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0D1117' }} />}>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/create" element={<CreateInvoicePage />} />
@@ -34,6 +36,7 @@ const App = () => {
           <Route path="/profile/:wallet" element={<ProfilePage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
         <Toaster />
       </NotificationProvider>
     </ConnectionProvider>

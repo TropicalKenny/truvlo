@@ -288,7 +288,13 @@ export class EscrowPaySDK {
   private async testConnection(): Promise<boolean> {
     try {
       if (!this.provider?.connection) return false;
-      const { value } = await this.provider.connection.getLatestBlockhashAndContext('finalized');
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('connection timeout')), 5_000)
+      );
+      const { value } = await Promise.race([
+        this.provider.connection.getLatestBlockhashAndContext('finalized'),
+        timeout,
+      ]);
       return !!(value && value.blockhash);
     } catch {
       return false;

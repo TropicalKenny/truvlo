@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
@@ -129,6 +129,7 @@ const Dashboard: React.FC = () => {
     open: boolean; invoiceId: string; amount: string;
     tokenType: TokenType; releaseableAmount: number;
   } | null>(null);
+  const lastFetchedAt = useRef<number>(0);
   const [profileCopied, setProfileCopied] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
@@ -246,12 +247,17 @@ const Dashboard: React.FC = () => {
       try { localStorage.setItem(SEEN_KEY, JSON.stringify(newSeen)); } catch { /* ignore */ }
     } catch {
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+      lastFetchedAt.current = Date.now();
+    }
   }, [sdk, connected, addNotification]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {
-    const h = () => fetchAll();
+    const h = () => {
+      if (Date.now() - lastFetchedAt.current > 30_000) fetchAll();
+    };
     window.addEventListener('focus', h);
     return () => window.removeEventListener('focus', h);
   }, [fetchAll]);
@@ -376,7 +382,7 @@ const Dashboard: React.FC = () => {
         } catch { /* non-blocking */ }
         toast({ title: 'Release requested', description: 'Client notified by email.' });
         addNotification({ type: 'info', title: 'Release Requested', message: `7-day window started for ${inv.invoiceId}.` });
-        await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Request failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -409,7 +415,7 @@ const Dashboard: React.FC = () => {
         const decimals = releaseModal.tokenType === TokenType.USDC ? 2 : 4;
         const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
         addNotification({ type: 'success', title: 'Funds Released', message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}` });
-        await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Release failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -436,7 +442,7 @@ const Dashboard: React.FC = () => {
       if (result.success) {
         toast({ title: 'Release approved' });
         addNotification({ type: 'success', title: 'Release Approved', message: `You approved release for ${inv.invoiceId}.` });
-        await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Approval failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -453,7 +459,7 @@ const Dashboard: React.FC = () => {
       if (result.success) {
         toast({ title: 'Dispute raised', description: 'Funds frozen. Mediator will review.' });
         addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
-        await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }

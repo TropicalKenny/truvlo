@@ -78,6 +78,11 @@ function createReadOnlySdk(connection: Connection): EscrowPaySDK | null {
   } catch { return null; }
 }
 
+// ── per-wallet session cache ───────────────────────────────────
+
+const walletCache = new Map<string, { creator: any[]; client: any[]; fetchedAt: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // ── score ring ─────────────────────────────────────────────────
 
 const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
@@ -196,19 +201,23 @@ const CombinedProfilePage: React.FC = () => {
       if (!sdk) { setErrorMsg('Failed to connect to Solana.'); setLoadState('error'); return; }
 
       try {
-        // Fetch all wallets in parallel
+        // Fetch all wallets in parallel (with per-wallet cache)
         const results = await Promise.all(
           addresses.map(async addr => {
+            const cached = walletCache.get(addr);
+            if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+              return { creator: cached.creator, client: cached.client };
+            }
             let pubkey: PublicKey;
             try { pubkey = new PublicKey(addr); } catch { return { creator: [], client: [] }; }
             const [cr, cl] = await Promise.all([
               sdk.fetchInvoicesByCreator(pubkey),
               sdk.fetchInvoicesByClient(pubkey),
             ]);
-            return {
-              creator: cr.success && cr.data ? cr.data : [],
-              client: cl.success && cl.data ? cl.data : [],
-            };
+            const creator = cr.success && cr.data ? cr.data : [];
+            const client = cl.success && cl.data ? cl.data : [];
+            walletCache.set(addr, { creator, client, fetchedAt: Date.now() });
+            return { creator, client };
           })
         );
 

@@ -182,6 +182,11 @@ const BreakdownRow = ({ label, pts, max, negative }: { label: string; pts: numbe
   </div>
 );
 
+// ── session cache (cleared on tab close) ──────────────────────
+
+const profileCache = new Map<string, { data: ProfileData; fetchedAt: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // ── types ──────────────────────────────────────────────────────
 
 type LoadState = 'loading' | 'error' | 'loaded';
@@ -218,6 +223,14 @@ const ProfilePage: React.FC = () => {
   useEffect(() => {
     if (!walletPubkey) { setError('Invalid wallet address.'); setLoadState('error'); return; }
 
+    const cacheKey = walletPubkey.toBase58();
+    const cached = profileCache.get(cacheKey);
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+      setProfile(cached.data);
+      setLoadState('loaded');
+      return;
+    }
+
     const load = async () => {
       setLoadState('loading');
       const sdk = createReadOnlySdk(connection);
@@ -244,7 +257,7 @@ const ProfilePage: React.FC = () => {
           clientInvoices.length, disputedAsCreator, disputedAsClient,
         );
 
-        setProfile({
+        const data: ProfileData = {
           totalSent: creatorInvoices.length,
           cleanCompletions,
           disputedAsCreator,
@@ -254,7 +267,9 @@ const ProfilePage: React.FC = () => {
           memberSince: getMemberSince([...creatorInvoices, ...clientInvoices]),
           walletAddress: walletPubkey.toBase58(),
           score,
-        });
+        };
+        profileCache.set(cacheKey, { data, fetchedAt: Date.now() });
+        setProfile(data);
         setLoadState('loaded');
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load profile.');

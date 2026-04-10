@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { usePrivy, useExportWallet } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
-import { Menu, X, ChevronDown, Download, LogOut, Settings } from 'lucide-react';
+import { Menu, X, ChevronDown, Copy, Wallet, LogOut, Settings } from 'lucide-react';
 import TruvloLogo from './TruvloLogo';
 import { useToast } from '@/hooks/use-toast';
 
@@ -13,19 +13,14 @@ const Header: React.FC = () => {
   const [authDropdownOpen, setAuthDropdownOpen] = useState(false);
   const { authenticated, login, logout } = usePrivy();
   const { wallets } = useSolanaWallets();
-  const { exportWallet } = useExportWallet();
   const { toast } = useToast();
 
-  const handleExportWallet = async () => {
-    try {
-      await exportWallet();
-    } catch {
-      toast({
-        title: 'Export not available',
-        description: 'Private key export is not supported for Solana embedded wallets yet.',
-        variant: 'destructive',
-      });
-    }
+  const handleCopyAddress = async () => {
+    const address = wallets[0]?.address;
+    if (!address) return;
+    await navigator.clipboard.writeText(address);
+    toast({ title: 'Address copied' });
+    setAuthDropdownOpen(false);
   };
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -151,49 +146,35 @@ const Header: React.FC = () => {
                     to="/settings"
                     onClick={() => setAuthDropdownOpen(false)}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
-                    style={{
-                      color: '#94A3B8',
-                      fontFamily: '"DM Sans", sans-serif',
-                      fontSize: '13px',
-                      textDecoration: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                    }}
+                    style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}
                   >
                     <Settings size={14} />
                     Profile Settings
                   </Link>
                   <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
-                  <button
-                    onClick={() => { handleExportWallet(); setAuthDropdownOpen(false); }}
+                  <Link
+                    to="/wallet"
+                    onClick={() => setAuthDropdownOpen(false)}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
-                    style={{
-                      color: '#94A3B8',
-                      fontFamily: '"DM Sans", sans-serif',
-                      fontSize: '13px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
+                    style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}
                   >
-                    <Download size={14} />
-                    Export Wallet
+                    <Wallet size={14} />
+                    Wallet
+                  </Link>
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
+                  <button
+                    onClick={handleCopyAddress}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
+                    style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <Copy size={14} />
+                    Copy Address
                   </button>
                   <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
                   <button
                     onClick={() => { logout(); setAuthDropdownOpen(false); }}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
-                    style={{
-                      color: '#94A3B8',
-                      fontFamily: '"DM Sans", sans-serif',
-                      fontSize: '13px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
+                    style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                   >
                     <LogOut size={14} />
                     Disconnect
@@ -284,21 +265,22 @@ const Header: React.FC = () => {
                     <Settings size={15} />
                     Profile Settings
                   </Link>
-                  <button
-                    onClick={() => { handleExportWallet(); setMobileOpen(false); }}
-                    className="flex items-center gap-2 py-2.5 text-sm transition-colors duration-150"
-                    style={{
-                      color: '#94A3B8',
-                      fontFamily: '"DM Sans", sans-serif',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: '10px 0',
-                      textAlign: 'left',
-                    }}
+                  <Link
+                    to="/wallet"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-2 text-sm transition-colors duration-150"
+                    style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none', padding: '10px 0' }}
                   >
-                    <Download size={15} />
-                    Export Wallet
+                    <Wallet size={15} />
+                    Wallet
+                  </Link>
+                  <button
+                    onClick={async () => { await handleCopyAddress(); setMobileOpen(false); }}
+                    className="flex items-center gap-2 text-sm transition-colors duration-150"
+                    style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0', textAlign: 'left' }}
+                  >
+                    <Copy size={15} />
+                    Copy Address
                   </button>
                   <button
                     onClick={() => { logout(); setMobileOpen(false); }}

@@ -709,7 +709,7 @@ export class EscrowPaySDK {
           const allInvoices = await invoiceAccessor.all([{
             memcmp: { offset: 10, bytes: targetCreator.toBase58() },
           }]);
-          if (allInvoices?.length) {
+          if (Array.isArray(allInvoices)) {
             const filtered = allInvoices.filter((inv: any) => {
               try {
                 return inv?.account?.creator?.toString() === targetCreator.toString();
@@ -774,7 +774,7 @@ export class EscrowPaySDK {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
           const allInvoices = await invoiceAccessor.all();
-          if (allInvoices?.length) {
+          if (Array.isArray(allInvoices)) {
             if (allInvoices.length > 0) {
               const sample = allInvoices[0]?.account;
               console.log('[fetchInvoicesByClient] sample client field:', JSON.stringify(sample?.client), 'target:', targetStr);

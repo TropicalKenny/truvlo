@@ -12,7 +12,8 @@ const PaymentPage        = lazy(() => import('./pages/PaymentPage'));
 const DashboardPage      = lazy(() => import('./pages/DashboardPage'));
 const InvalidInvoicePage = lazy(() => import('./pages/InvalidInvoicePage'));
 const ApprovePage        = lazy(() => import('./pages/ApprovePage'));
-const ProfilePage        = lazy(() => import('./pages/ProfilePage'));
+const ProfilePage            = lazy(() => import('./pages/ProfilePage'));
+const ProfileSettingsPage    = lazy(() => import('./pages/ProfileSettingsPage'));
 
 const App = () => {
   const endpoint = useMemo(
@@ -34,6 +35,7 @@ const App = () => {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/approve/:invoiceId/:creator" element={<ApprovePage />} />
           <Route path="/profile/:wallet" element={<ProfilePage />} />
+          <Route path="/settings" element={<ProfileSettingsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>

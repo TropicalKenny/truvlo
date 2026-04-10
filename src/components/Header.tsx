@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { usePrivy, useExportWallet } from '@privy-io/react-auth';
 import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
-import { Menu, X, ChevronDown, Download, LogOut } from 'lucide-react';
+import { Menu, X, ChevronDown, Download, LogOut, Settings } from 'lucide-react';
 import TruvloLogo from './TruvloLogo';
 import { useToast } from '@/hooks/use-toast';
 
@@ -146,6 +146,24 @@ const Header: React.FC = () => {
                     boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
                   }}
                 >
+                  <Link
+                    to="/settings"
+                    onClick={() => setAuthDropdownOpen(false)}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
+                    style={{
+                      color: '#94A3B8',
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: '13px',
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                  >
+                    <Settings size={14} />
+                    Profile Settings
+                  </Link>
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
                   <button
                     onClick={() => { handleExportWallet(); setAuthDropdownOpen(false); }}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
@@ -251,6 +269,20 @@ const Header: React.FC = () => {
             <div className="pt-4 pb-2 flex flex-col gap-2">
               {authenticated ? (
                 <>
+                  <Link
+                    to="/settings"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-2 text-sm transition-colors duration-150"
+                    style={{
+                      color: '#94A3B8',
+                      fontFamily: '"DM Sans", sans-serif',
+                      textDecoration: 'none',
+                      padding: '10px 0',
+                    }}
+                  >
+                    <Settings size={15} />
+                    Profile Settings
+                  </Link>
                   <button
                     onClick={() => { handleExportWallet(); setMobileOpen(false); }}
                     className="flex items-center gap-2 py-2.5 text-sm transition-colors duration-150"

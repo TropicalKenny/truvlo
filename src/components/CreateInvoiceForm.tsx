@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
@@ -114,6 +114,24 @@ const CreateInvoiceForm: React.FC = () => {
     invoiceId: string;
     signature: string;
   } | null>(null);
+
+  // ── profile auto-fill ──────────────────────────────────────────
+  useEffect(() => {
+    if (!authenticated) return;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        const res = await fetch('/api/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json() as { display_name: string | null; default_token: string };
+          if (data.display_name) setSenderName(data.display_name);
+          if (data.default_token === 'SOL') setTokenType(TokenType.SOL);
+        }
+      } catch { /* non-blocking */ }
+    })();
+  }, [authenticated, getAccessToken]);
 
   // ── SDK init — preserved exactly ───────────────────────────────
   const sdk = useMemo(() => {

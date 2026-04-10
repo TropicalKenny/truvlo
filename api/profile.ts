@@ -30,33 +30,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('display_name, email, created_at')
+      .select('display_name, default_token, email, created_at')
       .eq('privy_id', privyId)
       .maybeSingle();
 
     if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json({ display_name: data?.display_name ?? null });
+    return res.status(200).json({
+      display_name: data?.display_name ?? null,
+      default_token: data?.default_token ?? 'USDC',
+    });
   }
 
   if (req.method === 'PATCH') {
     const privyId = await verifyToken(req);
     if (!privyId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { display_name } = req.body as { display_name?: string };
+    const { display_name, default_token } = req.body as {
+      display_name?: string;
+      default_token?: string;
+    };
+
     if (typeof display_name !== 'string') {
       return res.status(400).json({ error: 'display_name must be a string' });
     }
     const trimmed = display_name.trim().slice(0, 50);
+    const tokenValue = default_token === 'SOL' ? 'SOL' : 'USDC';
 
     const { error } = await supabase
       .from('profiles')
       .upsert(
-        { privy_id: privyId, display_name: trimmed || null },
+        { privy_id: privyId, display_name: trimmed || null, default_token: tokenValue },
         { onConflict: 'privy_id' }
       );
 
     if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json({ display_name: trimmed || null });
+    return res.status(200).json({ display_name: trimmed || null, default_token: tokenValue });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

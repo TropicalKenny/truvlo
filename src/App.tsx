@@ -26,9 +26,9 @@ const App = () => {
     () => import.meta.env.VITE_SOLANA_RPC_URL || clusterApiUrl('devnet'),
     [],
   );
-  const { authenticated } = usePrivy();
+  const { authenticated, ready } = usePrivy();
   const { wallets } = useSolanaWallets();
-  const needsWallet = authenticated && wallets.length === 0;
+  const needsWallet = ready && authenticated && wallets.length === 0;
 
   return (
     <ConnectionProvider endpoint={endpoint}>

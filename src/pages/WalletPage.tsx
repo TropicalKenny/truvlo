@@ -147,20 +147,32 @@ const WalletPage: React.FC = () => {
     if (ready && !authenticated) navigate('/', { replace: true });
   }, [ready, authenticated, navigate]);
 
-  // Load profile slug
+  // Load profile slug — if null, auto-register active wallet to generate one
   useEffect(() => {
-    if (!ready || !authenticated) return;
+    if (!ready || !authenticated || !activeWallet) return;
     (async () => {
       try {
         const token = await getAccessToken();
         const res = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
-        if (res.ok) {
-          const data = await res.json();
-          setProfileSlug(data.profile_slug ?? null);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.profile_slug) {
+          setProfileSlug(data.profile_slug);
+        } else {
+          // No slug yet — register the active wallet to generate one
+          const regRes = await fetch('/api/register-wallet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ wallet_address: activeWallet.address }),
+          });
+          if (regRes.ok) {
+            const regData = await regRes.json();
+            setProfileSlug(regData.profile_slug ?? null);
+          }
         }
       } catch { /* non-blocking */ }
     })();
-  }, [ready, authenticated, getAccessToken]);
+  }, [ready, authenticated, getAccessToken, activeWallet]);
 
   // ─── balances ─────────────────────────────────────────────────────────────
   const fetchBalances = useCallback(async () => {

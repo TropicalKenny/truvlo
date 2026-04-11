@@ -60,6 +60,7 @@ const ProfileSettingsPage: React.FC = () => {
 
   const [displayName, setDisplayName] = useState('');
   const [defaultToken, setDefaultToken] = useState<'USDC' | 'SOL'>('USDC');
+  const [notificationEmail, setNotificationEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -76,9 +77,10 @@ const ProfileSettingsPage: React.FC = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
-          const data = await res.json() as { display_name: string | null; default_token: string };
+          const data = await res.json() as { display_name: string | null; default_token: string; notification_email: string | null };
           setDisplayName(data.display_name ?? '');
           setDefaultToken(data.default_token === 'SOL' ? 'SOL' : 'USDC');
+          setNotificationEmail(data.notification_email ?? '');
         }
       } catch { /* non-blocking */ } finally {
         setLoading(false);
@@ -96,15 +98,16 @@ const ProfileSettingsPage: React.FC = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ display_name: displayName.trim(), default_token: defaultToken }),
+        body: JSON.stringify({ display_name: displayName.trim(), default_token: defaultToken, notification_email: notificationEmail.trim() }),
       });
       if (res.ok) {
         toast({ title: 'Profile saved' });
       } else {
-        toast({ title: 'Failed to save', variant: 'destructive' });
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        toast({ title: 'Failed to save', description: body.error || `HTTP ${res.status}`, variant: 'destructive' });
       }
-    } catch {
-      toast({ title: 'Failed to save', variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Failed to save', description: e instanceof Error ? e.message : 'Network error', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -147,7 +150,7 @@ const ProfileSettingsPage: React.FC = () => {
           {loading ? (
             /* Skeleton */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {[1, 2].map(i => (
+              {[1, 2, 3].map(i => (
                 <div key={i}>
                   <div style={{ height: '12px', width: '80px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: '4px', marginBottom: '8px' }} />
                   <div style={{ height: '44px', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '8px' }} />
@@ -207,6 +210,18 @@ const ProfileSettingsPage: React.FC = () => {
                   ))}
                 </div>
                 <p style={helpStyle}>Pre-selected when you create a new invoice</p>
+              </div>
+
+              {/* Notification email */}
+              <div>
+                <label style={labelStyle}>Notification email</label>
+                <DarkInput
+                  type="email"
+                  value={notificationEmail}
+                  onChange={e => setNotificationEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+                <p style={helpStyle}>You'll be notified when a client pays, approves a release, or raises a dispute</p>
               </div>
 
             </div>

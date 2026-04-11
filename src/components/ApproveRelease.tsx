@@ -161,6 +161,11 @@ const ApproveRelease: React.FC = () => {
       const result = await sdk.approveRelease(invoiceId!, new PublicKey(creator!));
       if (result.success) {
         setPageState({ type: 'approved' });
+        fetch('/api/notify-creator', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoiceId, creatorWallet: creator, event: 'release_approved' }),
+        }).catch(() => {});
       } else {
         toast({ title: 'Approval failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -177,6 +182,11 @@ const ApproveRelease: React.FC = () => {
       const result = await sdk.raiseDispute(invoiceId!, new PublicKey(creator!));
       if (result.success) {
         setPageState({ type: 'disputed' });
+        fetch('/api/notify-creator', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoiceId, creatorWallet: creator, event: 'disputed' }),
+        }).catch(() => {});
       } else {
         toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }

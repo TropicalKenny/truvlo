@@ -102,15 +102,18 @@ const Dashboard: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
   const { activeWallet: privyWallet } = useActiveWallet();
-  const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
-  const connected = authenticated && !!publicKey;
-  const { toast } = useToast();
-  const { unreadCount, addNotification, markAllAsRead } = useNotifications();
-
   // Stable refs to avoid re-render loops from unstable object references
   const privyWalletRef = useRef(privyWallet);
   privyWalletRef.current = privyWallet;
   const walletAddress = privyWallet?.address ?? null;
+  // useMemo ensures publicKey reference is stable across re-renders (same address → same object)
+  // Without this, `new PublicKey(addr)` on every render causes sdk → fetchAll → useEffect to
+  // retrigger after every setLoading(false), creating an infinite spin loop.
+  const publicKey = useMemo(() => walletAddress ? new PublicKey(walletAddress) : null, [walletAddress]);
+  const connected = authenticated && !!publicKey;
+  const { toast } = useToast();
+  const { unreadCount, addNotification, markAllAsRead } = useNotifications();
+
   const addNotificationRef = useRef(addNotification);
   addNotificationRef.current = addNotification;
 
@@ -141,6 +144,7 @@ const Dashboard: React.FC = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [profileCopied, setProfileCopied] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [missingNotifEmail, setMissingNotifEmail] = useState(false);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
@@ -297,8 +301,9 @@ const Dashboard: React.FC = () => {
         const token = await getAccessToken();
         const res = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
-          const data = await res.json() as { display_name: string | null };
+          const data = await res.json() as { display_name: string | null; notification_email: string | null };
           setDisplayName(data.display_name);
+          setMissingNotifEmail(!data.notification_email);
           if (!data.display_name) setShowNamePrompt(true);
           return;
         }
@@ -360,8 +365,8 @@ const Dashboard: React.FC = () => {
 
   const formatStat = (usdc: number, sol: number) => {
     const lines = [];
-    if (usdc > 0) lines.push(usdc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USDC');
-    if (sol > 0) lines.push(sol.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' SOL');
+    if (usdc > 0) lines.push(parseFloat(usdc.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' USDC');
+    if (sol > 0) lines.push(parseFloat(sol.toFixed(4)).toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' SOL');
     return lines.length > 0 ? lines : ['—'];
   };
 
@@ -404,10 +409,9 @@ const Dashboard: React.FC = () => {
             },
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
-              clientEmail: inv.clientEmail,
               creatorWallet: publicKey.toBase58(),
               amount: formatAmount(inv.amountPaid, inv.tokenType),
-              description: inv.description || '',
+              senderName: displayName || undefined,
               invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey.toBase58()}`,
             }),
           });
@@ -1091,6 +1095,43 @@ const Dashboard: React.FC = () => {
                 }}
               >
                 Skip
+              </button>
+            </div>
+          )}
+
+          {/* Missing notification email nudge */}
+          {missingNotifEmail && !showNamePrompt && (
+            <div
+              className="flex items-center gap-2 mt-3"
+              style={{
+                backgroundColor: 'rgba(45,212,191,0.06)',
+                border: '1px solid rgba(45,212,191,0.15)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', flex: 1 }}>
+                Add a notification email to get alerts when clients pay or dispute.
+              </span>
+              <a
+                href="/settings"
+                style={{
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#2DD4BF',
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Go to Settings →
+              </a>
+              <button
+                onClick={() => setMissingNotifEmail(false)}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: '0 4px', fontSize: '14px' }}
+              >
+                ✕
               </button>
             </div>
           )}

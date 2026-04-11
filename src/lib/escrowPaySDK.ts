@@ -23,6 +23,11 @@ const PROGRAM_ID = new PublicKey(IDL.address || "12mH9wkUUvyQmhqD9A6gJzLGxEUCTZC
 // Source: workspace.json accounts[0].discriminator
 const INVOICE_DISCRIMINATOR = Buffer.from([51, 194, 250, 114, 6, 104, 18, 164]);
 
+// Minimum byte length of a valid new-schema Invoice account.
+// Old devnet PDAs share the same discriminator but have a different field layout and will
+// fail Borsh decode; filtering them out by size avoids unnecessary decode attempts.
+const MIN_INVOICE_BYTES = 100;
+
 // Token Mints
 export const USDC_MINT_DEVNET = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 export const USDC_MINT_MAINNET = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
@@ -193,20 +198,24 @@ export class EscrowPaySDK {
     if (!raw) return null;
     
     try {
+      // Anchor preserves IDL variant name casing, so check both PascalCase (IDL) and camelCase (older)
       let tokenType = TokenType.USDC;
-      if (raw.tokenType?.sol !== undefined || raw.token_type?.sol !== undefined) {
+      const tt = raw.tokenType ?? raw.token_type;
+      if (typeof tt === 'number' || typeof tt === 'bigint') {
+        tokenType = Number(tt) === 1 ? TokenType.SOL : TokenType.USDC;
+      } else if (tt?.SOL !== undefined || tt?.sol !== undefined) {
         tokenType = TokenType.SOL;
       }
 
       let status = InvoiceStatus.Unpaid;
       const rawStatus = raw.status || {};
-      if (rawStatus.partiallyPaid !== undefined || rawStatus.partially_paid !== undefined) {
+      if (rawStatus.PartiallyPaid !== undefined || rawStatus.partiallyPaid !== undefined || rawStatus.partially_paid !== undefined) {
         status = InvoiceStatus.PartiallyPaid;
-      } else if (rawStatus.fullyPaid !== undefined || rawStatus.fully_paid !== undefined) {
+      } else if (rawStatus.FullyPaid !== undefined || rawStatus.fullyPaid !== undefined || rawStatus.fully_paid !== undefined) {
         status = InvoiceStatus.FullyPaid;
-      } else if (rawStatus.released !== undefined) {
+      } else if (rawStatus.Released !== undefined || rawStatus.released !== undefined) {
         status = InvoiceStatus.Released;
-      } else if (rawStatus.disputed !== undefined) {
+      } else if (rawStatus.Disputed !== undefined || rawStatus.disputed !== undefined) {
         status = InvoiceStatus.Disputed;
       }
 
@@ -725,11 +734,9 @@ export class EscrowPaySDK {
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
-          // memcmp at offset 10: discriminator(8) + bump(1) + escrow_bump(1) = 10
-          const allInvoices = await this.withTimeout(
-            invoiceAccessor.all([{ memcmp: { offset: 10, bytes: targetCreator.toBase58() } }]),
-            8_000
-          );
+          // No RPC-level creator filter: invoice_id is variable-length (Borsh string) and sits
+          // between escrow_bump and creator, so creator has no fixed byte offset. Filter client-side.
+          const allInvoices = await this.withTimeout(invoiceAccessor.all(), 8_000);
           if (Array.isArray(allInvoices)) {
             const filtered = allInvoices.filter((inv: any) => {
               try {
@@ -750,22 +757,25 @@ export class EscrowPaySDK {
       const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
         filters: [
           { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
-          { memcmp: { offset: 10, bytes: targetCreator.toBase58() } },
         ],
       });
 
       if (!accounts?.length) return { success: true, data: [] };
 
-      const mapped = accounts.map((acc) => {
-        try {
-          const decoded = this.decodeInvoiceAccount(acc.account.data);
-          const parsed = this.parseInvoiceData(decoded);
-          if (parsed) return { publicKey: acc.pubkey, account: parsed };
-        } catch (e) {
-          console.error('Failed to decode account:', e);
-        }
-        return null;
-      }).filter((inv): inv is { publicKey: PublicKey; account: InvoiceData } => inv !== null);
+      const targetCreatorStr = targetCreator.toBase58();
+      const mapped = accounts
+        .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
+        .map((acc) => {
+          try {
+            const decoded = this.decodeInvoiceAccount(acc.account.data);
+            const parsed = this.parseInvoiceData(decoded);
+            if (parsed && parsed.creator?.toString() === targetCreatorStr)
+              return { publicKey: acc.pubkey, account: parsed };
+          } catch (e) {
+            console.error('Failed to decode account:', e);
+          }
+          return null;
+        }).filter((inv): inv is { publicKey: PublicKey; account: InvoiceData } => inv !== null);
 
       return { success: true, data: mapped };
     } catch (error: any) {
@@ -792,10 +802,6 @@ export class EscrowPaySDK {
         if (invoiceAccessor) {
           const allInvoices = await this.withTimeout(invoiceAccessor.all(), 8_000);
           if (Array.isArray(allInvoices)) {
-            if (allInvoices.length > 0) {
-              const sample = allInvoices[0]?.account;
-              console.log('[fetchInvoicesByClient] sample client field:', JSON.stringify(sample?.client), 'target:', targetStr);
-            }
             const filtered = allInvoices.filter((inv: any) => {
               try {
                 const clientField = inv?.account?.client;
@@ -833,16 +839,18 @@ export class EscrowPaySDK {
       });
       if (!accounts?.length) return { success: true, data: [] };
 
-      const mapped = accounts.map((acc) => {
-        try {
-          const decoded = this.decodeInvoiceAccount(acc.account.data);
-          const parsed = this.parseInvoiceData(decoded);
-          if (!parsed) return null;
-          if (!parsed.client) return null;
-          if (parsed.client.toString() !== targetStr) return null;
-          return { publicKey: acc.pubkey, account: parsed };
-        } catch { return null; }
-      }).filter(Boolean) as Array<{ publicKey: PublicKey; account: InvoiceData }>;
+      const mapped = accounts
+        .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
+        .map((acc) => {
+          try {
+            const decoded = this.decodeInvoiceAccount(acc.account.data);
+            const parsed = this.parseInvoiceData(decoded);
+            if (!parsed) return null;
+            if (!parsed.client) return null;
+            if (parsed.client.toString() !== targetStr) return null;
+            return { publicKey: acc.pubkey, account: parsed };
+          } catch { return null; }
+        }).filter(Boolean) as Array<{ publicKey: PublicKey; account: InvoiceData }>;
 
       return { success: true, data: mapped };
     } catch (error: any) {

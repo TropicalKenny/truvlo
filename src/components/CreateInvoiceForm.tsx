@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
+import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { Loader2, Copy, ExternalLink, Check } from 'lucide-react';
@@ -96,8 +96,7 @@ const DarkTextarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) 
 const CreateInvoiceForm: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
-  const { wallets } = useSolanaWallets();
-  const privyWallet = wallets[0];
+  const { activeWallet: privyWallet } = useActiveWallet();
   const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
   const connected = authenticated && !!publicKey;
   const navigate = useNavigate();
@@ -114,6 +113,24 @@ const CreateInvoiceForm: React.FC = () => {
     invoiceId: string;
     signature: string;
   } | null>(null);
+
+  // ── profile auto-fill ──────────────────────────────────────────
+  useEffect(() => {
+    if (!authenticated) return;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        const res = await fetch('/api/profile', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json() as { display_name: string | null; default_token: string };
+          if (data.display_name) setSenderName(data.display_name);
+          if (data.default_token === 'SOL') setTokenType(TokenType.SOL);
+        }
+      } catch { /* non-blocking */ }
+    })();
+  }, [authenticated, getAccessToken]);
 
   // ── SDK init — preserved exactly ───────────────────────────────
   const sdk = useMemo(() => {

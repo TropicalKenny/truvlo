@@ -1,26 +1,62 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { PrivyClient } from '@privy-io/server-auth';
+import { createClient } from '@supabase/supabase-js';
+
+const privy = new PrivyClient(
+  process.env.VITE_PRIVY_APP_ID!,
+  process.env.PRIVY_APP_SECRET!
+);
+
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 // Resend API — free tier: 3,000 emails/month
 // Set RESEND_API_KEY in Vercel environment variables
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@truvlo.io';
 
+async function verifyToken(req: VercelRequest): Promise<string | null> {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return null;
+  try {
+    const claims = await privy.verifyAuthToken(token);
+    return claims.userId;
+  } catch { return null; }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { invoiceId, clientEmail, creatorWallet, amount, description, senderName, invoiceUrl } = req.body;
-  // Direct approve/dispute URL — faster for client
-  const approveUrl = invoiceUrl.replace('/invoice/', '/approve/');
+  const userId = await verifyToken(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  if (!invoiceId || !clientEmail || !creatorWallet || !amount || !invoiceUrl) {
+  const { invoiceId, creatorWallet, amount, description, senderName, invoiceUrl } = req.body;
+  let { clientEmail } = req.body as { clientEmail?: string };
+
+  if (!invoiceId || !creatorWallet || !amount || !invoiceUrl) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  // Basic email validation
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
-    return res.status(400).json({ error: 'Invalid email address' });
+  // Direct approve/dispute URL — faster for client
+  const approveUrl = invoiceUrl.replace('/invoice/', '/approve/');
+
+  // Look up clientEmail from invoice_meta if not provided (it's not on-chain)
+  if (!clientEmail) {
+    const { data } = await supabase
+      .from('invoice_meta')
+      .select('client_email, sender_name, description')
+      .eq('invoice_id', invoiceId)
+      .eq('creator_wallet', creatorWallet)
+      .maybeSingle();
+    clientEmail = data?.client_email ?? undefined;
+  }
+
+  if (!clientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+    return res.status(400).json({ error: 'No client email on record for this invoice' });
   }
 
   if (!RESEND_API_KEY) {

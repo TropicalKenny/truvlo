@@ -2,14 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
+import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 import {
   Loader2, AlertCircle, Check, ArrowLeft, Shield,
   ExternalLink, Plus, Trash2, Wallet
 } from 'lucide-react';
-import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType, PLATFORM_FEE_BPS } from '@/lib/escrowPaySDK';
+import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType, PLATFORM_FEE_BPS, PLATFORM_FLAT_FEE_USD, PLATFORM_FEE_THRESHOLD_USD } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
 
 // ── types — preserved exactly ──────────────────────────────────
@@ -38,8 +38,7 @@ const InvoicePayment: React.FC = () => {
   const navigate = useNavigate();
   const { connection } = useConnection();
   const { authenticated, login } = usePrivy();
-  const { wallets } = useSolanaWallets();
-  const privyWallet = wallets[0];
+  const { activeWallet: privyWallet } = useActiveWallet();
   const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
@@ -48,6 +47,7 @@ const InvoicePayment: React.FC = () => {
   const [paying, setPaying] = useState(false);
   const [sdkInitError, setSdkInitError] = useState<string | null>(null);
   const [installments, setInstallments] = useState<Installment[]>([{ percentage: 100 }]);
+  const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   // ── preserved exactly ──────────────────────────────────────────
@@ -116,7 +116,11 @@ const InvoicePayment: React.FC = () => {
       if (!readOnlySdk) { setPageState({ type: 'error', message: sdkInitError || 'Failed to initialize.' }); return; }
       try {
         const creatorPubkey = new PublicKey(urlParams.creator!);
-        const result = await readOnlySdk.fetchInvoice(urlParams.invoiceId!, creatorPubkey);
+        const [result, price] = await Promise.all([
+          readOnlySdk.fetchInvoice(urlParams.invoiceId!, creatorPubkey),
+          readOnlySdk.getSolPriceUsd(),
+        ]);
+        if (price) setSolPriceUsd(price);
         if (result.success && result.data) {
           setPageState({ type: 'invoice_loaded', invoice: result.data });
         } else {
@@ -148,14 +152,36 @@ const InvoicePayment: React.FC = () => {
   const formatAmount = (value: number, tokenType: TokenType) => {
     const symbol = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
     const decimals = tokenType === TokenType.USDC ? 2 : 4;
-    return `${value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol}`;
+    return `${parseFloat(value.toFixed(decimals)).toLocaleString('en-US', { maximumFractionDigits: decimals })} ${symbol}`;
   };
 
   const calculateBreakdown = (inv: InvoiceData) => {
     const amount = getRemainingAmount(inv);
-    const fee = parseFloat((amount * (PLATFORM_FEE_BPS / 10000)).toFixed(getDecimals(inv.tokenType)));
-    const total = parseFloat((amount + fee).toFixed(getDecimals(inv.tokenType)));
-    return { amount, fee, total };
+    const dec = getDecimals(inv.tokenType);
+    let fee: number;
+    let feeLabel: string;
+
+    if (inv.tokenType === TokenType.USDC) {
+      if (amount < PLATFORM_FEE_THRESHOLD_USD) {
+        fee = PLATFORM_FLAT_FEE_USD;
+        feeLabel = `Platform Fee ($${PLATFORM_FLAT_FEE_USD} flat)`;
+      } else {
+        fee = parseFloat((amount * (PLATFORM_FEE_BPS / 10000)).toFixed(dec));
+        feeLabel = `Platform Fee (${PLATFORM_FEE_BPS / 100}%)`;
+      }
+    } else {
+      const valueUsd = solPriceUsd && solPriceUsd > 0 ? amount * solPriceUsd : null;
+      if (valueUsd !== null && valueUsd < PLATFORM_FEE_THRESHOLD_USD) {
+        fee = parseFloat((PLATFORM_FLAT_FEE_USD / solPriceUsd!).toFixed(dec));
+        feeLabel = `Platform Fee ($${PLATFORM_FLAT_FEE_USD} flat)`;
+      } else {
+        fee = parseFloat((amount * (PLATFORM_FEE_BPS / 10000)).toFixed(dec));
+        feeLabel = `Platform Fee (${PLATFORM_FEE_BPS / 100}%)`;
+      }
+    }
+
+    const total = parseFloat((amount + fee).toFixed(dec));
+    return { amount, fee, total, feeLabel };
   };
 
   const totalPercentage = installments.reduce((sum, i) => sum + (i.percentage || 0), 0);
@@ -219,6 +245,17 @@ const InvoicePayment: React.FC = () => {
         paidAmount: breakdown.amount,
         txSignature: payResult.data?.signature || '',
       });
+      // Notify creator — fire-and-forget, non-blocking
+      fetch('/api/notify-creator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceId: invoice.invoiceId,
+          creatorWallet: creator,
+          event: 'paid',
+          amount: formatAmount(breakdown.amount, invoice.tokenType),
+        }),
+      }).catch(() => {});
     } catch (error: unknown) {
       let msg = 'Transaction failed.';
       const errorStr = error instanceof Error ? error.message : String(error || '');
@@ -424,8 +461,7 @@ const InvoicePayment: React.FC = () => {
             marginBottom: '8px',
           }}
         >
-          {totalAmount.toLocaleString('en-US', {
-            minimumFractionDigits: invoice.tokenType === TokenType.USDC ? 2 : 4,
+          {parseFloat(totalAmount.toFixed(invoice.tokenType === TokenType.USDC ? 2 : 4)).toLocaleString('en-US', {
             maximumFractionDigits: invoice.tokenType === TokenType.USDC ? 2 : 4,
           })}
           <span style={{ fontSize: '1.125rem', color: '#64748B', marginLeft: '8px', fontWeight: 500 }}>{symbol}</span>
@@ -593,7 +629,7 @@ const InvoicePayment: React.FC = () => {
               <div className="rounded-lg p-4 space-y-2.5" style={{ backgroundColor: '#1C2128' }}>
                 {[
                   { label: 'Amount', value: formatAmount(breakdown.amount, invoice.tokenType) },
-                  { label: 'Platform Fee (1%)', value: formatAmount(breakdown.fee, invoice.tokenType) },
+                  { label: breakdown.feeLabel, value: formatAmount(breakdown.fee, invoice.tokenType) },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between text-sm">
                     <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>{label}</span>

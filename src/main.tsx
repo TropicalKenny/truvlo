@@ -23,7 +23,7 @@ createRoot(rootElement).render(
           theme: 'dark',
         },
         embeddedWallets: {
-          createOnLogin: 'users-without-wallets',
+          createOnLogin: 'off',
           showWalletUIs: false,
         },
         solana: {

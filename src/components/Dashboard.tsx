@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
+import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
@@ -100,19 +100,29 @@ const DarkBadge = ({
 
 const Dashboard: React.FC = () => {
   const { connection } = useConnection();
-  const { authenticated } = usePrivy();
-  const { wallets } = useSolanaWallets();
-  const privyWallet = wallets[0];
-  const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
+  const { authenticated, getAccessToken } = usePrivy();
+  const { activeWallet: privyWallet } = useActiveWallet();
+  // Stable refs to avoid re-render loops from unstable object references
+  const privyWalletRef = useRef(privyWallet);
+  privyWalletRef.current = privyWallet;
+  const walletAddress = privyWallet?.address ?? null;
+  // useMemo ensures publicKey reference is stable across re-renders (same address → same object)
+  // Without this, `new PublicKey(addr)` on every render causes sdk → fetchAll → useEffect to
+  // retrigger after every setLoading(false), creating an infinite spin loop.
+  const publicKey = useMemo(() => walletAddress ? new PublicKey(walletAddress) : null, [walletAddress]);
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
   const { unreadCount, addNotification, markAllAsRead } = useNotifications();
+
+  const addNotificationRef = useRef(addNotification);
+  addNotificationRef.current = addNotification;
 
   const [sentInvoices, setSentInvoices] = useState<InvoiceWithKey[]>([]);
   const [receivedInvoices, setReceivedInvoices] = useState<InvoiceWithKey[]>([]);
   const [clientInvoices, setClientInvoices] = useState<InvoiceWithKey[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnce = useRef(false);
   const [releasing, setReleasing] = useState<string | null>(null);
   const [requesting, setRequesting] = useState<string | null>(null);
   const [approving, setApproving] = useState<string | null>(null);
@@ -130,7 +140,14 @@ const Dashboard: React.FC = () => {
     open: boolean; invoiceId: string; amount: string;
     tokenType: TokenType; releaseableAmount: number;
   } | null>(null);
+  const lastFetchedAt = useRef<number>(0);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [profileCopied, setProfileCopied] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [missingNotifEmail, setMissingNotifEmail] = useState(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -143,24 +160,28 @@ const Dashboard: React.FC = () => {
   };
 
   const sdk = useMemo(() => {
-    if (!publicKey || !privyWallet) return null;
+    if (!publicKey || !walletAddress) return null;
     const anchorWallet = {
       publicKey,
       signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
+        const w = privyWalletRef.current;
+        if (!w) throw new Error('Wallet disconnected');
         const bytes = tx instanceof VersionedTransaction
           ? tx.serialize()
           : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-        const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+        const { signedTransaction } = await w.signTransaction({ transaction: bytes });
         return (tx instanceof VersionedTransaction
           ? VersionedTransaction.deserialize(signedTransaction)
           : Transaction.from(Buffer.from(signedTransaction))) as T;
       },
       signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
+        const w = privyWalletRef.current;
+        if (!w) throw new Error('Wallet disconnected');
         return Promise.all(txs.map(async (tx) => {
           const bytes = tx instanceof VersionedTransaction
             ? tx.serialize()
             : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-          const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
+          const { signedTransaction } = await w.signTransaction({ transaction: bytes });
           return (tx instanceof VersionedTransaction
             ? VersionedTransaction.deserialize(signedTransaction)
             : Transaction.from(Buffer.from(signedTransaction))) as T;
@@ -171,18 +192,26 @@ const Dashboard: React.FC = () => {
     const instance = new EscrowPaySDK(provider);
     if (!instance.isInitialized()) console.error('SDK init error:', instance.getInitError());
     return instance;
-  }, [connection, publicKey, privyWallet]);
+  }, [connection, publicKey, walletAddress]);
+
+  const isFetching = useRef(false);
 
   const fetchAll = useCallback(async () => {
+    if (isFetching.current) return; // Prevent overlapping fetches
     if (!sdk || !connected || !sdk.isInitialized()) {
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]); setLoading(false); return;
     }
+    isFetching.current = true;
     setLoading(true);
+    setFetchError(null);
     try {
-      const [creatorResult, clientResult] = await Promise.all([
-        sdk.fetchInvoicesByCreator(),
-        sdk.fetchInvoicesByClient(),
-      ]);
+      const fetchTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 10_000)
+      );
+      const [creatorResult, clientResult] = await Promise.race([
+        Promise.all([sdk.fetchInvoicesByCreator(), sdk.fetchInvoicesByClient()]),
+        fetchTimeout,
+      ]) as [Awaited<ReturnType<typeof sdk.fetchInvoicesByCreator>>, Awaited<ReturnType<typeof sdk.fetchInvoicesByClient>>];
 
       const sort = (arr: InvoiceWithKey[]) =>
         arr.sort((a, b) => {
@@ -191,8 +220,40 @@ const Dashboard: React.FC = () => {
           return bt - at;
         });
 
+      // Load last-seen state for change-based notifications
+      type SeenEntry = { status: number; clientApproved: boolean; disputed: boolean };
+      const SEEN_KEY = 'truvlo_seen_invoices';
+      let seen: Record<string, SeenEntry> = {};
+      try { seen = JSON.parse(localStorage.getItem(SEEN_KEY) ?? '{}') as Record<string, SeenEntry>; } catch { /* ignore */ }
+      const newSeen: Record<string, SeenEntry> = { ...seen };
+      const isFirstLoad = Object.keys(seen).length === 0;
+
+      const checkAndNotify = (invoices: InvoiceWithKey[], role: 'creator' | 'client') => {
+        for (const { account: inv } of invoices) {
+          const id = inv.invoiceId;
+          const prev = seen[id];
+          const statusNum = typeof inv.status === 'number' ? inv.status : (inv.status as any)?.valueOf?.() ?? -1;
+          const nowDisputed = !!inv.disputeRaisedAt;
+          newSeen[id] = { status: statusNum, clientApproved: !!inv.clientApproved, disputed: nowDisputed };
+          if (isFirstLoad || !prev) continue;
+          // Invoice paid (creator view — someone paid your invoice)
+          if (role === 'creator' && prev.status !== InvoiceStatus.FullyPaid && inv.status === InvoiceStatus.FullyPaid) {
+            addNotificationRef.current({ type: 'success', title: 'Invoice paid', message: `#${id}` });
+          }
+          // Release approved (creator view — client approved release)
+          if (role === 'creator' && !prev.clientApproved && !!inv.clientApproved) {
+            addNotificationRef.current({ type: 'success', title: 'Release approved', message: `#${id}` });
+          }
+          // Dispute raised (either role)
+          if (!prev.disputed && nowDisputed) {
+            addNotificationRef.current({ type: 'warning', title: 'Dispute raised', message: `#${id}` });
+          }
+        }
+      };
+
       if (creatorResult.success && creatorResult.data) {
         const all = sort(creatorResult.data);
+        checkAndNotify(all, 'creator');
         setSentInvoices(all);
         setReceivedInvoices(all.filter(i =>
           i.account.status === InvoiceStatus.PartiallyPaid ||
@@ -203,19 +264,74 @@ const Dashboard: React.FC = () => {
       }
 
       if (clientResult.success && clientResult.data) {
-        setClientInvoices(sort(clientResult.data));
+        const sorted = sort(clientResult.data);
+        checkAndNotify(sorted, 'client');
+        setClientInvoices(sorted);
       }
-    } catch {
+
+      try { localStorage.setItem(SEEN_KEY, JSON.stringify(newSeen)); } catch { /* ignore */ }
+    } catch (e) {
+      const isTimeout = e instanceof Error && e.message === 'timeout';
+      setFetchError(isTimeout
+        ? 'Could not reach Solana — check your connection and try refreshing.'
+        : 'Failed to load invoices. Try refreshing.'
+      );
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
-    } finally { setLoading(false); }
+    } finally {
+      isFetching.current = false;
+      setLoading(false);
+      hasLoadedOnce.current = true;
+      lastFetchedAt.current = Date.now();
+    }
   }, [sdk, connected]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {
-    const h = () => fetchAll();
+    const h = () => {
+      if (Date.now() - lastFetchedAt.current > 30_000) fetchAll();
+    };
     window.addEventListener('focus', h);
     return () => window.removeEventListener('focus', h);
   }, [fetchAll]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const fetchProfile = async () => {
+      try {
+        const token = await getAccessToken();
+        const res = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json() as { display_name: string | null; notification_email: string | null };
+          setDisplayName(data.display_name);
+          setMissingNotifEmail(!data.notification_email);
+          if (!data.display_name) setShowNamePrompt(true);
+          return;
+        }
+      } catch { /* non-blocking */ }
+      // API unavailable or errored — still show the prompt
+      setShowNamePrompt(true);
+    };
+    fetchProfile();
+  }, [authenticated, getAccessToken]);
+
+  const handleSaveName = async () => {
+    if (!nameInput.trim()) { setShowNamePrompt(false); return; }
+    setSavingName(true);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ display_name: nameInput.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { display_name: string | null };
+        setDisplayName(data.display_name);
+        setShowNamePrompt(false);
+        toast({ title: 'Name saved' });
+      }
+    } catch { /* non-blocking */ } finally { setSavingName(false); }
+  };
 
   // ============================================================
   // HELPERS — preserved exactly
@@ -249,8 +365,8 @@ const Dashboard: React.FC = () => {
 
   const formatStat = (usdc: number, sol: number) => {
     const lines = [];
-    if (usdc > 0) lines.push(usdc.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USDC');
-    if (sol > 0) lines.push(sol.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' SOL');
+    if (usdc > 0) lines.push(parseFloat(usdc.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' USDC');
+    if (sol > 0) lines.push(parseFloat(sol.toFixed(4)).toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' SOL');
     return lines.length > 0 ? lines : ['—'];
   };
 
@@ -284,22 +400,25 @@ const Dashboard: React.FC = () => {
       const result = await sdk.requestRelease(inv.invoiceId, inv.tokenType);
       if (result.success) {
         try {
+          const token = await getAccessToken();
           await fetch('/api/notify-client', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
-              clientEmail: inv.clientEmail,
               creatorWallet: publicKey.toBase58(),
               amount: formatAmount(inv.amountPaid, inv.tokenType),
-              description: inv.description || '',
+              senderName: displayName || undefined,
               invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey.toBase58()}`,
             }),
           });
         } catch { /* non-blocking */ }
         toast({ title: 'Release requested', description: 'Client notified by email.' });
         addNotification({ type: 'info', title: 'Release Requested', message: `7-day window started for ${inv.invoiceId}.` });
-        await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Request failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -332,7 +451,7 @@ const Dashboard: React.FC = () => {
         const decimals = releaseModal.tokenType === TokenType.USDC ? 2 : 4;
         const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
         addNotification({ type: 'success', title: 'Funds Released', message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}` });
-        await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Release failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -359,7 +478,7 @@ const Dashboard: React.FC = () => {
       if (result.success) {
         toast({ title: 'Release approved' });
         addNotification({ type: 'success', title: 'Release Approved', message: `You approved release for ${inv.invoiceId}.` });
-        await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Approval failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -376,7 +495,7 @@ const Dashboard: React.FC = () => {
       if (result.success) {
         toast({ title: 'Dispute raised', description: 'Funds frozen. Mediator will review.' });
         addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
-        await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -895,7 +1014,7 @@ const Dashboard: React.FC = () => {
               lineHeight: 1.2,
             }}
           >
-            Dashboard
+            {displayName ? `Hey, ${displayName}` : 'Dashboard'}
           </h1>
           {publicKey && (
             <Link
@@ -919,6 +1038,102 @@ const Dashboard: React.FC = () => {
                 style={{ color: '#64748B', marginTop: '4px' }}
               />
             </Link>
+          )}
+
+          {/* First-login display name prompt */}
+          {showNamePrompt && (
+            <div
+              className="flex items-center gap-2 mt-3"
+              style={{ flexWrap: 'wrap' }}
+            >
+              <input
+                type="text"
+                placeholder="Add a display name…"
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setShowNamePrompt(false); }}
+                style={{
+                  backgroundColor: '#1C2128',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: '#F8FAFC',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '13px',
+                  padding: '6px 12px',
+                  outline: 'none',
+                  width: '180px',
+                }}
+              />
+              <button
+                onClick={handleSaveName}
+                disabled={savingName || !nameInput.trim()}
+                style={{
+                  backgroundColor: '#2DD4BF',
+                  color: '#0D1117',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  opacity: savingName || !nameInput.trim() ? 0.5 : 1,
+                }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setShowNamePrompt(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748B',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  padding: '6px 4px',
+                }}
+              >
+                Skip
+              </button>
+            </div>
+          )}
+
+          {/* Missing notification email nudge */}
+          {missingNotifEmail && !showNamePrompt && (
+            <div
+              className="flex items-center gap-2 mt-3"
+              style={{
+                backgroundColor: 'rgba(45,212,191,0.06)',
+                border: '1px solid rgba(45,212,191,0.15)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', flex: 1 }}>
+                Add a notification email to get alerts when clients pay or dispute.
+              </span>
+              <a
+                href="/settings"
+                style={{
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#2DD4BF',
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Go to Settings →
+              </a>
+              <button
+                onClick={() => setMissingNotifEmail(false)}
+                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: '0 4px', fontSize: '14px' }}
+              >
+                ✕
+              </button>
+            </div>
           )}
         </div>
 
@@ -1016,6 +1231,29 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Error banner */}
+      {fetchError && !loading && (
+        <div
+          className="flex items-center gap-3 rounded-xl px-4 py-3 mb-2"
+          style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
+        >
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" style={{ color: '#F59E0B' }} />
+          <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', flex: 1 }}>
+            {fetchError}
+          </p>
+          <button
+            onClick={() => { lastFetchedAt.current = 0; fetchAll(); }}
+            style={{
+              fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 600,
+              color: '#F59E0B', background: 'none', border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Role tabs */}
       <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as 'sent' | 'received' | 'client')}>
         <TabsList style={tabListStyle}>
@@ -1074,7 +1312,7 @@ const Dashboard: React.FC = () => {
               {sentStats.disputed > 0 && <TabsTrigger value="disputed" style={tabTriggerStyle(sentFilter === 'disputed')}>Disputed ({sentStats.disputed})</TabsTrigger>}
             </TabsList>
             <TabsContent value={sentFilter} className="mt-3">
-              {loading ? (
+              {loading && !hasLoadedOnce.current ? (
                 <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
               ) : filteredSent.length === 0 ? (
                 <EmptyState message="No invoices yet." showCreate />
@@ -1115,7 +1353,7 @@ const Dashboard: React.FC = () => {
               {receivedStats.disputed > 0 && <TabsTrigger value="disputed" style={tabTriggerStyle(receivedFilter === 'disputed')}>Disputed ({receivedStats.disputed})</TabsTrigger>}
             </TabsList>
             <TabsContent value={receivedFilter} className="mt-3">
-              {loading ? (
+              {loading && !hasLoadedOnce.current ? (
                 <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
               ) : filteredReceived.length === 0 ? (
                 <EmptyState message="No paid invoices yet. Once a client pays, it appears here." />
@@ -1184,7 +1422,7 @@ const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {loading ? (
+          {loading && !hasLoadedOnce.current ? (
             <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
           ) : clientSection === 'action' ? (
             awaitingAction.length === 0 ? (

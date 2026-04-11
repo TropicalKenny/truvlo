@@ -1,14 +1,38 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { usePrivy } from '@privy-io/react-auth';
 import { Lock, ArrowRight } from 'lucide-react';
 
+const CYCLING_WORDS = ['actually', 'always', 'finally', 'really'];
+
 const Hero: React.FC = () => {
+  const { authenticated, login } = usePrivy();
+  const navigate = useNavigate();
+  const [wordIndex, setWordIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  const handleCTA = (path: string) => {
+    if (authenticated) navigate(path);
+    else login();
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setWordIndex((i) => (i + 1) % CYCLING_WORDS.length);
+        setVisible(true);
+      }, 200);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <section
-      className="relative overflow-hidden"
+      className="relative overflow-hidden min-h-screen flex items-center"
       style={{ backgroundColor: '#0D1117' }}
     >
-      {/* Subtle grid texture — not decorative, just depth */}
+      {/* Subtle grid texture */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -18,7 +42,7 @@ const Hero: React.FC = () => {
         }}
       />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-16 md:pt-16 md:pb-24">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 w-full">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12 md:gap-8 items-center">
 
           {/* Left — text (7/12) */}
@@ -41,7 +65,7 @@ const Hero: React.FC = () => {
               />
             </div>
 
-            {/* Headline — ONE italic word */}
+            {/* Headline — cycling italic word */}
             <h1
               className="text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.05] tracking-tight"
               style={{
@@ -53,10 +77,16 @@ const Hero: React.FC = () => {
             >
               Invoices your clients{' '}
               <em
-                className="not-italic"
-                style={{ fontStyle: 'italic', color: '#F8FAFC' }}
+                style={{
+                  fontStyle: 'italic',
+                  color: '#F8FAFC',
+                  display: 'inline-block',
+                  opacity: visible ? 1 : 0,
+                  transform: visible ? 'translateY(0)' : 'translateY(4px)',
+                  transition: 'opacity 200ms ease, transform 200ms ease',
+                }}
               >
-                actually
+                {CYCLING_WORDS[wordIndex]}
               </em>{' '}
               pay.
             </h1>
@@ -76,9 +106,9 @@ const Hero: React.FC = () => {
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 pt-1">
-              <Link
-                to="/create"
-                className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-opacity duration-150 hover:opacity-90"
+              <button
+                onClick={() => handleCTA('/create')}
+                className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-90"
                 style={{
                   backgroundColor: '#2DD4BF',
                   color: '#0D1117',
@@ -86,14 +116,15 @@ const Hero: React.FC = () => {
                   fontWeight: 500,
                   fontSize: '15px',
                   padding: '13px 28px',
-                  textDecoration: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 Create Invoice
                 <ArrowRight size={16} />
-              </Link>
-              <Link
-                to="/dashboard"
+              </button>
+              <button
+                onClick={() => handleCTA('/dashboard')}
                 className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-80"
                 style={{
                   backgroundColor: 'transparent',
@@ -103,14 +134,14 @@ const Hero: React.FC = () => {
                   fontWeight: 500,
                   fontSize: '15px',
                   padding: '13px 28px',
-                  textDecoration: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 Open Dashboard
-              </Link>
+              </button>
             </div>
 
-            {/* Trust signal */}
+            {/* Trust signals */}
             <div className="flex items-center gap-6 pt-2">
               {[
                 { label: 'On-chain escrow', icon: '🔒' },
@@ -133,14 +164,13 @@ const Hero: React.FC = () => {
             </div>
           </div>
 
-          {/* Right — invoice card mockup (5/12) — GRID BREAK ELEMENT */}
+          {/* Right — invoice card mockup (5/12) */}
           <div className="md:col-span-5 flex items-center justify-center md:justify-end">
             <div
               className="relative w-full max-w-sm rounded-xl p-7"
               style={{
                 backgroundColor: '#161B22',
                 border: '1px solid rgba(255,255,255,0.08)',
-                // Slight upward offset — the grid break
                 marginTop: '-24px',
               }}
             >
@@ -157,7 +187,6 @@ const Hero: React.FC = () => {
                   >
                     Invoice Amount
                   </p>
-                  {/* THE DOMINANT ELEMENT — 3.5rem, nothing competes */}
                   <p
                     style={{
                       fontFamily: '"Space Grotesk", sans-serif',
@@ -174,7 +203,6 @@ const Hero: React.FC = () => {
                     </span>
                   </p>
                 </div>
-                {/* Lock icon — teal, occurrence 1 of 3 */}
                 <div
                   className="w-11 h-11 rounded-lg flex items-center justify-center"
                   style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}
@@ -194,15 +222,6 @@ const Hero: React.FC = () => {
                   }}
                 >
                   In Escrow
-                </span>
-                <span
-                  className="text-xs"
-                  style={{
-                    color: '#64748B',
-                    fontFamily: '"DM Sans", sans-serif',
-                  }}
-                >
-                  Mar 19, 2026
                 </span>
               </div>
 

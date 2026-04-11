@@ -1,42 +1,45 @@
 import React from 'react';
-import { Shield, Users, AlertTriangle, Coins } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { usePrivy } from '@privy-io/react-auth';
+import { Shield, Users, AlertTriangle, Coins, Clock, Star } from 'lucide-react';
 
 const features = [
   {
     icon: Shield,
-    title: 'On-chain escrow',
-    body: "Funds leave your client's wallet when they pay. They sit in a smart contract — not our bank account — until you're both satisfied. No intermediaries. No trust required.",
-    stat: '100%',
-    statLabel: 'non-custodial',
-    flip: false,
+    title: 'Escrow protection',
+    body: "Funds leave your client's wallet when they pay. They sit in a smart contract — not our bank account — until both sides are satisfied. No intermediaries.",
   },
   {
     icon: Users,
     title: 'Dual approval',
-    body: "You request release. Client approves. Neither side can move funds unilaterally. A 7-day timeout protects you if the client goes dark — funds auto-release after the window.",
-    stat: '7 days',
-    statLabel: 'auto-release window',
-    flip: true,
-  },
-  {
-    icon: AlertTriangle,
-    title: 'Dispute protection',
-    body: 'Something wrong? Raise a dispute. Funds freeze instantly. A mediator reviews the evidence and resolves — on-chain and transparent. No emails to ignore, no ghosting.',
-    stat: '0',
-    statLabel: 'funds lost to disputes',
-    flip: false,
+    body: 'You request release. Client approves. Neither side can move funds unilaterally. A 7-day timeout auto-releases funds if the client goes dark.',
   },
   {
     icon: Coins,
-    title: 'USDC + SOL',
-    body: 'Invoice in USDC for stable value. Accept SOL for speed. Platform fee is 1% above $200 — flat $2 below. You receive exactly what the invoice says. No surprises.',
-    stat: '1%',
-    statLabel: 'platform fee above $200',
-    flip: true,
+    title: 'Tiered fees',
+    body: 'Flat $2 below $200. 1% above. No hidden charges. You receive exactly what the invoice says — no surprises at payout.',
+  },
+  {
+    icon: AlertTriangle,
+    title: 'Dispute resolution',
+    body: 'Something wrong? Raise a dispute. Funds freeze instantly. A mediator reviews evidence and resolves on-chain. Transparent and final.',
+  },
+  {
+    icon: Clock,
+    title: 'Release schedule',
+    body: 'Break projects into milestones. Each milestone has its own escrow. Release funds incrementally as deliverables are approved.',
+  },
+  {
+    icon: Star,
+    title: 'Reputation',
+    body: 'Every completed invoice builds your on-chain reputation score. Verified track record follows your wallet across every client.',
   },
 ];
 
 const Features: React.FC = () => {
+  const { authenticated, login } = usePrivy();
+  const navigate = useNavigate();
+
   return (
     <section
       className="py-24"
@@ -44,7 +47,7 @@ const Features: React.FC = () => {
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         {/* Heading */}
-        <div className="mb-20">
+        <div className="mb-16">
           <h2
             className="text-3xl md:text-4xl"
             style={{
@@ -67,87 +70,47 @@ const Features: React.FC = () => {
           </p>
         </div>
 
-        {/* Feature rows */}
-        <div className="space-y-16">
-          {features.map((feature, i) => {
+        {/* 3-column feature grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {features.map((feature) => {
             const Icon = feature.icon;
             return (
               <div
                 key={feature.title}
-                className={`grid grid-cols-1 md:grid-cols-2 gap-10 items-center ${
-                  feature.flip ? 'md:[&>*:first-child]:order-last' : ''
-                }`}
-                // GRID BREAK: Feature 1 has deliberate heavy top padding
-                style={i === 0 ? { paddingTop: '8px' } : undefined}
+                className="rounded-xl p-6 flex flex-col gap-4 transition-transform duration-150 hover:-translate-y-0.5"
+                style={{
+                  backgroundColor: '#161B22',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '12px',
+                }}
               >
-                {/* Text side */}
                 <div
-                  className="flex flex-col gap-5"
-                  // LAYOUT BREAK on first feature: heavy top, light bottom
-                  style={i === 0 ? { paddingTop: '40px', paddingBottom: '8px' } : undefined}
+                  className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}
-                    >
-                      <Icon size={18} style={{ color: '#2DD4BF' }} />
-                    </div>
-                    <h3
-                      style={{
-                        fontFamily: '"Space Grotesk", sans-serif',
-                        fontWeight: 500,
-                        fontSize: '1.125rem',
-                        color: '#F8FAFC',
-                      }}
-                    >
-                      {feature.title}
-                    </h3>
-                  </div>
-
-                  <p
-                    className="text-base leading-relaxed"
-                    style={{
-                      color: '#94A3B8',
-                      fontFamily: '"DM Sans", sans-serif',
-                    }}
-                  >
-                    {feature.body}
-                  </p>
+                  <Icon size={18} style={{ color: '#2DD4BF' }} />
                 </div>
 
-                {/* Visual side — dark stat card */}
-                <div
-                  className="rounded-xl p-8 flex flex-col gap-2"
+                <h3
                   style={{
-                    backgroundColor: '#161B22',
-                    border: '1px solid rgba(255,255,255,0.07)',
-                    borderLeft: '4px solid rgba(45,212,191,0.3)',
+                    fontFamily: '"Space Grotesk", sans-serif',
+                    fontWeight: 500,
+                    fontSize: '1.0625rem',
+                    color: '#F8FAFC',
                   }}
                 >
-                  <p
-                    style={{
-                      fontFamily: '"Space Grotesk", sans-serif',
-                      fontWeight: 700,
-                      fontSize: '3.5rem',
-                      color: '#F8FAFC',
-                      letterSpacing: '-0.03em',
-                      lineHeight: 1,
-                    }}
-                  >
-                    {feature.stat}
-                  </p>
-                  <p
-                    className="text-sm uppercase tracking-widest"
-                    style={{
-                      color: '#64748B',
-                      fontFamily: '"DM Sans", sans-serif',
-                      letterSpacing: '0.08em',
-                    }}
-                  >
-                    {feature.statLabel}
-                  </p>
-                </div>
+                  {feature.title}
+                </h3>
+
+                <p
+                  className="text-sm leading-relaxed"
+                  style={{
+                    color: '#94A3B8',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                >
+                  {feature.body}
+                </p>
               </div>
             );
           })}
@@ -155,10 +118,11 @@ const Features: React.FC = () => {
 
         {/* Bottom CTA */}
         <div
-          className="mt-24 rounded-xl p-10 text-center"
+          className="mt-16 rounded-xl p-10 text-center"
           style={{
             backgroundColor: '#161B22',
             border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '12px',
           }}
         >
           <h3
@@ -179,10 +143,10 @@ const Features: React.FC = () => {
               fontFamily: '"DM Sans", sans-serif',
             }}
           >
-            Connect your wallet and create your first escrow invoice in under a minute.
+            Log in and create your first escrow invoice in under a minute.
           </p>
-          <a
-            href="/create"
+          <button
+            onClick={() => authenticated ? navigate('/create') : login()}
             className="inline-flex items-center justify-center rounded-lg font-medium transition-opacity duration-150 hover:opacity-90"
             style={{
               backgroundColor: '#2DD4BF',
@@ -191,11 +155,13 @@ const Features: React.FC = () => {
               fontWeight: 500,
               fontSize: '15px',
               padding: '13px 32px',
-              textDecoration: 'none',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
             }}
           >
             Create Invoice — it's free
-          </a>
+          </button>
         </div>
       </div>
     </section>

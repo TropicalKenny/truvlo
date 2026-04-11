@@ -4,7 +4,7 @@
  * Supports: USDC, SOL, Platform Fees, Milestone Payments
  */
 
-import { BN, Program, Provider, Idl, BorshCoder } from "@coral-xyz/anchor";
+import { BN, Program, Provider, Idl, BorshCoder, utils } from "@coral-xyz/anchor";
 import { 
   ASSOCIATED_TOKEN_PROGRAM_ID, 
   TOKEN_PROGRAM_ID, 
@@ -18,6 +18,15 @@ import IDL from "../idl/workspace.json";
 
 // Program ID from the deployed contract
 const PROGRAM_ID = new PublicKey(IDL.address || "12mH9wkUUvyQmhqD9A6gJzLGxEUCTZCCuddK6W9EbG2w");
+
+// Anchor discriminator for Invoice accounts — sha256("account:Invoice")[0..8]
+// Source: workspace.json accounts[0].discriminator
+const INVOICE_DISCRIMINATOR = Buffer.from([51, 194, 250, 114, 6, 104, 18, 164]);
+
+// Minimum byte length of a valid new-schema Invoice account.
+// Old devnet PDAs share the same discriminator but have a different field layout and will
+// fail Borsh decode; filtering them out by size avoids unnecessary decode attempts.
+const MIN_INVOICE_BYTES = 100;
 
 // Token Mints
 export const USDC_MINT_DEVNET = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
@@ -158,6 +167,15 @@ export class EscrowPaySDK {
     return this.initialized;
   }
 
+  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`rpc_timeout_${ms}`)), ms)
+      ),
+    ]);
+  }
+
   getInitError(): string | null {
     return this.initError;
   }
@@ -166,11 +184,11 @@ export class EscrowPaySDK {
     if (!this.coder) return null;
     try {
       return this.coder.accounts.decode('Invoice', data);
-    } catch (e) {
+    } catch {
       try {
         return this.coder.accounts.decode('invoice', data);
       } catch {
-        console.error('Failed to decode invoice account:', e);
+        // Old-schema accounts on devnet are expected to fail — skip silently
         return null;
       }
     }
@@ -180,20 +198,24 @@ export class EscrowPaySDK {
     if (!raw) return null;
     
     try {
+      // Anchor preserves IDL variant name casing, so check both PascalCase (IDL) and camelCase (older)
       let tokenType = TokenType.USDC;
-      if (raw.tokenType?.sol !== undefined || raw.token_type?.sol !== undefined) {
+      const tt = raw.tokenType ?? raw.token_type;
+      if (typeof tt === 'number' || typeof tt === 'bigint') {
+        tokenType = Number(tt) === 1 ? TokenType.SOL : TokenType.USDC;
+      } else if (tt?.SOL !== undefined || tt?.sol !== undefined) {
         tokenType = TokenType.SOL;
       }
 
       let status = InvoiceStatus.Unpaid;
       const rawStatus = raw.status || {};
-      if (rawStatus.partiallyPaid !== undefined || rawStatus.partially_paid !== undefined) {
+      if (rawStatus.PartiallyPaid !== undefined || rawStatus.partiallyPaid !== undefined || rawStatus.partially_paid !== undefined) {
         status = InvoiceStatus.PartiallyPaid;
-      } else if (rawStatus.fullyPaid !== undefined || rawStatus.fully_paid !== undefined) {
+      } else if (rawStatus.FullyPaid !== undefined || rawStatus.fullyPaid !== undefined || rawStatus.fully_paid !== undefined) {
         status = InvoiceStatus.FullyPaid;
-      } else if (rawStatus.released !== undefined) {
+      } else if (rawStatus.Released !== undefined || rawStatus.released !== undefined) {
         status = InvoiceStatus.Released;
-      } else if (rawStatus.disputed !== undefined) {
+      } else if (rawStatus.Disputed !== undefined || rawStatus.disputed !== undefined) {
         status = InvoiceStatus.Disputed;
       }
 
@@ -288,7 +310,13 @@ export class EscrowPaySDK {
   private async testConnection(): Promise<boolean> {
     try {
       if (!this.provider?.connection) return false;
-      const { value } = await this.provider.connection.getLatestBlockhashAndContext('finalized');
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('connection timeout')), 5_000)
+      );
+      const { value } = await Promise.race([
+        this.provider.connection.getLatestBlockhashAndContext('finalized'),
+        timeout,
+      ]);
       return !!(value && value.blockhash);
     } catch {
       return false;
@@ -434,8 +462,9 @@ export class EscrowPaySDK {
       if (!(await this.testConnection())) {
         return { success: false, error: "Network unavailable" };
       }
-      if (!params.invoiceId?.trim() || params.invoiceId.length > 32) {
-        return { success: false, error: "Invalid invoice ID" };
+      const trimmedId = params.invoiceId?.trim() ?? '';
+      if (!trimmedId || trimmedId.length > 32 || !/^[a-zA-Z0-9_-]+$/.test(trimmedId)) {
+        return { success: false, error: "Invoice ID must be 1–32 characters (letters, numbers, hyphens, underscores only)" };
       }
       if (params.amount <= 0) {
         return { success: false, error: "Amount must be greater than 0" };
@@ -705,8 +734,10 @@ export class EscrowPaySDK {
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
-          const allInvoices = await invoiceAccessor.all();
-          if (allInvoices?.length) {
+          // No RPC-level creator filter: invoice_id is variable-length (Borsh string) and sits
+          // between escrow_bump and creator, so creator has no fixed byte offset. Filter client-side.
+          const allInvoices = await this.withTimeout(invoiceAccessor.all(), 8_000);
+          if (Array.isArray(allInvoices)) {
             const filtered = allInvoices.filter((inv: any) => {
               try {
                 return inv?.account?.creator?.toString() === targetCreator.toString();
@@ -725,27 +756,26 @@ export class EscrowPaySDK {
 
       const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
         filters: [
-          {
-            memcmp: {
-              offset: 10,
-              bytes: targetCreator.toBase58(),
-            },
-          },
+          { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
         ],
       });
 
       if (!accounts?.length) return { success: true, data: [] };
 
-      const mapped = accounts.map((acc) => {
-        try {
-          const decoded = this.decodeInvoiceAccount(acc.account.data);
-          const parsed = this.parseInvoiceData(decoded);
-          if (parsed) return { publicKey: acc.pubkey, account: parsed };
-        } catch (e) {
-          console.error('Failed to decode account:', e);
-        }
-        return null;
-      }).filter((inv): inv is { publicKey: PublicKey; account: InvoiceData } => inv !== null);
+      const targetCreatorStr = targetCreator.toBase58();
+      const mapped = accounts
+        .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
+        .map((acc) => {
+          try {
+            const decoded = this.decodeInvoiceAccount(acc.account.data);
+            const parsed = this.parseInvoiceData(decoded);
+            if (parsed && parsed.creator?.toString() === targetCreatorStr)
+              return { publicKey: acc.pubkey, account: parsed };
+          } catch (e) {
+            console.error('Failed to decode account:', e);
+          }
+          return null;
+        }).filter((inv): inv is { publicKey: PublicKey; account: InvoiceData } => inv !== null);
 
       return { success: true, data: mapped };
     } catch (error: any) {
@@ -770,12 +800,8 @@ export class EscrowPaySDK {
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
-          const allInvoices = await invoiceAccessor.all();
-          if (allInvoices?.length) {
-            if (allInvoices.length > 0) {
-              const sample = allInvoices[0]?.account;
-              console.log('[fetchInvoicesByClient] sample client field:', JSON.stringify(sample?.client), 'target:', targetStr);
-            }
+          const allInvoices = await this.withTimeout(invoiceAccessor.all(), 8_000);
+          if (Array.isArray(allInvoices)) {
             const filtered = allInvoices.filter((inv: any) => {
               try {
                 const clientField = inv?.account?.client;
@@ -806,19 +832,25 @@ export class EscrowPaySDK {
         console.log('Anchor fetchAll failed for client invoices, trying RPC fallback:', anchorError);
       }
 
-      const accounts = await this.provider.connection.getProgramAccounts(this.programId);
+      const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
+        filters: [
+          { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
+        ],
+      });
       if (!accounts?.length) return { success: true, data: [] };
 
-      const mapped = accounts.map((acc) => {
-        try {
-          const decoded = this.decodeInvoiceAccount(acc.account.data);
-          const parsed = this.parseInvoiceData(decoded);
-          if (!parsed) return null;
-          if (!parsed.client) return null;
-          if (parsed.client.toString() !== targetStr) return null;
-          return { publicKey: acc.pubkey, account: parsed };
-        } catch { return null; }
-      }).filter(Boolean) as Array<{ publicKey: PublicKey; account: InvoiceData }>;
+      const mapped = accounts
+        .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
+        .map((acc) => {
+          try {
+            const decoded = this.decodeInvoiceAccount(acc.account.data);
+            const parsed = this.parseInvoiceData(decoded);
+            if (!parsed) return null;
+            if (!parsed.client) return null;
+            if (parsed.client.toString() !== targetStr) return null;
+            return { publicKey: acc.pubkey, account: parsed };
+          } catch { return null; }
+        }).filter(Boolean) as Array<{ publicKey: PublicKey; account: InvoiceData }>;
 
       return { success: true, data: mapped };
     } catch (error: any) {
@@ -836,7 +868,10 @@ export class EscrowPaySDK {
       const data = await res.json();
       const price = data?.parsed?.[0]?.price;
       if (!price) return null;
-      return parseFloat(price.price) * Math.pow(10, price.expo);
+      const computed = parseFloat(price.price) * Math.pow(10, price.expo);
+      // Reject unrealistic or malformed prices (SOL realistically $0.10–$100,000)
+      if (!isFinite(computed) || computed < 0.10 || computed > 100_000) return null;
+      return computed;
     } catch {
       return null;
     }

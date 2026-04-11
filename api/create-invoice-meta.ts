@@ -42,7 +42,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  // 3. Write to Supabase invoice_meta
+  // 3. Look up creator's notification_email from their profile
+  let creatorEmail: string | null = null;
+  try {
+    const claims = await privy.verifyAuthToken(token);
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('notification_email')
+      .eq('privy_id', claims.userId)
+      .maybeSingle();
+    creatorEmail = profile?.notification_email ?? null;
+  } catch { /* non-blocking */ }
+
+  // 4. Write to Supabase invoice_meta
   const { error: dbError } = await supabase.from('invoice_meta').insert({
     invoice_id: invoiceId,
     creator_wallet: creatorWallet,
@@ -53,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     amount,
     invoice_url: invoiceUrl,
     email_sent: false,
+    creator_email: creatorEmail,
   });
 
   if (dbError) {

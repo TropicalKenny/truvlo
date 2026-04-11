@@ -70,6 +70,7 @@ const ProfileSettingsPage: React.FC = () => {
       return;
     }
     if (!ready || !authenticated) return;
+    const safetyTimer = setTimeout(() => setLoading(false), 8000);
     (async () => {
       try {
         const token = await getAccessToken();
@@ -83,6 +84,7 @@ const ProfileSettingsPage: React.FC = () => {
           setNotificationEmail(data.notification_email ?? '');
         }
       } catch { /* non-blocking */ } finally {
+        clearTimeout(safetyTimer);
         setLoading(false);
       }
     })();

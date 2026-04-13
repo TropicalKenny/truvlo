@@ -51,7 +51,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .maybeSingle()
     : { data: null };
 
-  const creatorEmail = profile?.email;
+  console.log('walletRow:', JSON.stringify(walletRow));
+console.log('profile:', JSON.stringify(profile));
+console.log('creatorEmail:', profile?.email);
+const creatorEmail = profile?.email;
   if (!creatorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(creatorEmail)) {
     // No email on record — not an error, just skip silently
     return res.status(200).json({ success: true, skipped: true });

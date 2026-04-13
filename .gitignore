@@ -70,3 +70,4 @@ CODEBASE_TEACHER.md
 .agents
 .claude
 .vercel
+.env*.local

@@ -102,13 +102,9 @@ const Dashboard: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
   const { activeWallet: privyWallet } = useActiveWallet();
-  // Stable refs to avoid re-render loops from unstable object references
   const privyWalletRef = useRef(privyWallet);
   privyWalletRef.current = privyWallet;
   const walletAddress = privyWallet?.address ?? null;
-  // useMemo ensures publicKey reference is stable across re-renders (same address → same object)
-  // Without this, `new PublicKey(addr)` on every render causes sdk → fetchAll → useEffect to
-  // retrigger after every setLoading(false), creating an infinite spin loop.
   const publicKey = useMemo(() => walletAddress ? new PublicKey(walletAddress) : null, [walletAddress]);
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
@@ -197,7 +193,7 @@ const Dashboard: React.FC = () => {
   const isFetching = useRef(false);
 
   const fetchAll = useCallback(async () => {
-    if (isFetching.current) return; // Prevent overlapping fetches
+    if (isFetching.current) return;
     if (!sdk || !connected || !sdk.isInitialized()) {
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]); setLoading(false); return;
     }
@@ -220,7 +216,6 @@ const Dashboard: React.FC = () => {
           return bt - at;
         });
 
-      // Load last-seen state for change-based notifications
       type SeenEntry = { status: number; clientApproved: boolean; disputed: boolean };
       const SEEN_KEY = 'truvlo_seen_invoices';
       let seen: Record<string, SeenEntry> = {};
@@ -236,15 +231,12 @@ const Dashboard: React.FC = () => {
           const nowDisputed = !!inv.disputeRaisedAt;
           newSeen[id] = { status: statusNum, clientApproved: !!inv.clientApproved, disputed: nowDisputed };
           if (isFirstLoad || !prev) continue;
-          // Invoice paid (creator view — someone paid your invoice)
           if (role === 'creator' && prev.status !== InvoiceStatus.FullyPaid && inv.status === InvoiceStatus.FullyPaid) {
             addNotificationRef.current({ type: 'success', title: 'Invoice paid', message: `#${id}` });
           }
-          // Release approved (creator view — client approved release)
           if (role === 'creator' && !prev.clientApproved && !!inv.clientApproved) {
             addNotificationRef.current({ type: 'success', title: 'Release approved', message: `#${id}` });
           }
-          // Dispute raised (either role)
           if (!prev.disputed && nowDisputed) {
             addNotificationRef.current({ type: 'warning', title: 'Dispute raised', message: `#${id}` });
           }
@@ -308,7 +300,6 @@ const Dashboard: React.FC = () => {
           return;
         }
       } catch { /* non-blocking */ }
-      // API unavailable or errored — still show the prompt
       setShowNamePrompt(true);
     };
     fetchProfile();
@@ -334,7 +325,7 @@ const Dashboard: React.FC = () => {
   };
 
   // ============================================================
-  // HELPERS — preserved exactly
+  // HELPERS
   // ============================================================
 
   const fromSmallestUnit = (amount: any, tokenType: TokenType) => {
@@ -390,7 +381,7 @@ const Dashboard: React.FC = () => {
   const truncateWallet = (pk: string) => `${pk.slice(0, 4)}...${pk.slice(-4)}`;
 
   // ============================================================
-  // CREATOR ACTIONS — preserved exactly
+  // CREATOR ACTIONS
   // ============================================================
 
   const handleRequestRelease = async (inv: InvoiceData) => {
@@ -481,7 +472,6 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.approveRelease(inv.invoiceId, inv.creator);
       if (result.success) {
-        // Notify the creator by email that their release request was approved
         try {
           const token = await getAccessToken();
           await fetch('/api/notify-creator', {
@@ -497,7 +487,7 @@ const Dashboard: React.FC = () => {
               amount: formatAmount(inv.amountPaid, inv.tokenType),
             }),
           });
-        } catch { /* non-blocking — email failure must never break the TX flow */ }
+        } catch { /* non-blocking */ }
         toast({ title: 'Release approved' });
         addNotification({ type: 'success', title: 'Release Approved', message: `You approved release for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();
@@ -515,7 +505,6 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.raiseDispute(inv.invoiceId, inv.creator);
       if (result.success) {
-        // Notify the creator by email that a dispute was raised
         try {
           const token = await getAccessToken();
           await fetch('/api/notify-creator', {
@@ -531,7 +520,7 @@ const Dashboard: React.FC = () => {
               amount: formatAmount(inv.amountPaid, inv.tokenType),
             }),
           });
-        } catch { /* non-blocking — email failure must never break the TX flow */ }
+        } catch { /* non-blocking */ }
         toast({ title: 'Dispute raised', description: 'Funds frozen. Mediator will review.' });
         addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();
@@ -544,7 +533,7 @@ const Dashboard: React.FC = () => {
   };
 
   // ============================================================
-  // STATS — preserved exactly
+  // STATS
   // ============================================================
 
   const sentStats = {
@@ -1014,12 +1003,19 @@ const Dashboard: React.FC = () => {
     </div>
   );
 
-  // tab styles
+  // ============================================================
+  // TAB STYLES — MOBILE FIX: scrollable, no clipping
+  // ============================================================
+
   const tabListStyle: React.CSSProperties = {
     backgroundColor: '#1C2128',
     border: '1px solid rgba(255,255,255,0.06)',
     borderRadius: '8px',
     padding: '4px',
+    overflowX: 'auto',
+    display: 'flex',
+    flexWrap: 'nowrap',
+    width: '100%',
   };
 
   const tabTriggerStyle = (active: boolean): React.CSSProperties => ({
@@ -1032,6 +1028,8 @@ const Dashboard: React.FC = () => {
     border: active ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
     cursor: 'pointer',
     transition: 'all 150ms ease',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
   });
 
   // ============================================================
@@ -1040,8 +1038,8 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
+      {/* Page header — MOBILE FIX: stacks vertically on mobile */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
             style={{
@@ -1176,7 +1174,8 @@ const Dashboard: React.FC = () => {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* MOBILE FIX: buttons wrap on small screens */}
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Notification bell */}
           <Popover open={notifOpen} onOpenChange={handleNotifOpen}>
             <PopoverTrigger asChild>

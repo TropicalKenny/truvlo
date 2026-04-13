@@ -462,12 +462,17 @@ const Dashboard: React.FC = () => {
 
   const handleCopyLink = async (invoiceId: string) => {
     const url = `${window.location.origin}/invoice/${invoiceId}/${publicKey?.toBase58()}`;
-    try { await navigator.clipboard.writeText(url); toast({ title: 'Link copied' }); }
-    catch { toast({ title: 'Failed to copy', variant: 'destructive' }); }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: 'Link copied' });
+    } catch {
+      toast({ title: 'Failed to copy', variant: 'destructive' });
+    }
   };
 
   // ============================================================
-  // CLIENT ACTIONS — preserved exactly
+  // CLIENT ACTIONS
+  // FIX: notify creator on approve AND dispute
   // ============================================================
 
   const handleApprove = async (inv: InvoiceData) => {
@@ -476,6 +481,23 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.approveRelease(inv.invoiceId, inv.creator);
       if (result.success) {
+        // Notify the creator by email that their release request was approved
+        try {
+          const token = await getAccessToken();
+          await fetch('/api/notify-creator', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              invoiceId: inv.invoiceId,
+              creatorWallet: inv.creator.toBase58(),
+              event: 'release_approved',
+              amount: formatAmount(inv.amountPaid, inv.tokenType),
+            }),
+          });
+        } catch { /* non-blocking — email failure must never break the TX flow */ }
         toast({ title: 'Release approved' });
         addNotification({ type: 'success', title: 'Release Approved', message: `You approved release for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();
@@ -493,6 +515,23 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.raiseDispute(inv.invoiceId, inv.creator);
       if (result.success) {
+        // Notify the creator by email that a dispute was raised
+        try {
+          const token = await getAccessToken();
+          await fetch('/api/notify-creator', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              invoiceId: inv.invoiceId,
+              creatorWallet: inv.creator.toBase58(),
+              event: 'disputed',
+              amount: formatAmount(inv.amountPaid, inv.tokenType),
+            }),
+          });
+        } catch { /* non-blocking — email failure must never break the TX flow */ }
         toast({ title: 'Dispute raised', description: 'Funds frozen. Mediator will review.' });
         addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();

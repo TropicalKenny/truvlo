@@ -1,0 +1,43 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - heading "Set up your wallet" [level=2] [ref=e5]
+    - paragraph [ref=e6]: How would you like to get started?
+    - generic [ref=e7]:
+      - button "Generate a new wallet A secure wallet is created for you — no setup needed" [ref=e8] [cursor=pointer]:
+        - img [ref=e10]
+        - generic [ref=e13]:
+          - paragraph [ref=e14]: Generate a new wallet
+          - paragraph [ref=e15]: A secure wallet is created for you — no setup needed
+      - button "Import existing wallet Use your own wallet via private key or seed phrase" [ref=e16] [cursor=pointer]:
+        - img [ref=e18]
+        - generic [ref=e21]:
+          - paragraph [ref=e22]: Import existing wallet
+          - paragraph [ref=e23]: Use your own wallet via private key or seed phrase
+  - generic [ref=e24]:
+    - banner [ref=e25]:
+      - generic [ref=e26]:
+        - link "Truvlo" [ref=e27] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e28]: Truvlo
+        - navigation [ref=e29]:
+          - link "Dashboard" [ref=e30] [cursor=pointer]:
+            - /url: /dashboard
+          - link "Create Invoice" [ref=e31] [cursor=pointer]:
+            - /url: /create
+        - button "Account" [ref=e34] [cursor=pointer]:
+          - text: Account
+          - img [ref=e35]
+    - main [ref=e37]:
+      - generic [ref=e39]:
+        - img [ref=e40]
+        - paragraph [ref=e42]: Loading invoice...
+    - contentinfo [ref=e43]:
+      - generic [ref=e44]:
+        - generic [ref=e46]:
+          - generic [ref=e47]: Truvlo
+          - paragraph [ref=e48]: Escrow-protected invoicing on Solana.
+        - generic [ref=e49]:
+          - generic [ref=e50]: Built on Solana · Devnet
+          - generic [ref=e53]: Devnet
+  - region "Notifications (F8)":
+    - list

@@ -27,15 +27,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!RESEND_API_KEY) return res.status(500).json({ error: 'Email service not configured' });
 
-  // Look up creator_email from invoice_meta
+  // Look up invoice metadata (description only — creator_email does not exist in invoice_meta)
   const { data: meta } = await supabase
     .from('invoice_meta')
-    .select('creator_email, sender_name, description')
+    .select('sender_name, description')
     .eq('invoice_id', invoiceId)
     .eq('creator_wallet', creatorWallet)
     .maybeSingle();
 
-  const creatorEmail = meta?.creator_email;
+  // FIX: creator email lives in profiles, joined via profile_wallets → profiles.email
+  // invoice_meta has no creator_email column per the schema in AGENT_CONTEXT
+  const { data: walletRow } = await supabase
+    .from('profile_wallets')
+    .select('privy_id')
+    .eq('wallet_address', creatorWallet)
+    .maybeSingle();
+
+  const { data: profile } = walletRow
+    ? await supabase
+        .from('profiles')
+        .select('email')
+        .eq('privy_id', walletRow.privy_id)
+        .maybeSingle()
+    : { data: null };
+
+  const creatorEmail = profile?.email;
   if (!creatorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(creatorEmail)) {
     // No email on record — not an error, just skip silently
     return res.status(200).json({ success: true, skipped: true });

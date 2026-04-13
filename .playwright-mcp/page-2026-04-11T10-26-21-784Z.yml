@@ -1,0 +1,14 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "Truvlo" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: Truvlo
+        - navigation
+        - button "Login" [ref=e9] [cursor=pointer]
+    - generic [ref=e10]:
+      - heading "Profile Settings" [level=1] [ref=e11]
+      - paragraph [ref=e12]: Your details auto-fill when you create an invoice — you only need to enter the client's email and work description each time.
+  - region "Notifications (F8)":
+    - list

@@ -73,8 +73,8 @@ const sectionCard: React.CSSProperties = {
   backgroundColor: '#161B22',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '12px',
-  padding: '24px',
-  marginBottom: '20px',
+  padding: '20px 16px',
+  marginBottom: '16px',
 };
 
 const sectionTitle: React.CSSProperties = {
@@ -83,6 +83,7 @@ const sectionTitle: React.CSSProperties = {
   fontSize: '1rem',
   color: '#F8FAFC',
   marginBottom: '16px',
+  margin: 0,
 };
 
 function getErrorMessage(e: unknown): string {
@@ -140,7 +141,15 @@ const WalletPage: React.FC = () => {
   const [removing, setRemoving] = useState(false);
   const [showCombinedWarning, setShowCombinedWarning] = useState(false);
 
-  const publicKey = activeWallet?.address ? new PublicKey(activeWallet.address) : null;
+  // FIX: Memoize publicKey so its reference is stable across renders.
+  // Without useMemo, `new PublicKey(addr)` creates a new object on every render,
+  // causing fetchBalances (which depends on publicKey) to re-fire endlessly:
+  // fetch → setBalanceLoading(false) → re-render → new publicKey ref → new fetchBalances → fetch again.
+  const walletAddress = activeWallet?.address ?? null;
+  const publicKey = useMemo(
+    () => walletAddress ? new PublicKey(walletAddress) : null,
+    [walletAddress]
+  );
 
   // Auth guard
   useEffect(() => {
@@ -350,41 +359,51 @@ const WalletPage: React.FC = () => {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0D1117', display: 'flex', flexDirection: 'column' }}>
       <Header />
-      <main style={{ flex: 1, maxWidth: '560px', margin: '0 auto', width: '100%', padding: '40px 16px 80px' }}>
+      <main style={{ flex: 1, maxWidth: '560px', margin: '0 auto', width: '100%', padding: '32px 16px 80px' }}>
 
         {/* Page title */}
-        <div style={{ marginBottom: '28px' }}>
-          <h1 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: '#F8FAFC', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+        <div style={{ marginBottom: '24px' }}>
+          <h1 style={{
+            fontFamily: '"Space Grotesk", sans-serif',
+            fontWeight: 700,
+            fontSize: '1.625rem',
+            color: '#F8FAFC',
+            letterSpacing: '-0.02em',
+            marginBottom: '4px',
+          }}>
             Wallet
           </h1>
-          <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
+          <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '13px' }}>
             {activeWallet?.address
               ? `${activeWallet.address.slice(0, 6)}...${activeWallet.address.slice(-6)}`
               : 'No wallet connected'}
           </p>
         </div>
 
-        {/* ── Wallet Switcher ───────────────────────────────────────────────── */}
+        {/* ── Your Wallets ──────────────────────────────────────────────────── */}
         <div style={sectionCard}>
-          <p style={sectionTitle}>Your Wallets</p>
+          <p style={{ ...sectionTitle, marginBottom: '14px' }}>Your Wallets</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {allWallets.length === 0 && (
-              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B' }}>No wallets connected.</p>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B' }}>
+                No wallets connected.
+              </p>
             )}
             {allWallets.map(w => {
               const isActive = w.address === activeWallet?.address;
-              const short = `${w.address.slice(0, 4)}...${w.address.slice(-4)}`;
+              const short = `${w.address.slice(0, 6)}...${w.address.slice(-6)}`;
               return (
                 <div
                   key={w.address}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
+                    gap: '8px',
                     backgroundColor: isActive ? 'rgba(45,212,191,0.05)' : '#1C2128',
                     border: `1px solid ${isActive ? 'rgba(45,212,191,0.2)' : 'rgba(255,255,255,0.06)'}`,
                     borderRadius: '8px',
-                    padding: '10px 14px',
+                    padding: '10px 12px',
+                    minWidth: 0,
                   }}
                 >
                   {/* Status dot */}
@@ -393,8 +412,17 @@ const WalletPage: React.FC = () => {
                     backgroundColor: isActive ? '#2DD4BF' : '#334155',
                   }} />
 
-                  {/* Address */}
-                  <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '13px', color: '#F8FAFC', flex: 1 }}>
+                  {/* Address — truncated, takes remaining space */}
+                  <span style={{
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontSize: '12px',
+                    color: '#F8FAFC',
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
                     {short}
                   </span>
 
@@ -418,13 +446,13 @@ const WalletPage: React.FC = () => {
                         toast({ title: 'Wallet switched — dashboard and invoices now use this wallet' });
                       }}
                       style={{
-                        fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500,
+                        fontFamily: '"DM Sans", sans-serif', fontSize: '11px', fontWeight: 500,
                         color: '#94A3B8', backgroundColor: 'rgba(255,255,255,0.06)',
                         border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px',
-                        padding: '4px 10px', cursor: 'pointer', flexShrink: 0,
+                        padding: '3px 8px', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                       }}
                     >
-                      Set as Active
+                      Set Active
                     </button>
                   )}
 
@@ -444,7 +472,7 @@ const WalletPage: React.FC = () => {
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '2px', flexShrink: 0, display: 'flex', alignItems: 'center' }}
                       title="Remove wallet"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                     </button>
                   )}
                 </div>
@@ -453,25 +481,142 @@ const WalletPage: React.FC = () => {
           </div>
         </div>
 
+        {/* ── Balances ─────────────────────────────────────────────────────── */}
+        <div style={sectionCard}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <p style={sectionTitle}>Balances</p>
+            <button
+              onClick={fetchBalances}
+              disabled={balanceLoading}
+              style={{ background: 'none', border: 'none', cursor: balanceLoading ? 'not-allowed' : 'pointer', color: '#64748B', padding: '4px', display: 'flex', alignItems: 'center' }}
+              title="Refresh balances"
+            >
+              <RefreshCw size={14} style={{ animation: balanceLoading ? 'spin 1s linear infinite' : 'none' }} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {([
+              { label: 'SOL', value: solBalance },
+              { label: 'USDC', value: usdcBalance },
+            ] as const).map(({ label, value }) => (
+              <div key={label} style={{
+                backgroundColor: '#1C2128',
+                borderRadius: '10px',
+                padding: '16px 14px',
+                minWidth: 0,
+              }}>
+                <p style={{
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: '11px',
+                  color: '#64748B',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.07em',
+                  marginBottom: '8px',
+                }}>
+                  {label}
+                </p>
+                <p style={{
+                  fontFamily: '"Space Grotesk", sans-serif',
+                  fontWeight: 700,
+                  fontSize: '1.4rem',
+                  color: '#F8FAFC',
+                  letterSpacing: '-0.02em',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {value === null ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Receive ──────────────────────────────────────────────────────── */}
+        <div style={sectionCard}>
+          <p style={{ ...sectionTitle, marginBottom: '14px' }}>Receive</p>
+
+          {/* Address row — single line, truncated, never wraps */}
+          <div style={{
+            backgroundColor: '#1C2128',
+            borderRadius: '8px',
+            padding: '11px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '16px',
+            minWidth: 0,
+          }}>
+            <span style={{
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: '12px',
+              color: '#94A3B8',
+              flex: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {activeWallet?.address ?? '—'}
+            </span>
+            <button
+              onClick={handleCopyAddress}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: addressCopied ? '#2DD4BF' : '#64748B',
+                flexShrink: 0,
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+              title="Copy address"
+            >
+              {addressCopied ? <Check size={15} /> : <Copy size={15} />}
+            </button>
+          </div>
+
+          {/* QR Code — full card width, properly centered, white background */}
+          {publicKey && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '20px',
+              backgroundColor: '#ffffff',
+              borderRadius: '10px',
+            }}>
+              <QRCodeSVG value={publicKey.toBase58()} size={180} />
+            </div>
+          )}
+        </div>
+
         {/* ── Share Reputation ─────────────────────────────────────────────── */}
         <div style={sectionCard}>
-          <p style={sectionTitle}>Share Reputation</p>
-          <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B', marginBottom: '16px' }}>
+          <p style={{ ...sectionTitle, marginBottom: '6px' }}>Share Reputation</p>
+          <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B', marginBottom: '14px' }}>
             Send a reputation link to a client so they can verify your track record.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {/* Single wallet option */}
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
-              backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              backgroundColor: '#1C2128',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '8px',
+              padding: '12px 14px',
             }}>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '13px', color: '#F8FAFC', marginBottom: '2px' }}>
                   This wallet only
                 </p>
                 <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#64748B' }}>
-                  Share reputation for your active wallet. Client sees only this address.
+                  Reputation for your active wallet.
                 </p>
               </div>
               <button
@@ -484,6 +629,7 @@ const WalletPage: React.FC = () => {
                   border: '1px solid rgba(45,212,191,0.2)', borderRadius: '6px',
                   padding: '6px 12px', cursor: activeWallet ? 'pointer' : 'not-allowed',
                   opacity: activeWallet ? 1 : 0.5, flexShrink: 0,
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <Copy size={12} /> Copy Link
@@ -492,15 +638,21 @@ const WalletPage: React.FC = () => {
 
             {/* Combined option */}
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
-              backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              backgroundColor: '#1C2128',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '8px',
+              padding: '12px 14px',
             }}>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '13px', color: '#F8FAFC', marginBottom: '2px' }}>
                   All wallets (combined)
                 </p>
                 <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#64748B' }}>
-                  Share your full reputation across all linked wallets.
+                  Full reputation across all linked wallets.
                 </p>
               </div>
               <button
@@ -513,6 +665,7 @@ const WalletPage: React.FC = () => {
                   border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px',
                   padding: '6px 12px', cursor: profileSlug ? 'pointer' : 'not-allowed',
                   opacity: profileSlug ? 1 : 0.5, flexShrink: 0,
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <Copy size={12} /> Copy Link
@@ -521,58 +674,9 @@ const WalletPage: React.FC = () => {
           </div>
         </div>
 
-        {/* ── Balances ─────────────────────────────────────────────────────── */}
-        <div style={sectionCard}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <p style={sectionTitle}>Balances</p>
-            <button
-              onClick={fetchBalances}
-              disabled={balanceLoading}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '4px', display: 'flex', alignItems: 'center' }}
-            >
-              <RefreshCw size={14} className={balanceLoading ? 'animate-spin' : ''} />
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            {([
-              { label: 'SOL', value: solBalance },
-              { label: 'USDC', value: usdcBalance },
-            ] as const).map(({ label, value }) => (
-              <div key={label} style={{ backgroundColor: '#1C2128', borderRadius: '8px', padding: '16px' }}>
-                <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{label}</p>
-                <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.5rem', color: '#F8FAFC' }}>
-                  {value === null ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 6 })}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Receive ──────────────────────────────────────────────────────── */}
-        <div style={sectionCard}>
-          <p style={sectionTitle}>Receive</p>
-          <div style={{ backgroundColor: '#1C2128', borderRadius: '8px', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
-            <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#94A3B8', wordBreak: 'break-all', flex: 1 }}>
-              {activeWallet?.address ?? '—'}
-            </p>
-            <button
-              onClick={handleCopyAddress}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: addressCopied ? '#2DD4BF' : '#64748B', flexShrink: 0, padding: '2px' }}
-              title="Copy address"
-            >
-              {addressCopied ? <Check size={16} /> : <Copy size={16} />}
-            </button>
-          </div>
-          {publicKey && (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '16px', backgroundColor: '#fff', borderRadius: '8px', width: 'fit-content', margin: '0 auto' }}>
-              <QRCodeSVG value={publicKey.toBase58()} size={160} />
-            </div>
-          )}
-        </div>
-
         {/* ── Send ─────────────────────────────────────────────────────────── */}
         <div style={sectionCard}>
-          <p style={sectionTitle}>Send</p>
+          <p style={{ ...sectionTitle, marginBottom: '16px' }}>Send</p>
           <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
               <label style={labelStyle}>Token</label>
@@ -650,7 +754,7 @@ const WalletPage: React.FC = () => {
 
         {/* ── Import Wallet ─────────────────────────────────────────────────── */}
         <div style={sectionCard}>
-          <p style={sectionTitle}>Import Wallet</p>
+          <p style={{ ...sectionTitle, marginBottom: '6px' }}>Import Wallet</p>
           <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B', marginBottom: '16px' }}>
             Add an existing wallet to your account by importing it.
           </p>
@@ -736,13 +840,20 @@ const WalletPage: React.FC = () => {
             </button>
           </form>
         </div>
+
       </main>
       <Footer />
 
       {/* ── Remove wallet confirmation modal ──────────────────────────────── */}
       {removeModalWallet && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px' }}>
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)',
+          zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+        }}>
+          <div style={{
+            backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px',
+          }}>
             <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.1rem', color: '#F8FAFC', marginBottom: '12px' }}>
               Remove wallet?
             </p>
@@ -776,8 +887,14 @@ const WalletPage: React.FC = () => {
 
       {/* ── Combined profile privacy warning modal ────────────────────────── */}
       {showCombinedWarning && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px' }}>
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)',
+          zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+        }}>
+          <div style={{
+            backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px',
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
               <AlertTriangle size={18} style={{ color: '#F59E0B', flexShrink: 0 }} />
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1rem', color: '#F8FAFC' }}>

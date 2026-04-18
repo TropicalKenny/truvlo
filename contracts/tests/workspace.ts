@@ -38,8 +38,6 @@ describe("EscrowPay Invoice Payment Program", () => {
 
   const invoiceId = "INV-001";
   const amount = new anchor.BN(1000000); // 1 USDC (6 decimals)
-  const description = "Payment for web development services";
-  const clientEmail = "client@example.com";
 
   before(async () => {
     // Generate keypairs
@@ -132,15 +130,13 @@ describe("EscrowPay Invoice Payment Program", () => {
     );
   };
 
-
-
   describe("initialize_config (USDC Invoice)", () => {
     it("should create a USDC invoice successfully", async () => {
       const [invoicePDA] = getInvoicePDA(invoiceId, creator.publicKey);
       const [escrowPDA] = getEscrowPDA(invoiceId, creator.publicKey);
 
       await program.methods
-        .initializeConfig(invoiceId, amount, description, clientEmail)
+        .initializeConfig(invoiceId, amount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -162,8 +158,6 @@ describe("EscrowPay Invoice Payment Program", () => {
       expect(invoice.amountPaid.toString()).to.equal("0");
       expect(invoice.amountReleased.toString()).to.equal("0");
       expect(invoice.tokenType).to.deep.equal({ usdc: {} });
-      expect(invoice.description).to.equal(description);
-      expect(invoice.clientEmail).to.equal(clientEmail);
       expect(invoice.status).to.deep.equal({ unpaid: {} });
       expect(Number(invoice.createdAt)).to.be.greaterThan(0);
       expect(invoice.paidAt).to.be.null;
@@ -177,7 +171,7 @@ describe("EscrowPay Invoice Payment Program", () => {
 
       try {
         await program.methods
-          .initializeConfig(testInvoiceId, new anchor.BN(0), description, clientEmail)
+          .initializeConfig(testInvoiceId, new anchor.BN(0))
           .accounts({
             invoice: invoicePDA,
             escrow: escrowPDA,
@@ -194,32 +188,6 @@ describe("EscrowPay Invoice Payment Program", () => {
         expect(error.message).to.include("InvalidAmount");
       }
     });
-
-    it("should fail with description too long", async () => {
-      const testInvoiceId = "INV-LONG-DESC";
-      const [invoicePDA] = getInvoicePDA(testInvoiceId, creator.publicKey);
-      const [escrowPDA] = getEscrowPDA(testInvoiceId, creator.publicKey);
-      const longDescription = "a".repeat(257);
-
-      try {
-        await program.methods
-          .initializeConfig(testInvoiceId, amount, longDescription, clientEmail)
-          .accounts({
-            invoice: invoicePDA,
-            escrow: escrowPDA,
-            usdcMint: usdcMint,
-            creator: creator.publicKey,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            rent: SYSVAR_RENT_PUBKEY,
-          })
-          .signers([creator])
-          .rpc();
-        expect.fail("Should have thrown error");
-      } catch (error) {
-        expect(error.message).to.include("DescriptionTooLong");
-      }
-    });
   });
 
   describe("initialize_config_sol (SOL Invoice)", () => {
@@ -230,7 +198,7 @@ describe("EscrowPay Invoice Payment Program", () => {
       const [invoicePDA] = getInvoicePDA(solInvoiceId, creator.publicKey);
 
       await program.methods
-        .initializeConfigSol(solInvoiceId, solAmount, description, clientEmail)
+        .initializeConfigSol(solInvoiceId, solAmount)
         .accounts({
           invoice: invoicePDA,
           creator: creator.publicKey,
@@ -259,7 +227,7 @@ describe("EscrowPay Invoice Payment Program", () => {
       const [escrowPDA] = getEscrowPDA(payInvoiceId, creator.publicKey);
 
       await program.methods
-        .initializeConfig(payInvoiceId, invoiceAmount, description, clientEmail)
+        .initializeConfig(payInvoiceId, invoiceAmount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -376,7 +344,7 @@ describe("EscrowPay Invoice Payment Program", () => {
 
       // Create invoice first
       await program.methods
-        .initializeConfig(testInvoiceId, amount, description, clientEmail)
+        .initializeConfig(testInvoiceId, amount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -418,7 +386,7 @@ describe("EscrowPay Invoice Payment Program", () => {
       const [invoicePDA] = getInvoicePDA(solPayInvoiceId, creator.publicKey);
 
       await program.methods
-        .initializeConfigSol(solPayInvoiceId, solInvoiceAmount, description, clientEmail)
+        .initializeConfigSol(solPayInvoiceId, solInvoiceAmount)
         .accounts({
           invoice: invoicePDA,
           creator: creator.publicKey,
@@ -496,7 +464,7 @@ describe("EscrowPay Invoice Payment Program", () => {
 
       // Create invoice
       await program.methods
-        .initializeConfig(releaseInvoiceId, invoiceAmount, description, clientEmail)
+        .initializeConfig(releaseInvoiceId, invoiceAmount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -593,7 +561,7 @@ describe("EscrowPay Invoice Payment Program", () => {
 
       // Create and pay invoice
       await program.methods
-        .initializeConfig(testInvoiceId, amount, description, clientEmail)
+        .initializeConfig(testInvoiceId, amount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -650,7 +618,7 @@ describe("EscrowPay Invoice Payment Program", () => {
 
       // Create and pay invoice
       await program.methods
-        .initializeConfig(testInvoiceId, amount, description, clientEmail)
+        .initializeConfig(testInvoiceId, amount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -710,7 +678,7 @@ describe("EscrowPay Invoice Payment Program", () => {
 
       // Create SOL invoice
       await program.methods
-        .initializeConfigSol(solReleaseInvoiceId, solInvoiceAmount, description, clientEmail)
+        .initializeConfigSol(solReleaseInvoiceId, solInvoiceAmount)
         .accounts({
           invoice: invoicePDA,
           creator: creator.publicKey,
@@ -788,7 +756,7 @@ describe("EscrowPay Invoice Payment Program", () => {
 
       // Create USDC invoice
       await program.methods
-        .initializeConfig(testInvoiceId, amount, description, clientEmail)
+        .initializeConfig(testInvoiceId, amount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -825,7 +793,7 @@ describe("EscrowPay Invoice Payment Program", () => {
 
       // Create SOL invoice
       await program.methods
-        .initializeConfigSol(testInvoiceId, new anchor.BN(LAMPORTS_PER_SOL), description, clientEmail)
+        .initializeConfigSol(testInvoiceId, new anchor.BN(LAMPORTS_PER_SOL))
         .accounts({
           invoice: invoicePDA,
           creator: creator.publicKey,
@@ -850,8 +818,6 @@ describe("EscrowPay Invoice Payment Program", () => {
           .rpc();
         expect.fail("Should have thrown error");
       } catch (error) {
-        // The error will be about escrow account not existing (different seeds)
-        // since USDC escrow uses "escrow" seed and SOL invoice doesn't create one
         expect(error.message).to.include("AccountNotInitialized");
       }
     });
@@ -867,7 +833,7 @@ describe("EscrowPay Invoice Payment Program", () => {
       const [escrowPDA] = getEscrowPDA(testInvoiceId, creator.publicKey);
 
       await program.methods
-        .initializeConfig(testInvoiceId, testAmount, description, clientEmail)
+        .initializeConfig(testInvoiceId, testAmount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -912,7 +878,7 @@ describe("EscrowPay Invoice Payment Program", () => {
       const [escrowPDA] = getEscrowPDA(testInvoiceId, creator.publicKey);
 
       await program.methods
-        .initializeConfig(testInvoiceId, minAmount, description, clientEmail)
+        .initializeConfig(testInvoiceId, minAmount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,
@@ -949,7 +915,7 @@ describe("EscrowPay Invoice Payment Program", () => {
       const [escrowPDA] = getEscrowPDA(testInvoiceId, creator.publicKey);
 
       await program.methods
-        .initializeConfig(testInvoiceId, amount, description, clientEmail)
+        .initializeConfig(testInvoiceId, amount)
         .accounts({
           invoice: invoicePDA,
           escrow: escrowPDA,

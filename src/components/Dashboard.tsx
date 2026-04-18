@@ -463,7 +463,6 @@ const Dashboard: React.FC = () => {
 
   // ============================================================
   // CLIENT ACTIONS
-  // FIX: notify creator on approve AND dispute
   // ============================================================
 
   const handleApprove = async (inv: InvoiceData) => {
@@ -696,13 +695,8 @@ const Dashboard: React.FC = () => {
             <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1.125rem', color: '#F8FAFC', marginBottom: '4px' }}>
               {formatAmount(inv.amount, inv.tokenType)}
             </p>
-            {inv.description && (
-              <p className="truncate text-sm mb-0.5" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
-                {inv.description}
-              </p>
-            )}
             <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-              {inv.clientEmail} · {formatDate(inv.createdAt)}
+              {formatDate(inv.createdAt)}
             </p>
 
             {hasSchedule && !isDisputed && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
@@ -891,11 +885,6 @@ const Dashboard: React.FC = () => {
             <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1.125rem', color: '#F8FAFC', marginBottom: '4px' }}>
               {formatAmount(inv.amount, inv.tokenType)}
             </p>
-            {inv.description && (
-              <p className="truncate text-sm mb-0.5" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
-                {inv.description}
-              </p>
-            )}
             <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
               To: <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{truncateWallet(inv.creator.toBase58())}</span> · {formatDate(inv.createdAt)}
             </p>

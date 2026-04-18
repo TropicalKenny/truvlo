@@ -9,7 +9,6 @@ import { Loader2, AlertCircle, Check, AlertTriangle, Clock } from 'lucide-react'
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
 
-// ── preserved exactly ──────────────────────────────────────────
 type PageState =
   | { type: 'loading' }
   | { type: 'error'; message: string }
@@ -26,7 +25,6 @@ function formatCountdown(seconds: number): string {
   if (hours > 0) return `${hours}h ${mins}m remaining`;
   return `${mins}m remaining`;
 }
-// ───────────────────────────────────────────────────────────────
 
 const cardStyle: React.CSSProperties = {
   maxWidth: '440px',
@@ -58,7 +56,6 @@ const ApproveRelease: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // ── preserved exactly ──────────────────────────────────────────
   const urlValid = useMemo(() => {
     if (!invoiceId || !creator) return false;
     try { new PublicKey(creator); return true; } catch { return false; }
@@ -195,7 +192,6 @@ const ApproveRelease: React.FC = () => {
       toast({ title: 'Dispute failed', description: msg, variant: 'destructive' });
     } finally { setDisputing(false); }
   };
-  // ───────────────────────────────────────────────────────────────
 
   // ── LOADING ─────────────────────────────────────────────────────
   if (pageState.type === 'loading') {
@@ -347,11 +343,11 @@ const ApproveRelease: React.FC = () => {
   const symbol = inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
   const decimals = inv.tokenType === TokenType.USDC ? 2 : 4;
   const amountWhole = Math.floor(amountValue);
-  const amountFrac = (amountValue - amountWhole).toFixed(decimals).slice(1); // ".50"
+  const amountFrac = (amountValue - amountWhole).toFixed(decimals).slice(1);
 
   return (
     <div style={cardStyle}>
-      {/* Invoice amount — dominant element (grid break: 3.5rem, nothing competes) */}
+      {/* Invoice amount */}
       <div className="mb-6">
         <p
           className="uppercase tracking-widest mb-2"
@@ -403,12 +399,6 @@ const ApproveRelease: React.FC = () => {
 
       {/* Invoice details */}
       <div className="space-y-3 mb-5">
-        {inv.description && (
-          <div>
-            <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '3px' }}>Description</p>
-            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>{inv.description}</p>
-          </div>
-        )}
         <div>
           <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '3px' }}>Invoice ID</p>
           <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#94A3B8' }}>{invoiceId}</p>
@@ -459,10 +449,9 @@ const ApproveRelease: React.FC = () => {
         </div>
       )}
 
-      {/* Action buttons — only show if not already actioned */}
+      {/* Action buttons */}
       {!alreadyApproved && !isDisputed && (
         <div className="flex flex-col gap-3">
-          {/* Connect prompt */}
           {!connected && (
             <p
               className="text-center text-sm mb-2"

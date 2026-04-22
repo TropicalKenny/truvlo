@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
@@ -44,6 +45,7 @@ const ApproveRelease: React.FC = () => {
   const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
 
   const [pageState, setPageState] = useState<PageState>({ type: 'loading' });
   const [approving, setApproving] = useState(false);
@@ -88,7 +90,15 @@ const ApproveRelease: React.FC = () => {
         },
       };
       const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
-      return new EscrowPaySDK(provider);
+      const sponsorFn = async (tx: Uint8Array): Promise<string> => {
+        const result = await signAndSendTransaction({
+          transaction: Buffer.from(tx).toString('base64'),
+          wallet: privyWallet,
+          options: { sponsor: true },
+        });
+        return result.signature;
+      };
+      return new EscrowPaySDK(provider, false, sponsorFn);
     } catch { return null; }
   }, [connection, publicKey, privyWallet]);
 

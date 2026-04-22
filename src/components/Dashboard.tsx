@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import {
@@ -108,6 +109,7 @@ const Dashboard: React.FC = () => {
   const publicKey = useMemo(() => walletAddress ? new PublicKey(walletAddress) : null, [walletAddress]);
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
   const { unreadCount, addNotification, markAllAsRead } = useNotifications();
 
   const addNotificationRef = useRef(addNotification);
@@ -185,10 +187,20 @@ const Dashboard: React.FC = () => {
       },
     };
     const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
-    const instance = new EscrowPaySDK(provider);
+    const sponsorFn = async (tx: Uint8Array): Promise<string> => {
+      const w = privyWalletRef.current;
+      if (!w) throw new Error('Wallet disconnected');
+      const result = await signAndSendTransaction({
+        transaction: Buffer.from(tx).toString('base64'),
+        wallet: w,
+        options: { sponsor: true },
+      });
+      return result.signature;
+    };
+    const instance = new EscrowPaySDK(provider, false, sponsorFn);
     if (!instance.isInitialized()) console.error('SDK init error:', instance.getInitError());
     return instance;
-  }, [connection, publicKey, walletAddress]);
+  }, [connection, publicKey, walletAddress, signAndSendTransaction]);
 
   const isFetching = useRef(false);
 

@@ -92,6 +92,7 @@ const InvoicePayment: React.FC = () => {
           transaction: Buffer.from(tx).toString('base64'),
           wallet: privyWallet,
           options: { sponsor: true },
+          chainId: 'solana:devnet',
         });
         return result.signature;
       };

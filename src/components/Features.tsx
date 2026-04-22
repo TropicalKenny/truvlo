@@ -22,7 +22,7 @@ const features = [
   {
     icon: AlertTriangle,
     title: 'Dispute resolution',
-    body: 'Something wrong? Raise a dispute. Funds freeze instantly. A mediator reviews evidence and resolves on-chain. Transparent and final.',
+    body: 'Something wrong? Raise a dispute. Funds freeze instantly. A platform reviewer checks the evidence and applies the final split on-chain.',
   },
   {
     icon: Clock,
@@ -32,7 +32,7 @@ const features = [
   {
     icon: Star,
     title: 'Reputation',
-    body: 'Every completed invoice builds your reputation score, visible to new clients before the first invoice. Your track record follows your wallet.',
+    body: 'Every completed invoice builds your account reputation, visible to new clients before the first invoice. The score pools activity across your linked wallets.',
   },
 ];
 

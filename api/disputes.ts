@@ -1,0 +1,307 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import {
+  isValidSolanaAddress,
+  normalizeSolanaAddress,
+  requireUserId,
+  supabase,
+  walletBelongsToUser,
+} from './_shared';
+
+type DisputeDecision = 'creator' | 'client' | 'split';
+type DisputeSide = 'creator' | 'client' | 'admin';
+
+function parseDecision(value: unknown): DisputeDecision | null {
+  return value === 'creator' || value === 'client' || value === 'split' ? value : null;
+}
+
+function getAdminPrivyIds(): string[] {
+  const raw = process.env.DISPUTE_ADMIN_PRIVY_IDS || process.env.DISPUTE_ADMIN_PRIVY_ID || '';
+  return raw
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const userId = await requireUserId(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const adminIds = getAdminPrivyIds();
+  const isAdmin = adminIds.includes(userId);
+
+  // ─────────────────────────────────────────────────────────────────
+  // GET /api/disputes?invoiceId=...
+  // FIX: Authorize that the caller is a party to the dispute or admin.
+  // ─────────────────────────────────────────────────────────────────
+  if (req.method === 'GET') {
+    const invoiceId = typeof req.query.invoiceId === 'string' ? req.query.invoiceId : null;
+    if (!invoiceId) {
+      return res.status(400).json({ error: 'invoiceId is required' });
+    }
+
+    const { data: disputeCase, error } = await supabase
+      .from('dispute_cases')
+      .select('*')
+      .eq('invoice_id', invoiceId)
+      .maybeSingle();
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!disputeCase) return res.status(404).json({ error: 'Dispute case not found' });
+
+    // FIX: Verify the caller is the creator, client, or admin before returning any data.
+    const isCreator = disputeCase.creator_privy_id === userId;
+    // client_privy_id may be null for older cases; fall back to wallet ownership check.
+    const isClient =
+      disputeCase.client_privy_id === userId ||
+      (disputeCase.client_wallet &&
+        (await walletBelongsToUser(supabase, userId, disputeCase.client_wallet)));
+
+    if (!isCreator && !isClient && !isAdmin) {
+      return res.status(403).json({ error: 'Not authorized to view this dispute' });
+    }
+
+    const { data: evidence, error: evidenceError } = await supabase
+      .from('dispute_evidence')
+      .select('*')
+      .eq('case_id', disputeCase.id)
+      .order('created_at', { ascending: true });
+
+    if (evidenceError) return res.status(500).json({ error: evidenceError.message });
+    return res.status(200).json({ dispute_case: disputeCase, evidence: evidence ?? [] });
+  }
+
+  if (req.method === 'POST') {
+    const { action } = req.body as { action?: string };
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST action=open
+    // FIX 1: Replace upsert with insert — fail if a case already exists.
+    // FIX 2: Verify openedByWallet is a party to the invoice from invoice_meta.
+    // FIX 3: Derive openedByRole from the verified wallet match, not from input.
+    // ─────────────────────────────────────────────────────────────────
+    if (action === 'open') {
+      const {
+        invoiceId,
+        openedByWallet,
+        evidenceDeadlineHours = 72,
+      } = req.body as {
+        invoiceId?: string;
+        openedByWallet?: string;
+        evidenceDeadlineHours?: number;
+      };
+
+      if (!invoiceId || !openedByWallet) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      if (!isValidSolanaAddress(openedByWallet)) {
+        return res.status(400).json({ error: 'Invalid wallet address' });
+      }
+
+      const normalizedOpener = normalizeSolanaAddress(openedByWallet);
+
+      if (!(await walletBelongsToUser(supabase, userId, normalizedOpener))) {
+        return res.status(403).json({ error: 'Opened-by wallet does not belong to the authenticated user' });
+      }
+
+      // FIX: Verify opener is a party to this invoice; derive role server-side.
+      const { data: invoiceMeta, error: metaError } = await supabase
+        .from('invoice_meta')
+        .select('creator_wallet, client_wallet, creator_privy_id, client_privy_id')
+        .eq('invoice_id', invoiceId)
+        .maybeSingle();
+
+      if (metaError) return res.status(500).json({ error: metaError.message });
+      if (!invoiceMeta) return res.status(404).json({ error: 'Invoice not found' });
+
+      let derivedRole: 'creator' | 'client';
+      if (invoiceMeta.creator_wallet === normalizedOpener) {
+        derivedRole = 'creator';
+      } else if (invoiceMeta.client_wallet === normalizedOpener) {
+        derivedRole = 'client';
+      } else {
+        return res.status(403).json({ error: 'Wallet is not a party to this invoice' });
+      }
+
+      const evidenceDeadlineAt = new Date(
+        Date.now() + Math.max(24, evidenceDeadlineHours) * 60 * 60 * 1000
+      ).toISOString();
+
+      // FIX: Use insert instead of upsert so an existing dispute cannot be overwritten.
+      const { data: disputeCase, error } = await supabase
+        .from('dispute_cases')
+        .insert({
+          invoice_id: invoiceId,
+          creator_wallet: invoiceMeta.creator_wallet,
+          client_wallet: invoiceMeta.client_wallet ?? null,
+          creator_privy_id: invoiceMeta.creator_privy_id ?? null,
+          client_privy_id: invoiceMeta.client_privy_id ?? null,
+          opened_by_privy_id: userId,
+          opened_by_role: derivedRole,
+          status: 'open',
+          evidence_deadline_at: evidenceDeadlineAt,
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        // Postgres unique_violation — a case already exists for this invoice.
+        if (error.code === '23505') {
+          return res.status(409).json({ error: 'A dispute already exists for this invoice' });
+        }
+        return res.status(500).json({ error: error.message });
+      }
+
+      await supabase
+        .from('invoice_meta')
+        .update({ dispute_case_id: disputeCase.id })
+        .eq('invoice_id', invoiceId)
+        .eq('creator_wallet', invoiceMeta.creator_wallet);
+
+      return res.status(200).json({ success: true, dispute_case: disputeCase });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST action=evidence
+    // FIX: Derive `side` from server-validated wallet match, not from input.
+    // ─────────────────────────────────────────────────────────────────
+    if (action === 'evidence') {
+      const {
+        caseId,
+        submittedByWallet,
+        evidenceType,
+        evidenceUrl,
+        note,
+      } = req.body as {
+        caseId?: string;
+        submittedByWallet?: string;
+        // `side` is intentionally NOT destructured — we derive it server-side.
+        evidenceType?: string;
+        evidenceUrl?: string;
+        note?: string;
+      };
+
+      if (!caseId || !submittedByWallet || !evidenceType) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      if (!isValidSolanaAddress(submittedByWallet)) {
+        return res.status(400).json({ error: 'Invalid wallet address' });
+      }
+
+      const normalizedSubmitter = normalizeSolanaAddress(submittedByWallet);
+
+      if (!(await walletBelongsToUser(supabase, userId, normalizedSubmitter))) {
+        return res.status(403).json({ error: 'Submitted wallet does not belong to the authenticated user' });
+      }
+
+      const { data: disputeCase, error: caseError } = await supabase
+        .from('dispute_cases')
+        .select('*')
+        .eq('id', caseId)
+        .maybeSingle();
+
+      if (caseError) return res.status(500).json({ error: caseError.message });
+      if (!disputeCase) return res.status(404).json({ error: 'Dispute case not found' });
+
+      // FIX: Derive side from the authenticated wallet's role in this dispute.
+      let derivedSide: DisputeSide;
+      if (isAdmin) {
+        derivedSide = 'admin';
+      } else if (normalizedSubmitter === disputeCase.creator_wallet) {
+        derivedSide = 'creator';
+      } else if (normalizedSubmitter === disputeCase.client_wallet) {
+        derivedSide = 'client';
+      } else {
+        return res.status(403).json({ error: 'Wallet is not a party to this dispute' });
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('dispute_evidence')
+        .insert({
+          case_id: caseId,
+          submitted_by_privy_id: userId,
+          submitted_by_wallet: normalizedSubmitter,
+          side: derivedSide,          // server-derived, not caller-supplied
+          evidence_type: evidenceType,
+          evidence_url: evidenceUrl || null,
+          note: note || null,
+        })
+        .select('*')
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      await supabase
+        .from('dispute_cases')
+        .update({ status: 'under_review' })
+        .eq('id', caseId);
+
+      return res.status(200).json({ success: true, evidence: inserted });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST action=resolve  (unchanged — already admin-gated)
+    // ─────────────────────────────────────────────────────────────────
+    if (action === 'resolve') {
+      if (adminIds.length === 0) {
+        return res.status(503).json({ error: 'Dispute admin is not configured' });
+      }
+      if (!isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const {
+        caseId,
+        decision,
+        creatorShareBps,
+        clientShareBps,
+        verdictNote,
+        verdictHash,
+      } = req.body as {
+        caseId?: string;
+        decision?: DisputeDecision;
+        creatorShareBps?: number;
+        clientShareBps?: number;
+        verdictNote?: string;
+        verdictHash?: string;
+      };
+
+      const parsedDecision = parseDecision(decision);
+      if (!caseId || !parsedDecision) {
+        return res.status(400).json({ error: 'Missing caseId or invalid decision' });
+      }
+
+      const shares = parsedDecision === 'split'
+        ? { creator: creatorShareBps ?? 0, client: clientShareBps ?? 0 }
+        : parsedDecision === 'creator'
+          ? { creator: 10000, client: 0 }
+          : { creator: 0, client: 10000 };
+
+      if (parsedDecision === 'split' && shares.creator + shares.client !== 10000) {
+        return res.status(400).json({ error: 'Split shares must total 10000 bps' });
+      }
+
+      const { data, error } = await supabase
+        .from('dispute_cases')
+        .update({
+          status: 'resolved',
+          decision: parsedDecision,
+          resolution_creator_bps: shares.creator,
+          resolution_client_bps: shares.client,
+          resolved_by_privy_id: userId,
+          resolved_at: new Date().toISOString(),
+          verdict_note: verdictNote || null,
+          verdict_hash: verdictHash || null,
+        })
+        .eq('id', caseId)
+        .select('*')
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ success: true, dispute_case: data });
+    }
+
+    return res.status(400).json({ error: 'Unknown action' });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}

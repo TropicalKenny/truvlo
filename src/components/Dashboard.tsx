@@ -2,16 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
   RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp,
-  ArrowDownLeft, ExternalLink, Wallet
+  ArrowDownLeft, ExternalLink, Wallet as WalletIcon
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
@@ -24,6 +21,15 @@ interface InvoiceWithKey {
   publicKey: PublicKey;
   account: InvoiceData;
 }
+
+type AmountLike =
+
+  | number
+  | string
+  | bigint
+  | { toNumber?: () => number; toString?: () => string }
+  | null
+  | undefined;
 
 function formatCountdown(seconds: number): string {
   if (seconds <= 0) return 'Auto-releasing soon';
@@ -102,14 +108,13 @@ const DarkBadge = ({
 const Dashboard: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
-  const { activeWallet: privyWallet } = useActiveWallet();
+  const { activeWallet: privyWallet, allWallets } = useActiveWallet();
   const privyWalletRef = useRef(privyWallet);
   privyWalletRef.current = privyWallet;
   const walletAddress = privyWallet?.address ?? null;
   const publicKey = useMemo(() => walletAddress ? new PublicKey(walletAddress) : null, [walletAddress]);
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
-  const { signAndSendTransaction } = useSignAndSendTransaction();
   const { unreadCount, addNotification, markAllAsRead } = useNotifications();
 
   const addNotificationRef = useRef(addNotification);
@@ -120,6 +125,7 @@ const Dashboard: React.FC = () => {
   const [clientInvoices, setClientInvoices] = useState<InvoiceWithKey[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const hasLoadedOnce = useRef(false);
   const [releasing, setReleasing] = useState<string | null>(null);
   const [requesting, setRequesting] = useState<string | null>(null);
@@ -136,16 +142,12 @@ const Dashboard: React.FC = () => {
 
   const [releaseModal, setReleaseModal] = useState<{
     open: boolean; invoiceId: string; amount: string;
-    tokenType: TokenType; releaseableAmount: number;
+    tokenType: TokenType; releaseableAmount: number; isFinalRelease: boolean;
+    creatorWallet: string; clientWallet: string | null; invoiceAmount: number;
   } | null>(null);
   const lastFetchedAt = useRef<number>(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [profileCopied, setProfileCopied] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
-  const [missingNotifEmail, setMissingNotifEmail] = useState(false);
-  const [showNamePrompt, setShowNamePrompt] = useState(false);
-  const [nameInput, setNameInput] = useState('');
-  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -186,28 +188,22 @@ const Dashboard: React.FC = () => {
         }));
       },
     };
-    const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
-    const sponsorFn = async (tx: Uint8Array): Promise<string> => {
-      const w = privyWalletRef.current;
-      if (!w) throw new Error('Wallet disconnected');
-      const result = await signAndSendTransaction({
-        transaction: Buffer.from(tx).toString('base64'),
-        wallet: w,
-        options: { sponsor: true },
-      });
-      return result.signature;
-    };
-    const instance = new EscrowPaySDK(provider, false, sponsorFn);
+    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
+    const instance = new EscrowPaySDK(provider, false);
     if (!instance.isInitialized()) console.error('SDK init error:', instance.getInitError());
     return instance;
-  }, [connection, publicKey, walletAddress, signAndSendTransaction]);
+  }, [connection, publicKey, walletAddress]);
 
   const isFetching = useRef(false);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (showRefreshSpinner = false) => {
     if (isFetching.current) return;
+    if (showRefreshSpinner) setRefreshing(true);
     if (!sdk || !connected || !sdk.isInitialized()) {
-      setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]); setLoading(false); return;
+      setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
+      setLoading(false);
+      if (showRefreshSpinner) setRefreshing(false);
+      return;
     }
     isFetching.current = true;
     setLoading(true);
@@ -239,7 +235,14 @@ const Dashboard: React.FC = () => {
         for (const { account: inv } of invoices) {
           const id = inv.invoiceId;
           const prev = seen[id];
-          const statusNum = typeof inv.status === 'number' ? inv.status : (inv.status as any)?.valueOf?.() ?? -1;
+          const statusNum = (() => {
+            if (typeof inv.status === 'number' && Number.isFinite(inv.status)) return inv.status;
+            if (inv.status && typeof inv.status === 'object' && typeof (inv.status as { valueOf?: () => unknown }).valueOf === 'function') {
+              const value = (inv.status as { valueOf?: () => unknown }).valueOf?.();
+              return typeof value === 'number' ? value : Number(value ?? -1);
+            }
+            return -1;
+          })();
           const nowDisputed = !!inv.disputeRaisedAt;
           newSeen[id] = { status: statusNum, clientApproved: !!inv.clientApproved, disputed: nowDisputed };
           if (isFirstLoad || !prev) continue;
@@ -286,13 +289,14 @@ const Dashboard: React.FC = () => {
       setLoading(false);
       hasLoadedOnce.current = true;
       lastFetchedAt.current = Date.now();
+      if (showRefreshSpinner) setRefreshing(false);
     }
   }, [sdk, connected]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
   useEffect(() => {
     const h = () => {
-      if (Date.now() - lastFetchedAt.current > 30_000) fetchAll();
+      if (Date.now() - lastFetchedAt.current > 30_000) void fetchAll();
     };
     window.addEventListener('focus', h);
     return () => window.removeEventListener('focus', h);
@@ -307,43 +311,25 @@ const Dashboard: React.FC = () => {
         if (res.ok) {
           const data = await res.json() as { display_name: string | null; notification_email: string | null };
           setDisplayName(data.display_name);
-          setMissingNotifEmail(!data.notification_email);
-          if (!data.display_name) setShowNamePrompt(true);
           return;
         }
       } catch { /* non-blocking */ }
-      setShowNamePrompt(true);
     };
     fetchProfile();
   }, [authenticated, getAccessToken]);
-
-  const handleSaveName = async () => {
-    if (!nameInput.trim()) { setShowNamePrompt(false); return; }
-    setSavingName(true);
-    try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ display_name: nameInput.trim() }),
-      });
-      if (res.ok) {
-        const data = await res.json() as { display_name: string | null };
-        setDisplayName(data.display_name);
-        setShowNamePrompt(false);
-        toast({ title: 'Name saved' });
-      }
-    } catch { /* non-blocking */ } finally { setSavingName(false); }
-  };
 
   // ============================================================
   // HELPERS
   // ============================================================
 
-  const fromSmallestUnit = (amount: any, tokenType: TokenType) => {
+  const fromSmallestUnit = (amount: AmountLike, tokenType: TokenType) => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     try {
-      const raw = amount?.toNumber ? amount.toNumber() : Number(amount ?? 0);
+      // FIX: Properly narrow the union type instead of accessing .toNumber directly,
+      // which TypeScript rejects because string/number/bigint don't have that property.
+      const raw = (amount != null && typeof amount === 'object' && typeof amount.toNumber === 'function')
+        ? amount.toNumber()
+        : Number(amount ?? 0);
       const int = BigInt(Math.round(raw));
       const divisor = BigInt(10 ** decimals);
       const whole = int / divisor;
@@ -352,16 +338,22 @@ const Dashboard: React.FC = () => {
     } catch { return 0; }
   };
 
-  const formatAmount = (amount: any, tokenType: TokenType): string => {
+  const formatAmount = (amount: AmountLike, tokenType: TokenType): string => {
     const symbol = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
     const decimals = tokenType === TokenType.USDC ? 2 : 4;
     const value = typeof amount === 'number' ? amount : fromSmallestUnit(amount, tokenType);
     return `${parseFloat(value.toFixed(decimals)).toLocaleString('en-US', { maximumFractionDigits: decimals })} ${symbol}`;
   };
 
-  const formatDate = (timestamp: any): string => {
+  const formatDate = (timestamp: AmountLike): string => {
     try {
-      const ts = timestamp.toNumber ? timestamp.toNumber() : Number(timestamp);
+      // FIX 1: Guard against null/undefined before any property access.
+      // FIX 2: Narrow the type before calling .toNumber() to satisfy TypeScript,
+      // because string/number/bigint members of AmountLike don't have .toNumber.
+      if (timestamp == null) return '-';
+      const ts = (typeof timestamp === 'object' && typeof timestamp.toNumber === 'function')
+        ? timestamp.toNumber()
+        : Number(timestamp);
       return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch { return '-'; }
   };
@@ -412,10 +404,11 @@ const Dashboard: React.FC = () => {
             },
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
-              creatorWallet: publicKey.toBase58(),
+              creatorWallet: publicKey!.toBase58(),
+              clientWallet: publicKey?.toBase58() ?? null,
               amount: formatAmount(inv.amountPaid, inv.tokenType),
               senderName: displayName || undefined,
-              invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey.toBase58()}`,
+              invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey!.toBase58()}`,
             }),
           });
         } catch { /* non-blocking */ }
@@ -434,6 +427,7 @@ const Dashboard: React.FC = () => {
     const releaseableAmount = getReleaseable(invoice);
     const schedule = invoice.releaseSchedule ?? [];
     const idx = invoice.currentReleaseIndex ?? 0;
+    const isFinalRelease = schedule.length === 0 || idx >= schedule.length - 1;
     let installmentAmount = releaseableAmount;
     let installmentLabel = '';
     if (schedule.length > 0 && idx < schedule.length) {
@@ -441,7 +435,17 @@ const Dashboard: React.FC = () => {
       installmentAmount = parseFloat((fromSmallestUnit(invoice.amountPaid, invoice.tokenType) * bps / 10000).toFixed(invoice.tokenType === TokenType.USDC ? 6 : 9));
       installmentLabel = `Installment ${idx + 1} of ${schedule.length} (${bps / 100}%)`;
     }
-    setReleaseModal({ open: true, invoiceId: invoice.invoiceId, amount: installmentLabel || formatAmount(invoice.amountPaid, invoice.tokenType), tokenType: invoice.tokenType, releaseableAmount: installmentAmount });
+    setReleaseModal({
+      open: true,
+      invoiceId: invoice.invoiceId,
+      amount: installmentLabel || formatAmount(invoice.amountPaid, invoice.tokenType),
+      tokenType: invoice.tokenType,
+      releaseableAmount: installmentAmount,
+      isFinalRelease,
+      creatorWallet: publicKey?.toBase58() || '',
+      clientWallet: invoice.client?.toBase58() ?? null,
+      invoiceAmount: fromSmallestUnit(invoice.amountPaid, invoice.tokenType),
+    });
   };
 
   const handleReleaseFunds = async () => {
@@ -451,10 +455,33 @@ const Dashboard: React.FC = () => {
       const result = await sdk.releaseFunds(releaseModal.invoiceId, releaseModal.releaseableAmount, releaseModal.tokenType);
       if (result.success) {
         toast({ title: 'Funds released to wallet' });
+        if (releaseModal.isFinalRelease && releaseModal.clientWallet) {
+          try {
+            const token = await getAccessToken();
+            await fetch('/api/referrals', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({
+                invoiceId: releaseModal.invoiceId,
+                creatorWallet: releaseModal.creatorWallet,
+                clientWallet: releaseModal.clientWallet,
+                tokenType: releaseModal.tokenType,
+                invoiceAmount: releaseModal.invoiceAmount,
+                isFinalRelease: true,
+              }),
+            });
+          } catch {
+            // non-blocking: referral accrual should not block release success
+          }
+        }
         const decimals = releaseModal.tokenType === TokenType.USDC ? 2 : 4;
         const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
         addNotification({ type: 'success', title: 'Funds Released', message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}` });
-        lastFetchedAt.current = 0; await fetchAll();
+        lastFetchedAt.current = 0;
+        await fetchAll();
       } else {
         toast({ title: 'Release failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -494,6 +521,7 @@ const Dashboard: React.FC = () => {
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               creatorWallet: inv.creator.toBase58(),
+              clientWallet: publicKey?.toBase58() ?? null,
               event: 'release_approved',
               amount: formatAmount(inv.amountPaid, inv.tokenType),
             }),
@@ -527,6 +555,7 @@ const Dashboard: React.FC = () => {
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               creatorWallet: inv.creator.toBase58(),
+              clientWallet: publicKey?.toBase58() ?? null,
               event: 'disputed',
               amount: formatAmount(inv.amountPaid, inv.tokenType),
             }),
@@ -1056,20 +1085,20 @@ const Dashboard: React.FC = () => {
           </h1>
           {publicKey && (
             <Link
-              to={`/profile/${publicKey.toBase58()}`}
+              to="/account"
               className="flex items-center gap-1 transition-opacity duration-150 hover:opacity-70 w-fit"
               style={{ textDecoration: 'none' }}
-              title="View your public escrow record"
+              title="Open your account hub"
             >
               <p
                 style={{
-                  fontFamily: '"JetBrains Mono", monospace',
+                  fontFamily: '"DM Sans", sans-serif',
                   fontSize: '12px',
                   color: '#64748B',
                   marginTop: '4px',
                 }}
               >
-                {truncateWallet(publicKey.toBase58())}
+                {displayName || 'Account'}
               </p>
               <ExternalLink
                 className="h-3 w-3"
@@ -1078,102 +1107,34 @@ const Dashboard: React.FC = () => {
             </Link>
           )}
 
-          {/* First-login display name prompt */}
-          {showNamePrompt && (
-            <div
-              className="flex items-center gap-2 mt-3"
-              style={{ flexWrap: 'wrap' }}
-            >
-              <input
-                type="text"
-                placeholder="Add a display name…"
-                value={nameInput}
-                onChange={e => setNameInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setShowNamePrompt(false); }}
-                style={{
-                  backgroundColor: '#1C2128',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '8px',
-                  color: '#F8FAFC',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: '13px',
-                  padding: '6px 12px',
-                  outline: 'none',
-                  width: '180px',
-                }}
-              />
-              <button
-                onClick={handleSaveName}
-                disabled={savingName || !nameInput.trim()}
-                style={{
-                  backgroundColor: '#2DD4BF',
-                  color: '#0D1117',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  padding: '6px 12px',
-                  cursor: 'pointer',
-                  opacity: savingName || !nameInput.trim() ? 0.5 : 1,
-                }}
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setShowNamePrompt(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#64748B',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  padding: '6px 4px',
-                }}
-              >
-                Skip
-              </button>
-            </div>
-          )}
-
-          {/* Missing notification email nudge */}
-          {missingNotifEmail && !showNamePrompt && (
-            <div
-              className="flex items-center gap-2 mt-3"
-              style={{
-                backgroundColor: 'rgba(45,212,191,0.06)',
-                border: '1px solid rgba(45,212,191,0.15)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                flexWrap: 'wrap',
-              }}
-            >
-              <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', flex: 1 }}>
-                Add a notification email to get alerts when clients pay or dispute.
-              </span>
-              <a
-                href="/settings"
-                style={{
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: '#2DD4BF',
-                  textDecoration: 'none',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Go to Settings →
-              </a>
-              <button
-                onClick={() => setMissingNotifEmail(false)}
-                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: '0 4px', fontSize: '14px' }}
-              >
-                ✕
-              </button>
-            </div>
-          )}
         </div>
+
+        {authenticated && allWallets.length === 0 && (
+          <div
+            className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3"
+            style={{
+              backgroundColor: 'rgba(45,212,191,0.08)',
+              border: '1px solid rgba(45,212,191,0.18)',
+            }}
+          >
+            <div>
+              <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '0.98rem' }}>
+                No wallet connected yet
+              </p>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', marginTop: '2px' }}>
+                Create or import one to send, receive, and approve invoices.
+              </p>
+            </div>
+            <Link
+              to="/wallet"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
+              style={{ backgroundColor: '#2DD4BF', color: '#0D1117', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
+            >
+              <WalletIcon className="h-4 w-4" />
+              Set up wallet
+            </Link>
+          </div>
+        )}
 
         {/* MOBILE FIX: buttons wrap on small screens */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -1209,50 +1170,20 @@ const Dashboard: React.FC = () => {
 
           {/* Refresh */}
           <button
-            onClick={fetchAll}
-            disabled={loading}
+            onClick={() => void fetchAll(true)}
+            disabled={loading || refreshing}
             className="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 disabled:opacity-50"
             style={{
               backgroundColor: 'transparent',
               border: '1px solid rgba(255,255,255,0.1)',
-              cursor: loading ? 'default' : 'pointer',
+              cursor: loading || refreshing ? 'default' : 'pointer',
               color: '#94A3B8',
             }}
-            onMouseEnter={e => !loading && (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
+            onMouseEnter={e => !(loading || refreshing) && (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
             onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
-
-          {/* Share Profile */}
-          {publicKey && (
-            <button
-              onClick={async () => {
-                const url = `${window.location.origin}/profile/${publicKey.toBase58()}`;
-                try {
-                  await navigator.clipboard.writeText(url);
-                  setProfileCopied(true);
-                  setTimeout(() => setProfileCopied(false), 2000);
-                } catch {
-                  toast({ title: 'Failed to copy', variant: 'destructive' });
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-medium transition-all duration-150"
-              style={{
-                backgroundColor: profileCopied ? 'rgba(45,212,191,0.1)' : 'transparent',
-                border: profileCopied ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.1)',
-                color: profileCopied ? '#2DD4BF' : '#94A3B8',
-                fontFamily: '"DM Sans", sans-serif',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={e => { if (!profileCopied) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
-              onMouseLeave={e => { if (!profileCopied) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-              title="Copy your public profile link"
-            >
-              {profileCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {profileCopied ? 'Copied!' : 'Profile'}
-            </button>
-          )}
 
           {/* Create invoice */}
           <Link
@@ -1281,7 +1212,7 @@ const Dashboard: React.FC = () => {
             {fetchError}
           </p>
           <button
-            onClick={() => { lastFetchedAt.current = 0; fetchAll(); }}
+            onClick={() => { lastFetchedAt.current = 0; void fetchAll(true); }}
             style={{
               fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 600,
               color: '#F59E0B', background: 'none', border: '1px solid rgba(245,158,11,0.3)',
@@ -1305,7 +1236,7 @@ const Dashboard: React.FC = () => {
             Received ({receivedStats.total})
           </TabsTrigger>
           <TabsTrigger value="client" style={tabTriggerStyle(roleTab === 'client')} className="flex items-center gap-1.5 relative">
-            <Wallet className="h-3.5 w-3.5" />
+            <WalletIcon className="h-3.5 w-3.5" />
             Client ({clientStats.total})
             {clientStats.awaitingAction > 0 && (
               <span

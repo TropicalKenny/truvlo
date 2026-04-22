@@ -40,7 +40,7 @@ const ApproveRelease: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
   const navigate = useNavigate();
   const { connection } = useConnection();
-  const { authenticated } = usePrivy();
+  const { authenticated, getAccessToken } = usePrivy();
   const { activeWallet: privyWallet } = useActiveWallet();
   const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
   const connected = authenticated && !!publicKey;
@@ -168,10 +168,14 @@ const ApproveRelease: React.FC = () => {
       const result = await sdk.approveRelease(invoiceId!, new PublicKey(creator!));
       if (result.success) {
         setPageState({ type: 'approved' });
+        const token = await getAccessToken();
         fetch('/api/notify-creator', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ invoiceId, creatorWallet: creator, event: 'release_approved' }),
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ invoiceId, creatorWallet: creator, clientWallet: publicKey?.toBase58() ?? '', event: 'release_approved' }),
         }).catch(() => {});
       } else {
         toast({ title: 'Approval failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
@@ -189,10 +193,14 @@ const ApproveRelease: React.FC = () => {
       const result = await sdk.raiseDispute(invoiceId!, new PublicKey(creator!));
       if (result.success) {
         setPageState({ type: 'disputed' });
+        const token = await getAccessToken();
         fetch('/api/notify-creator', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ invoiceId, creatorWallet: creator, event: 'disputed' }),
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ invoiceId, creatorWallet: creator, clientWallet: publicKey?.toBase58() ?? '', event: 'disputed' }),
         }).catch(() => {});
       } else {
         toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
@@ -320,7 +328,7 @@ const ApproveRelease: React.FC = () => {
               Dispute raised
             </h2>
             <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', lineHeight: 1.6, marginBottom: '8px' }}>
-              Your funds are now frozen. A mediator will review the case and contact both parties.
+              Your funds are now frozen. The platform will review the case and contact both parties.
             </p>
             <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.6, marginBottom: '28px' }}>
               Do not send additional payments until the dispute is resolved.
@@ -509,7 +517,7 @@ const ApproveRelease: React.FC = () => {
             className="text-center"
             style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', lineHeight: 1.5 }}
           >
-            Raising a dispute freezes all funds until a mediator resolves the case.
+            Raising a dispute freezes all funds until the platform resolves the case.
           </p>
         </div>
       )}

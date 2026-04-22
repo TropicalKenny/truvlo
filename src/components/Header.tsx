@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
-import { Menu, X, ChevronDown, Copy, Wallet, LogOut, Settings } from 'lucide-react';
+import { Menu, X, ChevronDown, Copy, Wallet, LogOut, User } from 'lucide-react';
 import TruvloLogo from './TruvloLogo';
 import { useToast } from '@/hooks/use-toast';
 
@@ -58,6 +58,7 @@ const Header: React.FC = () => {
     ? [
         { to: '/dashboard', label: 'Dashboard' },
         { to: '/create', label: 'Create Invoice' },
+        { to: '/account', label: 'Account' },
       ]
     : [];
 
@@ -143,13 +144,13 @@ const Header: React.FC = () => {
                   }}
                 >
                   <Link
-                    to="/settings"
+                    to="/account"
                     onClick={() => setAuthDropdownOpen(false)}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
                     style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}
                   >
-                    <Settings size={14} />
-                    Profile Settings
+                    <User size={14} />
+                    Account
                   </Link>
                   <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
                   <Link
@@ -262,7 +263,7 @@ const Header: React.FC = () => {
                       padding: '10px 0',
                     }}
                   >
-                    <Settings size={15} />
+                    <User size={15} />
                     Profile Settings
                   </Link>
                   <Link

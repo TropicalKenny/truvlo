@@ -1,27 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { PrivyClient } from '@privy-io/server-auth';
-import { createClient } from '@supabase/supabase-js';
-
-const privy = new PrivyClient(
-  process.env.VITE_PRIVY_APP_ID!,
-  process.env.PRIVY_APP_SECRET!
-);
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-async function verifyToken(req: VercelRequest): Promise<string | null> {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) return null;
-  try {
-    const claims = await privy.verifyAuthToken(token);
-    return claims.userId;
-  } catch {
-    return null;
-  }
-}
+import {
+  ensureReferralCode,
+  isValidSolanaAddress,
+  normalizeSolanaAddress,
+  requireUserId,
+  supabase,
+} from './_shared';
 
 function generateSlug(displayName: string | null): string {
   const suffix = Math.random().toString(16).slice(2, 6);
@@ -39,16 +23,19 @@ function generateSlug(displayName: string | null): string {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
-    const privyId = await verifyToken(req);
+    const privyId = await requireUserId(req);
     if (!privyId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { wallet_address } = req.body as { wallet_address?: string };
     if (!wallet_address) return res.status(400).json({ error: 'wallet_address required' });
+    if (!isValidSolanaAddress(wallet_address)) return res.status(400).json({ error: 'Invalid wallet address' });
+
+    const normalizedWallet = normalizeSolanaAddress(wallet_address);
 
     // Register the wallet
     const { error: walletError } = await supabase
       .from('wallets')
-      .upsert({ privy_id: privyId, wallet_address }, { onConflict: 'privy_id,wallet_address' });
+      .upsert({ privy_id: privyId, wallet_address: normalizedWallet }, { onConflict: 'privy_id,wallet_address' });
     if (walletError) return res.status(500).json({ error: walletError.message });
 
     // Ensure profile exists and has a slug
@@ -64,24 +51,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       slug = generateSlug(profile?.display_name ?? null);
       await supabase
         .from('profiles')
-        .upsert({ privy_id: privyId, profile_slug: slug }, { onConflict: 'privy_id' });
+        .upsert({ privy_id: privyId, profile_slug: slug, referral_code: await ensureReferralCode(supabase, privyId) }, { onConflict: 'privy_id' });
     }
 
     return res.status(200).json({ profile_slug: slug });
   }
 
   if (req.method === 'DELETE') {
-    const privyId = await verifyToken(req);
+    const privyId = await requireUserId(req);
     if (!privyId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { wallet_address } = req.body as { wallet_address?: string };
     if (!wallet_address) return res.status(400).json({ error: 'wallet_address required' });
+    if (!isValidSolanaAddress(wallet_address)) return res.status(400).json({ error: 'Invalid wallet address' });
 
     const { error } = await supabase
       .from('wallets')
       .delete()
       .eq('privy_id', privyId)
-      .eq('wallet_address', wallet_address);
+      .eq('wallet_address', normalizeSolanaAddress(wallet_address));
 
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ success: true });

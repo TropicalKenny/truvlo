@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
@@ -101,6 +102,7 @@ const CreateInvoiceForm: React.FC = () => {
   const connected = authenticated && !!publicKey;
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -159,12 +161,20 @@ const CreateInvoiceForm: React.FC = () => {
       },
     };
     const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
-    const instance = new EscrowPaySDK(provider);
+    const sponsorFn = async (tx: Uint8Array): Promise<string> => {
+      const result = await signAndSendTransaction({
+        transaction: Buffer.from(tx).toString('base64'),
+        wallet: privyWallet,
+        options: { sponsor: true },
+      });
+      return result.signature;
+    };
+    const instance = new EscrowPaySDK(provider, false, sponsorFn);
     if (!instance.isInitialized()) {
       console.error('SDK failed to initialize:', instance.getInitError());
     }
     return instance;
-  }, [connection, publicKey, privyWallet]);
+  }, [connection, publicKey, privyWallet, signAndSendTransaction]);
 
   // ── submit — preserved exactly ──────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {

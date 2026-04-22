@@ -117,6 +117,7 @@ const Dashboard: React.FC = () => {
   const publicKey = useMemo(() => walletAddress ? new PublicKey(walletAddress) : null, [walletAddress]);
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
   const { unreadCount, addNotification, markAllAsRead } = useNotifications();
 
   const addNotificationRef = useRef(addNotification);
@@ -190,7 +191,7 @@ const Dashboard: React.FC = () => {
         }));
       },
     };
-    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
+    const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
     const sponsorFn = async (tx: Uint8Array): Promise<string> => {
       const w = privyWalletRef.current;
       if (!w) throw new Error('Wallet disconnected');

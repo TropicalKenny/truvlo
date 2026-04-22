@@ -1,4 +1,4 @@
-# EscrowPay
+# Truvlo
 
 Enterprise fintech escrow payment platform built on Solana blockchain. Create invoices, accept USDC or SOL payments, and release funds securely with non-custodial smart contract escrow.
 

@@ -1,16 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { PrivyClient } from '@privy-io/server-auth';
-import { createClient } from '@supabase/supabase-js';
-
-const privy = new PrivyClient(
-  process.env.VITE_PRIVY_APP_ID!,
-  process.env.PRIVY_APP_SECRET!
-);
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import {
+  isValidSolanaAddress,
+  normalizeSolanaAddress,
+  requireUserId,
+  supabase,
+  walletBelongsToUser,
+} from './_shared';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@truvlo.io';
@@ -20,21 +15,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 1. Verify Privy JWT
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace('Bearer ', '');
-  if (!token) {
-    return res.status(401).json({ error: 'Missing authorization token' });
-  }
-  try {
-    await privy.verifyAuthToken(token);
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+  const privyId = await requireUserId(req);
+  if (!privyId) {
+    return res.status(401).json({ error: 'Missing or invalid authorization token' });
   }
 
   // 2. Validate body
   const {
-    invoiceId, creatorWallet, clientEmail, senderName,
+    invoiceId, creatorWallet, clientWallet, clientEmail, senderName,
     description, tokenType, amount, invoiceUrl,
   } = req.body;
 
@@ -42,14 +30,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
+  if (!isValidSolanaAddress(creatorWallet)) {
+    return res.status(400).json({ error: 'Invalid creator wallet' });
+  }
+  if (clientWallet && !isValidSolanaAddress(clientWallet)) {
+    return res.status(400).json({ error: 'Invalid client wallet' });
+  }
+
+  const normalizedCreatorWallet = normalizeSolanaAddress(creatorWallet);
+  if (!(await walletBelongsToUser(supabase, privyId, normalizedCreatorWallet))) {
+    return res.status(403).json({ error: 'Creator wallet does not belong to the authenticated user' });
+  }
+
   // 3. Look up creator's notification_email from their profile
   let creatorEmail: string | null = null;
   try {
-    const claims = await privy.verifyAuthToken(token);
     const { data: profile } = await supabase
       .from('profiles')
       .select('notification_email')
-      .eq('privy_id', claims.userId)
+      .eq('privy_id', privyId)
       .maybeSingle();
     creatorEmail = profile?.notification_email ?? null;
   } catch { /* non-blocking */ }
@@ -57,7 +56,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 4. Write to Supabase invoice_meta
   const { error: dbError } = await supabase.from('invoice_meta').insert({
     invoice_id: invoiceId,
-    creator_wallet: creatorWallet,
+    creator_wallet: normalizedCreatorWallet,
+    creator_privy_id: privyId,
+    client_wallet: clientWallet ? normalizeSolanaAddress(clientWallet) : null,
     client_email: clientEmail || null,
     sender_name: senderName || null,
     description: description || null,

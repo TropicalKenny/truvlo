@@ -22,7 +22,7 @@ const features = [
   {
     icon: AlertTriangle,
     title: 'Dispute resolution',
-    body: 'Something wrong? Raise a dispute. Funds freeze instantly. A mediator reviews evidence and resolves on-chain. Transparent and final.',
+    body: 'Something wrong? Raise a dispute. Funds freeze instantly. A platform reviewer checks the evidence and applies the final split on-chain.',
   },
   {
     icon: Clock,

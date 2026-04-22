@@ -35,7 +35,7 @@ const InvoicePayment: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
   const navigate = useNavigate();
   const { connection } = useConnection();
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, getAccessToken } = usePrivy();
   const { activeWallet: privyWallet } = useActiveWallet();
   const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
   const connected = authenticated && !!publicKey;
@@ -242,12 +242,17 @@ const InvoicePayment: React.FC = () => {
         paidAmount: breakdown.amount,
         txSignature: payResult.data?.signature || '',
       });
+      const token = await getAccessToken();
       fetch('/api/notify-creator', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           invoiceId: invoice.invoiceId,
           creatorWallet: creator,
+          clientWallet: publicKey.toBase58() ?? '',
           event: 'paid',
           amount: formatAmount(breakdown.amount, invoice.tokenType),
         }),

@@ -3,14 +3,12 @@ import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
-import { AnchorProvider } from '@coral-xyz/anchor';
+import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
   RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp,
   ArrowDownLeft, ExternalLink, Wallet
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
@@ -23,6 +21,55 @@ interface InvoiceWithKey {
   publicKey: PublicKey;
   account: InvoiceData;
 }
+
+type RewardTokenType = 'USDC' | 'SOL';
+type RewardStatus = 'pending' | 'matured' | 'requestable' | 'requested' | 'scheduled' | 'paid' | 'rejected';
+
+interface RewardBucket {
+  pending: number;
+  matured: number;
+  requestable: number;
+  requested: number;
+  scheduled: number;
+  paid: number;
+  rejected: number;
+}
+
+interface ReferralProfileData {
+  display_name: string | null;
+  referral_code: string | null;
+  referred_by_code: string | null;
+  referral_linked_at: string | null;
+  created_at: string | null;
+}
+
+interface PayoutRequestSummary {
+  id: number;
+  token_type: RewardTokenType;
+  amount: number;
+  status: RewardStatus;
+  payout_cycle_date: string | null;
+  request_deadline: string | null;
+  requested_at: string | null;
+  processed_at: string | null;
+  admin_note: string | null;
+}
+
+interface ReferralPanelData {
+  profile: ReferralProfileData | null;
+  summary: Record<RewardTokenType, RewardBucket>;
+  rewards: unknown[];
+  payout_requests: PayoutRequestSummary[];
+}
+
+type AmountLike =
+  | BN
+  | number
+  | string
+  | bigint
+  | { toNumber?: () => number; toString?: () => string }
+  | null
+  | undefined;
 
 function formatCountdown(seconds: number): string {
   if (seconds <= 0) return 'Auto-releasing soon';
@@ -118,6 +165,7 @@ const Dashboard: React.FC = () => {
   const [clientInvoices, setClientInvoices] = useState<InvoiceWithKey[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const hasLoadedOnce = useRef(false);
   const [releasing, setReleasing] = useState<string | null>(null);
   const [requesting, setRequesting] = useState<string | null>(null);
@@ -134,16 +182,23 @@ const Dashboard: React.FC = () => {
 
   const [releaseModal, setReleaseModal] = useState<{
     open: boolean; invoiceId: string; amount: string;
-    tokenType: TokenType; releaseableAmount: number;
+    tokenType: TokenType; releaseableAmount: number; isFinalRelease: boolean;
+    creatorWallet: string; clientWallet: string | null; invoiceAmount: number;
   } | null>(null);
   const lastFetchedAt = useRef<number>(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [profileCopied, setProfileCopied] = useState(false);
+  const [referralCopied, setReferralCopied] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [missingNotifEmail, setMissingNotifEmail] = useState(false);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [referralPanel, setReferralPanel] = useState<ReferralPanelData | null>(null);
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralError, setReferralError] = useState<string | null>(null);
+  const [requestingPayout, setRequestingPayout] = useState<RewardTokenType | null>(null);
+  const referralLastFetchedAt = useRef<number>(0);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -157,7 +212,7 @@ const Dashboard: React.FC = () => {
 
   const sdk = useMemo(() => {
     if (!publicKey || !walletAddress) return null;
-    const anchorWallet = {
+    const anchorWallet: Wallet = {
       publicKey,
       signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
         const w = privyWalletRef.current;
@@ -184,7 +239,7 @@ const Dashboard: React.FC = () => {
         }));
       },
     };
-    const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
+    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
     const instance = new EscrowPaySDK(provider);
     if (!instance.isInitialized()) console.error('SDK init error:', instance.getInitError());
     return instance;
@@ -192,10 +247,14 @@ const Dashboard: React.FC = () => {
 
   const isFetching = useRef(false);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (showRefreshSpinner = false) => {
     if (isFetching.current) return;
+    if (showRefreshSpinner) setRefreshing(true);
     if (!sdk || !connected || !sdk.isInitialized()) {
-      setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]); setLoading(false); return;
+      setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
+      setLoading(false);
+      if (showRefreshSpinner) setRefreshing(false);
+      return;
     }
     isFetching.current = true;
     setLoading(true);
@@ -227,7 +286,14 @@ const Dashboard: React.FC = () => {
         for (const { account: inv } of invoices) {
           const id = inv.invoiceId;
           const prev = seen[id];
-          const statusNum = typeof inv.status === 'number' ? inv.status : (inv.status as any)?.valueOf?.() ?? -1;
+          const statusNum = (() => {
+            if (typeof inv.status === 'number' && Number.isFinite(inv.status)) return inv.status;
+            if (inv.status && typeof inv.status === 'object' && typeof (inv.status as { valueOf?: () => unknown }).valueOf === 'function') {
+              const value = (inv.status as { valueOf?: () => unknown }).valueOf?.();
+              return typeof value === 'number' ? value : Number(value ?? -1);
+            }
+            return -1;
+          })();
           const nowDisputed = !!inv.disputeRaisedAt;
           newSeen[id] = { status: statusNum, clientApproved: !!inv.clientApproved, disputed: nowDisputed };
           if (isFirstLoad || !prev) continue;
@@ -274,13 +340,14 @@ const Dashboard: React.FC = () => {
       setLoading(false);
       hasLoadedOnce.current = true;
       lastFetchedAt.current = Date.now();
+      if (showRefreshSpinner) setRefreshing(false);
     }
   }, [sdk, connected]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
   useEffect(() => {
     const h = () => {
-      if (Date.now() - lastFetchedAt.current > 30_000) fetchAll();
+      if (Date.now() - lastFetchedAt.current > 30_000) void fetchAll();
     };
     window.addEventListener('focus', h);
     return () => window.removeEventListener('focus', h);
@@ -324,11 +391,46 @@ const Dashboard: React.FC = () => {
     } catch { /* non-blocking */ } finally { setSavingName(false); }
   };
 
+  const fetchReferralPanel = useCallback(async () => {
+    if (!authenticated) return;
+    setReferralLoading(true);
+    setReferralError(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/referrals', {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json() as ReferralPanelData;
+      setReferralPanel(data);
+      referralLastFetchedAt.current = Date.now();
+    } catch (e) {
+      setReferralError(e instanceof Error ? e.message : 'Failed to load referral data');
+    } finally {
+      setReferralLoading(false);
+    }
+  }, [authenticated, getAccessToken]);
+
+  useEffect(() => {
+    void fetchReferralPanel();
+  }, [fetchReferralPanel]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const onFocus = () => {
+      if (Date.now() - referralLastFetchedAt.current > 30_000) void fetchReferralPanel();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [authenticated, fetchReferralPanel]);
+
   // ============================================================
   // HELPERS
   // ============================================================
 
-  const fromSmallestUnit = (amount: any, tokenType: TokenType) => {
+  const fromSmallestUnit = (amount: AmountLike, tokenType: TokenType) => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     try {
       const raw = amount?.toNumber ? amount.toNumber() : Number(amount ?? 0);
@@ -340,14 +442,14 @@ const Dashboard: React.FC = () => {
     } catch { return 0; }
   };
 
-  const formatAmount = (amount: any, tokenType: TokenType): string => {
+  const formatAmount = (amount: AmountLike, tokenType: TokenType): string => {
     const symbol = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
     const decimals = tokenType === TokenType.USDC ? 2 : 4;
     const value = typeof amount === 'number' ? amount : fromSmallestUnit(amount, tokenType);
     return `${parseFloat(value.toFixed(decimals)).toLocaleString('en-US', { maximumFractionDigits: decimals })} ${symbol}`;
   };
 
-  const formatDate = (timestamp: any): string => {
+  const formatDate = (timestamp: AmountLike): string => {
     try {
       const ts = timestamp.toNumber ? timestamp.toNumber() : Number(timestamp);
       return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -401,6 +503,7 @@ const Dashboard: React.FC = () => {
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               creatorWallet: publicKey.toBase58(),
+              clientWallet: publicKey.toBase58(),
               amount: formatAmount(inv.amountPaid, inv.tokenType),
               senderName: displayName || undefined,
               invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey.toBase58()}`,
@@ -422,6 +525,7 @@ const Dashboard: React.FC = () => {
     const releaseableAmount = getReleaseable(invoice);
     const schedule = invoice.releaseSchedule ?? [];
     const idx = invoice.currentReleaseIndex ?? 0;
+    const isFinalRelease = schedule.length === 0 || idx >= schedule.length - 1;
     let installmentAmount = releaseableAmount;
     let installmentLabel = '';
     if (schedule.length > 0 && idx < schedule.length) {
@@ -429,7 +533,17 @@ const Dashboard: React.FC = () => {
       installmentAmount = parseFloat((fromSmallestUnit(invoice.amountPaid, invoice.tokenType) * bps / 10000).toFixed(invoice.tokenType === TokenType.USDC ? 6 : 9));
       installmentLabel = `Installment ${idx + 1} of ${schedule.length} (${bps / 100}%)`;
     }
-    setReleaseModal({ open: true, invoiceId: invoice.invoiceId, amount: installmentLabel || formatAmount(invoice.amountPaid, invoice.tokenType), tokenType: invoice.tokenType, releaseableAmount: installmentAmount });
+    setReleaseModal({
+      open: true,
+      invoiceId: invoice.invoiceId,
+      amount: installmentLabel || formatAmount(invoice.amountPaid, invoice.tokenType),
+      tokenType: invoice.tokenType,
+      releaseableAmount: installmentAmount,
+      isFinalRelease,
+      creatorWallet: publicKey?.toBase58() || '',
+      clientWallet: invoice.client?.toBase58() ?? null,
+      invoiceAmount: fromSmallestUnit(invoice.amountPaid, invoice.tokenType),
+    });
   };
 
   const handleReleaseFunds = async () => {
@@ -439,10 +553,33 @@ const Dashboard: React.FC = () => {
       const result = await sdk.releaseFunds(releaseModal.invoiceId, releaseModal.releaseableAmount, releaseModal.tokenType);
       if (result.success) {
         toast({ title: 'Funds released to wallet' });
+        if (releaseModal.isFinalRelease && releaseModal.clientWallet) {
+          try {
+            const token = await getAccessToken();
+            await fetch('/api/referrals', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({
+                invoiceId: releaseModal.invoiceId,
+                creatorWallet: releaseModal.creatorWallet,
+                clientWallet: releaseModal.clientWallet,
+                tokenType: releaseModal.tokenType,
+                invoiceAmount: releaseModal.invoiceAmount,
+                isFinalRelease: true,
+              }),
+            });
+          } catch {
+            // non-blocking: referral accrual should not block release success
+          }
+        }
         const decimals = releaseModal.tokenType === TokenType.USDC ? 2 : 4;
         const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
         addNotification({ type: 'success', title: 'Funds Released', message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}` });
-        lastFetchedAt.current = 0; await fetchAll();
+        lastFetchedAt.current = 0;
+        await Promise.all([fetchAll(), fetchReferralPanel()]);
       } else {
         toast({ title: 'Release failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -458,6 +595,47 @@ const Dashboard: React.FC = () => {
       toast({ title: 'Link copied' });
     } catch {
       toast({ title: 'Failed to copy', variant: 'destructive' });
+    }
+  };
+
+  const handleRequestPayout = async (tokenType: RewardTokenType) => {
+    if (!publicKey) {
+      toast({ title: 'Wallet required', description: 'Connect a wallet to request payout.', variant: 'destructive' });
+      return;
+    }
+    setRequestingPayout(tokenType);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/payout-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          tokenType,
+          payoutWallet: publicKey.toBase58(),
+        }),
+      });
+
+      const body = await res.json().catch(() => ({})) as { error?: string; amount?: number };
+      if (!res.ok) {
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+
+      toast({
+        title: 'Payout requested',
+        description: `Your ${tokenType} referral rewards will be reviewed on the next payout cycle.`,
+      });
+      await fetchReferralPanel();
+    } catch (e) {
+      toast({
+        title: 'Request failed',
+        description: e instanceof Error ? e.message : 'Unable to request payout',
+        variant: 'destructive',
+      });
+    } finally {
+      setRequestingPayout(null);
     }
   };
 
@@ -482,6 +660,7 @@ const Dashboard: React.FC = () => {
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               creatorWallet: inv.creator.toBase58(),
+              clientWallet: publicKey.toBase58(),
               event: 'release_approved',
               amount: formatAmount(inv.amountPaid, inv.tokenType),
             }),
@@ -515,6 +694,7 @@ const Dashboard: React.FC = () => {
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               creatorWallet: inv.creator.toBase58(),
+              clientWallet: publicKey.toBase58(),
               event: 'disputed',
               amount: formatAmount(inv.amountPaid, inv.tokenType),
             }),
@@ -595,6 +775,37 @@ const Dashboard: React.FC = () => {
     if (receivedFilter === 'disputed') return i.account.status === InvoiceStatus.Disputed;
     return true;
   });
+
+  const emptyRewardBucket: RewardBucket = {
+    pending: 0,
+    matured: 0,
+    requestable: 0,
+    requested: 0,
+    scheduled: 0,
+    paid: 0,
+    rejected: 0,
+  };
+  const emptyRewardSummary: Record<RewardTokenType, RewardBucket> = {
+    USDC: emptyRewardBucket,
+    SOL: emptyRewardBucket,
+  };
+  const referralSummary = referralPanel?.summary ?? emptyRewardSummary;
+  const latestPayoutRequest = referralPanel?.payout_requests?.[0] ?? null;
+  const referralCode = referralPanel?.profile?.referral_code ?? '';
+  const requestableTotal = (tokenType: RewardTokenType) =>
+    referralSummary[tokenType].matured + referralSummary[tokenType].requestable;
+  const payoutStatusLabel = (status: RewardStatus) => {
+    switch (status) {
+      case 'pending': return 'Pending admin review';
+      case 'matured': return 'Matured';
+      case 'requestable': return 'Requestable';
+      case 'requested': return 'Requested';
+      case 'scheduled': return 'Scheduled';
+      case 'paid': return 'Paid';
+      case 'rejected': return 'Rejected';
+      default: return status;
+    }
+  };
 
   // ============================================================
   // NOT CONNECTED
@@ -1197,19 +1408,19 @@ const Dashboard: React.FC = () => {
 
           {/* Refresh */}
           <button
-            onClick={fetchAll}
-            disabled={loading}
+            onClick={() => void fetchAll(true)}
+            disabled={loading || refreshing}
             className="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 disabled:opacity-50"
             style={{
               backgroundColor: 'transparent',
               border: '1px solid rgba(255,255,255,0.1)',
-              cursor: loading ? 'default' : 'pointer',
+              cursor: loading || refreshing ? 'default' : 'pointer',
               color: '#94A3B8',
             }}
-            onMouseEnter={e => !loading && (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
+            onMouseEnter={e => !(loading || refreshing) && (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
             onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
 
           {/* Share Profile */}
@@ -1269,7 +1480,7 @@ const Dashboard: React.FC = () => {
             {fetchError}
           </p>
           <button
-            onClick={() => { lastFetchedAt.current = 0; fetchAll(); }}
+            onClick={() => { lastFetchedAt.current = 0; void fetchAll(true); }}
             style={{
               fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 600,
               color: '#F59E0B', background: 'none', border: '1px solid rgba(245,158,11,0.3)',
@@ -1280,6 +1491,229 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* Referral + dispute surfaces */}
+      <div className="grid gap-4 lg:grid-cols-3 mb-4">
+        <div
+          className="rounded-xl p-4"
+          style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+                Referrals
+              </p>
+              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1rem' }}>
+                Earn from completed invoices
+              </h3>
+            </div>
+            <DarkBadge variant="green">10% fee share</DarkBadge>
+          </div>
+
+          {referralLoading && !referralPanel ? (
+            <div className="flex items-center gap-2 text-sm" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading referral ledger...
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+                  Your code
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p style={{ fontFamily: '"JetBrains Mono", monospace', color: '#F8FAFC', wordBreak: 'break-word' }}>
+                    {referralCode || 'Create or load a profile to see your code'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!referralCode) return;
+                      try {
+                        await navigator.clipboard.writeText(referralCode);
+                        setReferralCopied(true);
+                        setTimeout(() => setReferralCopied(false), 1500);
+                      } catch {
+                        toast({ title: 'Failed to copy', variant: 'destructive' });
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
+                    style={{
+                      backgroundColor: referralCopied ? 'rgba(45,212,191,0.1)' : 'transparent',
+                      border: referralCopied ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.1)',
+                      color: referralCopied ? '#2DD4BF' : '#94A3B8',
+                      cursor: 'pointer',
+                      fontFamily: '"DM Sans", sans-serif',
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    {referralCopied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {(['USDC', 'SOL'] as const).map(tokenType => {
+                  const total = requestableTotal(tokenType);
+                  const requestable = referralSummary[tokenType].requestable;
+                  const matured = referralSummary[tokenType].matured;
+                  const canRequestPayout = total >= 10 && !requestingPayout;
+                  return (
+                    <div key={tokenType} className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>{tokenType}</p>
+                      <p className="mt-1" style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1.15rem' }}>
+                        {total.toFixed(tokenType === 'USDC' ? 2 : 4)}
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
+                        {matured.toFixed(tokenType === 'USDC' ? 2 : 4)} matured · {requestable.toFixed(tokenType === 'USDC' ? 2 : 4)} ready
+                      </p>
+                      <button
+                        type="button"
+                        disabled={!canRequestPayout}
+                        onClick={() => void handleRequestPayout(tokenType)}
+                        className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-medium transition-opacity duration-150 disabled:opacity-50"
+                        style={{
+                          backgroundColor: total >= 10 ? '#2DD4BF' : 'rgba(255,255,255,0.06)',
+                          color: total >= 10 ? '#0D1117' : '#64748B',
+                          border: 'none',
+                          cursor: canRequestPayout ? 'pointer' : 'default',
+                          fontFamily: '"DM Sans", sans-serif',
+                        }}
+                      >
+                        {requestingPayout === tokenType ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Requesting...
+                          </>
+                        ) : total >= 10 ? (
+                          <>
+                            <SendHorizonal className="h-3.5 w-3.5" />
+                            Request payout
+                          </>
+                        ) : (
+                          'Need $10'
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {referralError && (
+                <p className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
+                  {referralError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+                  Rewards are stored off-chain and paid manually after the cycle cutoff.
+                </p>
+                <Link
+                  to="/settings"
+                  className="text-xs font-medium"
+                  style={{ color: '#93C5FD', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
+                >
+                  Manage
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div
+          className="rounded-xl p-4"
+          style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+                Payout status
+              </p>
+              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1rem' }}>
+                Manual cycle tracking
+              </h3>
+            </div>
+            <DarkBadge variant={latestPayoutRequest ? 'blue' : 'default'}>
+              {latestPayoutRequest ? payoutStatusLabel(latestPayoutRequest.status) : 'No request yet'}
+            </DarkBadge>
+          </div>
+
+          {latestPayoutRequest ? (
+            <div className="space-y-3">
+              <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+                  Latest request
+                </p>
+                <p className="mt-1" style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1.15rem' }}>
+                  {latestPayoutRequest.amount.toFixed(latestPayoutRequest.token_type === 'USDC' ? 2 : 4)} {latestPayoutRequest.token_type}
+                </p>
+                <p className="text-xs mt-1" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
+                  Cycle: {latestPayoutRequest.payout_cycle_date ?? '—'} · Deadline: {latestPayoutRequest.request_deadline ? new Date(latestPayoutRequest.request_deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                </p>
+              </div>
+              {latestPayoutRequest.admin_note && (
+                <p className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
+                  Admin note: {latestPayoutRequest.admin_note}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
+                No payout request has been filed yet. Available rewards will appear here once invoices complete.
+              </p>
+              <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+                  Policy
+                </p>
+                <p className="text-xs mt-2" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.6 }}>
+                  Requests are stored in the database, require at least $10 in completed fees, and are paid manually on the next cycle.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div
+          className="rounded-xl p-4"
+          style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+                Disputes
+              </p>
+              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1rem' }}>
+                Platform-reviewed resolution
+              </h3>
+            </div>
+            <DarkBadge variant="amber">Human review</DarkBadge>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+                How it works
+              </p>
+              <ul className="space-y-2 text-xs" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.5 }}>
+                <li>• Client or creator opens a dispute from the invoice flow.</li>
+                <li>• Funds freeze while both sides submit evidence.</li>
+                <li>• A platform admin decides the split and settles it on-chain.</li>
+              </ul>
+            </div>
+
+            <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.16)' }}>
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
+                Current rule
+              </p>
+              <p className="text-xs" style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.6 }}>
+                Disputes are handled by a single admin for now. Additional admins can be added later when the workload grows.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Role tabs */}
       <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as 'sent' | 'received' | 'client')}>

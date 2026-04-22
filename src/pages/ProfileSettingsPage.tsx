@@ -61,6 +61,8 @@ const ProfileSettingsPage: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [defaultToken, setDefaultToken] = useState<'USDC' | 'SOL'>('USDC');
   const [notificationEmail, setNotificationEmail] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [referredByCode, setReferredByCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -78,17 +80,25 @@ const ProfileSettingsPage: React.FC = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
-          const data = await res.json() as { display_name: string | null; default_token: string; notification_email: string | null };
+          const data = await res.json() as {
+            display_name: string | null;
+            default_token: string;
+            notification_email: string | null;
+            referral_code: string | null;
+            referred_by_code: string | null;
+          };
           setDisplayName(data.display_name ?? '');
           setDefaultToken(data.default_token === 'SOL' ? 'SOL' : 'USDC');
           setNotificationEmail(data.notification_email ?? '');
+          setReferralCode(data.referral_code ?? '');
+          setReferredByCode(data.referred_by_code ?? '');
         }
       } catch { /* non-blocking */ } finally {
         clearTimeout(safetyTimer);
         setLoading(false);
       }
     })();
-  }, [authenticated, getAccessToken, navigate]);
+  }, [authenticated, getAccessToken, navigate, ready]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -100,7 +110,12 @@ const ProfileSettingsPage: React.FC = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ display_name: displayName.trim(), default_token: defaultToken, notification_email: notificationEmail.trim() }),
+        body: JSON.stringify({
+          display_name: displayName.trim(),
+          default_token: defaultToken,
+          notification_email: notificationEmail.trim(),
+          referred_by_code: referredByCode.trim() || null,
+        }),
       });
       if (res.ok) {
         toast({ title: 'Profile saved' });
@@ -224,6 +239,49 @@ const ProfileSettingsPage: React.FC = () => {
                   placeholder="you@example.com"
                 />
                 <p style={helpStyle}>You'll be notified when a client pays, approves a release, or raises a dispute</p>
+              </div>
+
+              {/* Referral code */}
+              <div>
+                <label style={labelStyle}>Referral code</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <DarkInput
+                    type="text"
+                    value={referralCode}
+                    readOnly
+                    aria-readonly="true"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => referralCode && navigator.clipboard.writeText(referralCode)}
+                    style={{
+                      flexShrink: 0,
+                      padding: '0 14px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      backgroundColor: '#1C2128',
+                      color: '#F8FAFC',
+                      fontFamily: '"DM Sans", sans-serif',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p style={helpStyle}>Share this code so referrers can earn 10% of completed invoice platform fees.</p>
+              </div>
+
+              {/* Referred by */}
+              <div>
+                <label style={labelStyle}>Referred by code</label>
+                <DarkInput
+                  type="text"
+                  value={referredByCode}
+                  onChange={e => setReferredByCode(e.target.value.toUpperCase().slice(0, 32))}
+                  placeholder="Enter a referral code"
+                />
+                <p style={helpStyle}>Optional. Set once to credit the person who brought you here.</p>
               </div>
 
             </div>

@@ -58,6 +58,7 @@ const Header: React.FC = () => {
     ? [
         { to: '/dashboard', label: 'Dashboard' },
         { to: '/create', label: 'Create Invoice' },
+        { to: '/settings', label: 'Settings' },
       ]
     : [];
 

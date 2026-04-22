@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
@@ -21,46 +21,6 @@ import { NotificationList, NotificationHistory, useNotifications } from './Notif
 interface InvoiceWithKey {
   publicKey: PublicKey;
   account: InvoiceData;
-}
-
-type RewardTokenType = 'USDC' | 'SOL';
-type RewardStatus = 'pending' | 'matured' | 'requestable' | 'requested' | 'scheduled' | 'paid' | 'rejected';
-
-interface RewardBucket {
-  pending: number;
-  matured: number;
-  requestable: number;
-  requested: number;
-  scheduled: number;
-  paid: number;
-  rejected: number;
-}
-
-interface ReferralProfileData {
-  display_name: string | null;
-  referral_code: string | null;
-  referred_by_code: string | null;
-  referral_linked_at: string | null;
-  created_at: string | null;
-}
-
-interface PayoutRequestSummary {
-  id: number;
-  token_type: RewardTokenType;
-  amount: number;
-  status: RewardStatus;
-  payout_cycle_date: string | null;
-  request_deadline: string | null;
-  requested_at: string | null;
-  processed_at: string | null;
-  admin_note: string | null;
-}
-
-interface ReferralPanelData {
-  profile: ReferralProfileData | null;
-  summary: Record<RewardTokenType, RewardBucket>;
-  rewards: unknown[];
-  payout_requests: PayoutRequestSummary[];
 }
 
 type AmountLike =
@@ -150,7 +110,7 @@ const Dashboard: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
   const { signAndSendTransaction } = useSignAndSendTransaction();
-  const { activeWallet: privyWallet } = useActiveWallet();
+  const { activeWallet: privyWallet, allWallets } = useActiveWallet();
   const privyWalletRef = useRef(privyWallet);
   privyWalletRef.current = privyWallet;
   const walletAddress = privyWallet?.address ?? null;
@@ -189,18 +149,7 @@ const Dashboard: React.FC = () => {
   } | null>(null);
   const lastFetchedAt = useRef<number>(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [profileCopied, setProfileCopied] = useState(false);
-  const [referralCopied, setReferralCopied] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
-  const [missingNotifEmail, setMissingNotifEmail] = useState(false);
-  const [showNamePrompt, setShowNamePrompt] = useState(false);
-  const [nameInput, setNameInput] = useState('');
-  const [savingName, setSavingName] = useState(false);
-  const [referralPanel, setReferralPanel] = useState<ReferralPanelData | null>(null);
-  const [referralLoading, setReferralLoading] = useState(false);
-  const [referralError, setReferralError] = useState<string | null>(null);
-  const [requestingPayout, setRequestingPayout] = useState<RewardTokenType | null>(null);
-  const referralLastFetchedAt = useRef<number>(0);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -343,7 +292,7 @@ const Dashboard: React.FC = () => {
     } catch (e) {
       const isTimeout = e instanceof Error && e.message === 'timeout';
       setFetchError(isTimeout
-        ? 'Could not reach Solana — check your connection and try refreshing.'
+        ? 'Could not reach Solana â€” check your connection and try refreshing.'
         : 'Failed to load invoices. Try refreshing.'
       );
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
@@ -374,69 +323,12 @@ const Dashboard: React.FC = () => {
         if (res.ok) {
           const data = await res.json() as { display_name: string | null; notification_email: string | null };
           setDisplayName(data.display_name);
-          setMissingNotifEmail(!data.notification_email);
-          if (!data.display_name) setShowNamePrompt(true);
           return;
         }
       } catch { /* non-blocking */ }
-      setShowNamePrompt(true);
     };
     fetchProfile();
   }, [authenticated, getAccessToken]);
-
-  const handleSaveName = async () => {
-    if (!nameInput.trim()) { setShowNamePrompt(false); return; }
-    setSavingName(true);
-    try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ display_name: nameInput.trim() }),
-      });
-      if (res.ok) {
-        const data = await res.json() as { display_name: string | null };
-        setDisplayName(data.display_name);
-        setShowNamePrompt(false);
-        toast({ title: 'Name saved' });
-      }
-    } catch { /* non-blocking */ } finally { setSavingName(false); }
-  };
-
-  const fetchReferralPanel = useCallback(async () => {
-    if (!authenticated) return;
-    setReferralLoading(true);
-    setReferralError(null);
-    try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/referrals', {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json() as ReferralPanelData;
-      setReferralPanel(data);
-      referralLastFetchedAt.current = Date.now();
-    } catch (e) {
-      setReferralError(e instanceof Error ? e.message : 'Failed to load referral data');
-    } finally {
-      setReferralLoading(false);
-    }
-  }, [authenticated, getAccessToken]);
-
-  useEffect(() => {
-    void fetchReferralPanel();
-  }, [fetchReferralPanel]);
-
-  useEffect(() => {
-    if (!authenticated) return;
-    const onFocus = () => {
-      if (Date.now() - referralLastFetchedAt.current > 30_000) void fetchReferralPanel();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [authenticated, fetchReferralPanel]);
 
   // ============================================================
   // HELPERS
@@ -472,7 +364,7 @@ const Dashboard: React.FC = () => {
     const lines = [];
     if (usdc > 0) lines.push(parseFloat(usdc.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' USDC');
     if (sol > 0) lines.push(parseFloat(sol.toFixed(4)).toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' SOL');
-    return lines.length > 0 ? lines : ['—'];
+    return lines.length > 0 ? lines : ['â€”'];
   };
 
   const getReleaseable = (inv: InvoiceData) => {
@@ -591,7 +483,7 @@ const Dashboard: React.FC = () => {
         const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
         addNotification({ type: 'success', title: 'Funds Released', message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}` });
         lastFetchedAt.current = 0;
-        await Promise.all([fetchAll(), fetchReferralPanel()]);
+        await fetchAll();
       } else {
         toast({ title: 'Release failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -607,47 +499,6 @@ const Dashboard: React.FC = () => {
       toast({ title: 'Link copied' });
     } catch {
       toast({ title: 'Failed to copy', variant: 'destructive' });
-    }
-  };
-
-  const handleRequestPayout = async (tokenType: RewardTokenType) => {
-    if (!publicKey) {
-      toast({ title: 'Wallet required', description: 'Connect a wallet to request payout.', variant: 'destructive' });
-      return;
-    }
-    setRequestingPayout(tokenType);
-    try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/payout-requests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          tokenType,
-          payoutWallet: publicKey.toBase58(),
-        }),
-      });
-
-      const body = await res.json().catch(() => ({})) as { error?: string; amount?: number };
-      if (!res.ok) {
-        throw new Error(body.error || `HTTP ${res.status}`);
-      }
-
-      toast({
-        title: 'Payout requested',
-        description: `Your ${tokenType} referral rewards will be reviewed on the next payout cycle.`,
-      });
-      await fetchReferralPanel();
-    } catch (e) {
-      toast({
-        title: 'Request failed',
-        description: e instanceof Error ? e.message : 'Unable to request payout',
-        variant: 'destructive',
-      });
-    } finally {
-      setRequestingPayout(null);
     }
   };
 
@@ -788,37 +639,6 @@ const Dashboard: React.FC = () => {
     return true;
   });
 
-  const emptyRewardBucket: RewardBucket = {
-    pending: 0,
-    matured: 0,
-    requestable: 0,
-    requested: 0,
-    scheduled: 0,
-    paid: 0,
-    rejected: 0,
-  };
-  const emptyRewardSummary: Record<RewardTokenType, RewardBucket> = {
-    USDC: emptyRewardBucket,
-    SOL: emptyRewardBucket,
-  };
-  const referralSummary = referralPanel?.summary ?? emptyRewardSummary;
-  const latestPayoutRequest = referralPanel?.payout_requests?.[0] ?? null;
-  const referralCode = referralPanel?.profile?.referral_code ?? '';
-  const requestableTotal = (tokenType: RewardTokenType) =>
-    referralSummary[tokenType].matured + referralSummary[tokenType].requestable;
-  const payoutStatusLabel = (status: RewardStatus) => {
-    switch (status) {
-      case 'pending': return 'Pending admin review';
-      case 'matured': return 'Matured';
-      case 'requestable': return 'Requestable';
-      case 'requested': return 'Requested';
-      case 'scheduled': return 'Scheduled';
-      case 'paid': return 'Paid';
-      case 'rejected': return 'Rejected';
-      default: return status;
-    }
-  };
-
   // ============================================================
   // NOT CONNECTED
   // ============================================================
@@ -831,7 +651,7 @@ const Dashboard: React.FC = () => {
       >
         <FileText className="h-10 w-10 mx-auto mb-4" style={{ color: '#64748B' }} />
         <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
-          Connect to continue — your invoices will appear here.
+          Connect to continue â€” your invoices will appear here.
         </p>
       </div>
     );
@@ -924,16 +744,16 @@ const Dashboard: React.FC = () => {
 
             {hasSchedule && !isDisputed && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
               <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>
-                Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) — installment {scheduleIdx + 1} of {schedule.length}
+                Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) â€” installment {scheduleIdx + 1} of {schedule.length}
               </p>
             )}
-            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen — dispute under review</p>}
+            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen â€” dispute under review</p>}
             {releaseRequested && !isDisputed && !releaseReady && (
-              <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Release requested · {formatCountdown(secondsLeft)}</p>
+              <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Release requested Â· {formatCountdown(secondsLeft)}</p>
             )}
             {releaseRequested && !isDisputed && releaseReady && (
               <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>
-                {inv.clientApproved ? 'Client approved — ready to release' : 'Timeout passed — ready to release'}
+                {inv.clientApproved ? 'Client approved â€” ready to release' : 'Timeout passed â€” ready to release'}
               </p>
             )}
 
@@ -1109,16 +929,16 @@ const Dashboard: React.FC = () => {
               {formatAmount(inv.amount, inv.tokenType)}
             </p>
             <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-              To: <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{truncateWallet(inv.creator.toBase58())}</span> · {formatDate(inv.createdAt)}
+              To: <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{truncateWallet(inv.creator.toBase58())}</span> Â· {formatDate(inv.createdAt)}
             </p>
 
             {schedule.length > 1 && (
               <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                Installment {scheduleIdx + 1} of {schedule.length} — {formatAmount(released, inv.tokenType)} released of {formatAmount(paid, inv.tokenType)}
+                Installment {scheduleIdx + 1} of {schedule.length} â€” {formatAmount(released, inv.tokenType)} released of {formatAmount(paid, inv.tokenType)}
               </p>
             )}
-            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen — dispute under review</p>}
-            {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested release · {formatCountdown(secondsLeft)}</p>}
+            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen â€” dispute under review</p>}
+            {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested release Â· {formatCountdown(secondsLeft)}</p>}
             {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this release</p>}
 
             {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
@@ -1216,7 +1036,7 @@ const Dashboard: React.FC = () => {
   );
 
   // ============================================================
-  // TAB STYLES — MOBILE FIX: scrollable, no clipping
+  // TAB STYLES â€” MOBILE FIX: scrollable, no clipping
   // ============================================================
 
   const tabListStyle: React.CSSProperties = {
@@ -1250,7 +1070,7 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Page header — MOBILE FIX: stacks vertically on mobile */}
+      {/* Page header â€” MOBILE FIX: stacks vertically on mobile */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
@@ -1267,20 +1087,20 @@ const Dashboard: React.FC = () => {
           </h1>
           {publicKey && (
             <Link
-              to={`/profile/${publicKey.toBase58()}`}
+              to="/account"
               className="flex items-center gap-1 transition-opacity duration-150 hover:opacity-70 w-fit"
               style={{ textDecoration: 'none' }}
-              title="View your public escrow record"
+              title="Open your account hub"
             >
               <p
                 style={{
-                  fontFamily: '"JetBrains Mono", monospace',
+                  fontFamily: '"DM Sans", sans-serif',
                   fontSize: '12px',
                   color: '#64748B',
                   marginTop: '4px',
                 }}
               >
-                {truncateWallet(publicKey.toBase58())}
+                {displayName || 'Account'}
               </p>
               <ExternalLink
                 className="h-3 w-3"
@@ -1289,102 +1109,34 @@ const Dashboard: React.FC = () => {
             </Link>
           )}
 
-          {/* First-login display name prompt */}
-          {showNamePrompt && (
-            <div
-              className="flex items-center gap-2 mt-3"
-              style={{ flexWrap: 'wrap' }}
-            >
-              <input
-                type="text"
-                placeholder="Add a display name…"
-                value={nameInput}
-                onChange={e => setNameInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setShowNamePrompt(false); }}
-                style={{
-                  backgroundColor: '#1C2128',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '8px',
-                  color: '#F8FAFC',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: '13px',
-                  padding: '6px 12px',
-                  outline: 'none',
-                  width: '180px',
-                }}
-              />
-              <button
-                onClick={handleSaveName}
-                disabled={savingName || !nameInput.trim()}
-                style={{
-                  backgroundColor: '#2DD4BF',
-                  color: '#0D1117',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  padding: '6px 12px',
-                  cursor: 'pointer',
-                  opacity: savingName || !nameInput.trim() ? 0.5 : 1,
-                }}
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setShowNamePrompt(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#64748B',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  padding: '6px 4px',
-                }}
-              >
-                Skip
-              </button>
-            </div>
-          )}
-
-          {/* Missing notification email nudge */}
-          {missingNotifEmail && !showNamePrompt && (
-            <div
-              className="flex items-center gap-2 mt-3"
-              style={{
-                backgroundColor: 'rgba(45,212,191,0.06)',
-                border: '1px solid rgba(45,212,191,0.15)',
-                borderRadius: '8px',
-                padding: '8px 12px',
-                flexWrap: 'wrap',
-              }}
-            >
-              <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', flex: 1 }}>
-                Add a notification email to get alerts when clients pay or dispute.
-              </span>
-              <a
-                href="/settings"
-                style={{
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: '#2DD4BF',
-                  textDecoration: 'none',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Go to Settings →
-              </a>
-              <button
-                onClick={() => setMissingNotifEmail(false)}
-                style={{ background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', padding: '0 4px', fontSize: '14px' }}
-              >
-                ✕
-              </button>
-            </div>
-          )}
         </div>
+
+        {authenticated && allWallets.length === 0 && (
+          <div
+            className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3"
+            style={{
+              backgroundColor: 'rgba(45,212,191,0.08)',
+              border: '1px solid rgba(45,212,191,0.18)',
+            }}
+          >
+            <div>
+              <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '0.98rem' }}>
+                No wallet connected yet
+              </p>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#94A3B8', marginTop: '2px' }}>
+                Create or import one to send, receive, and approve invoices.
+              </p>
+            </div>
+            <Link
+              to="/wallet"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
+              style={{ backgroundColor: '#2DD4BF', color: '#0D1117', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
+            >
+              <Wallet className="h-4 w-4" />
+              Set up wallet
+            </Link>
+          </div>
+        )}
 
         {/* MOBILE FIX: buttons wrap on small screens */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -1435,36 +1187,6 @@ const Dashboard: React.FC = () => {
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
 
-          {/* Share Profile */}
-          {publicKey && (
-            <button
-              onClick={async () => {
-                const url = `${window.location.origin}/profile/${publicKey.toBase58()}`;
-                try {
-                  await navigator.clipboard.writeText(url);
-                  setProfileCopied(true);
-                  setTimeout(() => setProfileCopied(false), 2000);
-                } catch {
-                  toast({ title: 'Failed to copy', variant: 'destructive' });
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-medium transition-all duration-150"
-              style={{
-                backgroundColor: profileCopied ? 'rgba(45,212,191,0.1)' : 'transparent',
-                border: profileCopied ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.1)',
-                color: profileCopied ? '#2DD4BF' : '#94A3B8',
-                fontFamily: '"DM Sans", sans-serif',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={e => { if (!profileCopied) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
-              onMouseLeave={e => { if (!profileCopied) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-              title="Copy your public profile link"
-            >
-              {profileCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {profileCopied ? 'Copied!' : 'Profile'}
-            </button>
-          )}
-
           {/* Create invoice */}
           <Link
             to="/create"
@@ -1504,238 +1226,6 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Referral + dispute surfaces */}
-      <div className="grid gap-3 lg:grid-cols-3 mb-4">
-        <div
-          className="rounded-xl p-3 sm:p-4"
-          style={{
-            background: 'linear-gradient(180deg, rgba(22,27,34,0.98) 0%, rgba(22,27,34,0.92) 100%)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div>
-              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                Referrals
-              </p>
-              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '0.98rem' }}>
-                Completed fees, manual payout
-              </h3>
-            </div>
-            <DarkBadge variant="green">10% pool</DarkBadge>
-          </div>
-
-          {referralLoading && !referralPanel ? (
-            <div className="flex items-center gap-2 text-sm" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading rewards...
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                  Your code
-                </p>
-                <div className="flex items-center justify-between gap-2">
-                  <p style={{ fontFamily: '"JetBrains Mono", monospace', color: '#F8FAFC', wordBreak: 'break-word', fontSize: '0.95rem' }}>
-                    {referralCode || 'Create or load a profile to see your code'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!referralCode) return;
-                      try {
-                        await navigator.clipboard.writeText(referralCode);
-                        setReferralCopied(true);
-                        setTimeout(() => setReferralCopied(false), 1500);
-                      } catch {
-                        toast({ title: 'Failed to copy', variant: 'destructive' });
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
-                    style={{
-                      backgroundColor: referralCopied ? 'rgba(45,212,191,0.1)' : 'transparent',
-                      border: referralCopied ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.1)',
-                      color: referralCopied ? '#2DD4BF' : '#94A3B8',
-                      cursor: 'pointer',
-                      fontFamily: '"DM Sans", sans-serif',
-                    }}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    {referralCopied ? 'Copied' : 'Copy code'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                {(['USDC', 'SOL'] as const).map(tokenType => {
-                  const total = requestableTotal(tokenType);
-                  const requestable = referralSummary[tokenType].requestable;
-                  const matured = referralSummary[tokenType].matured;
-                  const canRequestPayout = total >= 10 && !requestingPayout;
-                  return (
-                    <div key={tokenType} className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>{tokenType}</p>
-                      <p className="mt-1" style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1.05rem' }}>
-                        {total.toFixed(tokenType === 'USDC' ? 2 : 4)}
-                      </p>
-                      <p className="text-xs mt-1" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
-                        {matured.toFixed(tokenType === 'USDC' ? 2 : 4)} matured · {requestable.toFixed(tokenType === 'USDC' ? 2 : 4)} ready
-                      </p>
-                      <button
-                        type="button"
-                        disabled={!canRequestPayout}
-                        onClick={() => void handleRequestPayout(tokenType)}
-                        className="mt-3 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-medium transition-opacity duration-150 disabled:opacity-50"
-                        style={{
-                          backgroundColor: total >= 10 ? '#2DD4BF' : 'rgba(255,255,255,0.06)',
-                          color: total >= 10 ? '#0D1117' : '#64748B',
-                          border: 'none',
-                          cursor: canRequestPayout ? 'pointer' : 'default',
-                          fontFamily: '"DM Sans", sans-serif',
-                        }}
-                      >
-                        {requestingPayout === tokenType ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Requesting...
-                          </>
-                        ) : total >= 10 ? (
-                          <>
-                            <SendHorizonal className="h-3.5 w-3.5" />
-                            Request payout
-                          </>
-                        ) : (
-                          'Need $10'
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {referralError && (
-                <p className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
-                  {referralError}
-                </p>
-              )}
-
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.4 }}>
-                  Off-chain ledger. Manual payout after the cycle cutoff.
-                </p>
-                <Link
-                  to="/settings"
-                  className="text-xs font-medium"
-                  style={{ color: '#93C5FD', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
-                >
-                  Manage
-                </Link>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div
-          className="rounded-xl p-3 sm:p-4"
-          style={{
-            background: 'linear-gradient(180deg, rgba(22,27,34,0.98) 0%, rgba(22,27,34,0.92) 100%)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div>
-              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                Payout status
-              </p>
-              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '0.98rem' }}>
-                Manual cycle tracking
-              </h3>
-            </div>
-            <DarkBadge variant={latestPayoutRequest ? 'blue' : 'default'}>
-              {latestPayoutRequest ? payoutStatusLabel(latestPayoutRequest.status) : 'No request yet'}
-            </DarkBadge>
-          </div>
-
-          {latestPayoutRequest ? (
-            <div className="space-y-3">
-              <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                  Latest request
-                </p>
-                <p className="mt-1" style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1.05rem' }}>
-                  {latestPayoutRequest.amount.toFixed(latestPayoutRequest.token_type === 'USDC' ? 2 : 4)} {latestPayoutRequest.token_type}
-                </p>
-                <p className="text-xs mt-1" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
-                  Cycle: {latestPayoutRequest.payout_cycle_date ?? '—'} · Deadline: {latestPayoutRequest.request_deadline ? new Date(latestPayoutRequest.request_deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                </p>
-              </div>
-              {latestPayoutRequest.admin_note && (
-                <p className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
-                  Admin note: {latestPayoutRequest.admin_note}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
-                No payout request has been filed yet. Available rewards will appear here once invoices complete.
-              </p>
-              <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                  Policy
-                </p>
-                <p className="text-xs mt-2" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.6 }}>
-                  Requests are stored in the database, require at least $10 in completed fees, and are paid manually on the next cycle.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div
-          className="rounded-xl p-3 sm:p-4"
-          style={{
-            background: 'linear-gradient(180deg, rgba(22,27,34,0.98) 0%, rgba(22,27,34,0.92) 100%)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div>
-              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                Disputes
-              </p>
-              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '0.98rem' }}>
-                Platform-reviewed resolution
-              </h3>
-            </div>
-            <DarkBadge variant="amber">Human review</DarkBadge>
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                How it works
-              </p>
-              <ul className="space-y-2 text-xs" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.5 }}>
-                <li>• Open from the invoice flow.</li>
-                <li>• Funds freeze while both sides submit evidence.</li>
-                <li>• Admin decides the split and settles on-chain.</li>
-              </ul>
-            </div>
-
-            <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.16)' }}>
-              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
-                Current rule
-              </p>
-              <p className="text-xs" style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.6 }}>
-                Single-admin review for now. Additional admins can be added later when the workload grows.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Role tabs */}
       <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as 'sent' | 'received' | 'client')}>
         <TabsList style={tabListStyle}>
@@ -1766,7 +1256,7 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Pending Release" accentLeft={sentStats.pendingReleaseUSDC > 0 || sentStats.pendingReleaseSOL > 0 ? '#F59E0B' : undefined}>
               {formatStat(sentStats.pendingReleaseUSDC, sentStats.pendingReleaseSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#FCD34D', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === 'â€”' ? '#64748B' : '#FCD34D', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="In Escrow" accentLeft={sentStats.inEscrow > 0 ? '#3B82F6' : undefined}>
@@ -1779,7 +1269,7 @@ const Dashboard: React.FC = () => {
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: '#F8FAFC' }}>{sentStats.total}</p>
               <div className="flex gap-2 flex-wrap">
                 <span className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>{sentStats.unpaid} pending</span>
-                {sentStats.disputed > 0 && <span className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>· {sentStats.disputed} disputed</span>}
+                {sentStats.disputed > 0 && <span className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>Â· {sentStats.disputed} disputed</span>}
               </div>
             </StatCard>
           </div>
@@ -1810,12 +1300,12 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total Received">
               {formatStat(receivedStats.totalReceivedUSDC, receivedStats.totalReceivedSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === 'â€”' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="In Escrow" accentLeft={receivedStats.inEscrow > 0 ? '#3B82F6' : undefined}>
               {formatStat(receivedStats.inEscrowUSDC, receivedStats.inEscrowSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#93C5FD', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === 'â€”' ? '#64748B' : '#93C5FD', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="Released" accentLeft={receivedStats.released > 0 ? '#22C55E' : undefined}>
@@ -1851,7 +1341,7 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total Paid Out">
               {formatStat(clientStats.totalPaidUSDC, clientStats.totalPaidSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === 'â€”' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="Awaiting Action" accentLeft={clientStats.awaitingAction > 0 ? '#3B82F6' : undefined}>
@@ -1939,3 +1429,4 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+

@@ -1,34 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
-import { AnchorProvider } from '@coral-xyz/anchor';
+import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection } from '@solana/web3.js';
 import { ExternalLink, AlertCircle, Loader2, Shield, Zap, TrendingUp, Calendar, Info, Copy, Check } from 'lucide-react';
-import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
+import { EscrowPaySDK, InvoiceData, InvoiceStatus } from '@/lib/escrowPaySDK';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import TruvloLogo from '@/components/TruvloLogo';
 
-// ── helpers ────────────────────────────────────────────────────
-
-function fromSmallestUnit(amount: any, tokenType: TokenType): number {
-  const decimals = tokenType === TokenType.USDC ? 6 : 9;
-  try {
-    const raw = amount?.toNumber ? amount.toNumber() : Number(amount ?? 0);
-    const int = BigInt(Math.round(raw));
-    const divisor = BigInt(10 ** decimals);
-    const whole = int / divisor;
-    const remainder = int % divisor;
-    return parseFloat(`${whole}.${remainder.toString().padStart(decimals, '0')}`);
-  } catch { return 0; }
-}
+// â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getMemberSince(invoices: InvoiceData[]): string {
-  if (!invoices.length) return '—';
+  if (!invoices.length) return 'â€”';
   const timestamps = invoices
     .map(i => { try { return i.createdAt.toNumber ? i.createdAt.toNumber() : Number(i.createdAt); } catch { return 0; } })
     .filter(t => t > 0);
-  if (!timestamps.length) return '—';
+  if (!timestamps.length) return 'â€”';
   return new Date(Math.min(...timestamps) * 1000).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
@@ -49,15 +37,15 @@ function getLongestCleanStreak(invoices: InvoiceData[]): number {
   return max;
 }
 
-// ── reputation score — deterministic, 0–1000 ──────────────────
-// Completion rate    40% → up to 400 pts  (linear — based on rate, not count)
-// Activity volume    20% → up to 200 pts  (log scale — never plateaus)
-// Best streak        20% → up to 200 pts  (log scale — keeps rewarding consistency)
-// Two-sided          10% → up to 100 pts  (binary — used platform both ways)
-// Dispute penalty   −10% → up to −100 pts (50 per dispute, max 100 deducted)
+// â”€â”€ reputation score â€” deterministic, 0â€“1000 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Completion rate    40% â†’ up to 400 pts  (linear â€” based on rate, not count)
+// Activity volume    20% â†’ up to 200 pts  (log scale â€” never plateaus)
+// Best streak        20% â†’ up to 200 pts  (log scale â€” keeps rewarding consistency)
+// Two-sided          10% â†’ up to 100 pts  (binary â€” used platform both ways)
+// Dispute penalty   âˆ’10% â†’ up to âˆ’100 pts (50 per dispute, max 100 deducted)
 //
 // Log scale means 200 invoices scores better than 50 but not 4x better.
-// The score approaches 1000 asymptotically — always a reason to do one more.
+// The score approaches 1000 asymptotically â€” always a reason to do one more.
 
 interface ScoreBreakdown {
   total: number;
@@ -76,25 +64,25 @@ function calcReputationScore(
   disputedAsCreator: number,
   disputedAsClient: number,
 ): ScoreBreakdown {
-  // 1. Completion rate — linear, based on rate not raw count (0–400)
+  // 1. Completion rate â€” linear, based on rate not raw count (0â€“400)
   const completionRate = totalSent > 0 ? cleanCompletions / totalSent : 0;
   const completionPts = Math.round(completionRate * 400);
 
-  // 2. Activity — log scale, reference point: 50 invoices ≈ 150pts, 200 ≈ 190pts (0–200)
+  // 2. Activity â€” log scale, reference point: 50 invoices â‰ˆ 150pts, 200 â‰ˆ 190pts (0â€“200)
   const totalActivity = totalSent + totalPaid;
   const activityPts = totalActivity > 0
     ? Math.round(Math.log(totalActivity + 1) / Math.log(202) * 200)
     : 0;
 
-  // 3. Streak — log scale, reference point: 20 streak ≈ 150pts, 100 ≈ 190pts (0–200)
+  // 3. Streak â€” log scale, reference point: 20 streak â‰ˆ 150pts, 100 â‰ˆ 190pts (0â€“200)
   const streakPts = longestStreak > 0
     ? Math.round(Math.log(longestStreak + 1) / Math.log(202) * 200)
     : 0;
 
-  // 4. Two-sided participation — binary (0 or 100)
+  // 4. Two-sided participation â€” binary (0 or 100)
   const twoSidedPts = totalSent > 0 && totalPaid > 0 ? 100 : 0;
 
-  // 5. Dispute penalty — 50pts per dispute, max 100 deducted
+  // 5. Dispute penalty â€” 50pts per dispute, max 100 deducted
   const disputePenalty = Math.min((disputedAsCreator + disputedAsClient) * 50, 100);
 
   const total = Math.max(0, Math.min(1000, completionPts + activityPts + streakPts + twoSidedPts - disputePenalty));
@@ -102,21 +90,21 @@ function calcReputationScore(
   return { total, completionPts, activityPts, streakPts, twoSidedPts, disputePenalty };
 }
 
-// ── read-only SDK ──────────────────────────────────────────────
+// â”€â”€ read-only SDK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function createReadOnlySdk(connection: Connection): EscrowPaySDK | null {
   try {
-    const mock = {
+    const mock: Wallet = {
       publicKey: new PublicKey('11111111111111111111111111111111'),
-      signTransaction: async (tx: any) => tx,
-      signAllTransactions: async (txs: any[]) => txs,
+      signTransaction: async <T extends { serialize: () => Uint8Array }>(tx: T): Promise<T> => tx,
+      signAllTransactions: async <T extends { serialize: () => Uint8Array }>(txs: T[]): Promise<T[]> => txs,
     };
-    const provider = new AnchorProvider(connection, mock as any, { commitment: 'confirmed' });
+    const provider = new AnchorProvider(connection, mock, { commitment: 'confirmed' });
     return new EscrowPaySDK(provider);
   } catch { return null; }
 }
 
-// ── score ring ─────────────────────────────────────────────────
+// â”€â”€ score ring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
   const size = 160;
@@ -149,7 +137,7 @@ const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
   );
 };
 
-// ── stat card ─────────────────────────────────────────────────
+// â”€â”€ stat card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const StatCard = ({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) => (
   <div className="rounded-xl p-5 flex flex-col gap-1" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -163,7 +151,7 @@ const StatCard = ({ label, value, sub, accent }: { label: string; value: string 
   </div>
 );
 
-// ── breakdown row ──────────────────────────────────────────────
+// â”€â”€ breakdown row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const BreakdownRow = ({ label, pts, max, negative }: { label: string; pts: number; max: number; negative?: boolean }) => (
   <div className="flex items-center gap-3">
@@ -177,17 +165,17 @@ const BreakdownRow = ({ label, pts, max, negative }: { label: string; pts: numbe
       />
     </div>
     <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '12px', color: negative ? '#EF4444' : '#F8FAFC', minWidth: '56px', textAlign: 'right', flexShrink: 0 }}>
-      {negative ? '−' : '+'}{Math.abs(pts)} / {max}
+      {negative ? 'âˆ’' : '+'}{Math.abs(pts)} / {max}
     </span>
   </div>
 );
 
-// ── session cache (cleared on tab close) ──────────────────────
+// â”€â”€ session cache (cleared on tab close) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const profileCache = new Map<string, { data: ProfileData; fetchedAt: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// ── types ──────────────────────────────────────────────────────
+// â”€â”€ types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type LoadState = 'loading' | 'error' | 'loaded';
 
@@ -203,7 +191,7 @@ interface ProfileData {
   score: ScoreBreakdown;
 }
 
-// ── page ───────────────────────────────────────────────────────
+// â”€â”€ page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ProfilePage: React.FC = () => {
   const { wallet } = useParams<{ wallet: string }>();
@@ -280,7 +268,7 @@ const ProfilePage: React.FC = () => {
     load();
   }, [walletPubkey, connection]);
 
-  // ── loading ──────────────────────────────────────────────────
+  // â”€â”€ loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loadState === 'loading') {
     return (
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
@@ -296,7 +284,7 @@ const ProfilePage: React.FC = () => {
     );
   }
 
-  // ── error ────────────────────────────────────────────────────
+  // â”€â”€ error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (loadState === 'error' || !profile) {
     return (
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
@@ -332,16 +320,16 @@ const ProfilePage: React.FC = () => {
       <main className="flex-1 w-full px-4 sm:px-6 py-12">
         <div style={{ maxWidth: '720px', margin: '0 auto' }}>
 
-          {/* ── Identity ── */}
+          {/* â”€â”€ Identity â”€â”€ */}
           <div className="flex items-start justify-between gap-4 mb-10">
             <div>
               <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}>
-                Escrow Record
+                Wallet Record
               </p>
               <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '1rem', color: '#F8FAFC', letterSpacing: '0.01em', wordBreak: 'break-all', lineHeight: 1.5 }}>
                 {profile.walletAddress}
               </p>
-              {profile.memberSince !== '—' && (
+              {profile.memberSince !== 'â€”' && (
                 <div className="flex items-center gap-2 mt-2">
                   <Calendar className="h-3 w-3" style={{ color: '#64748B' }} />
                   <span style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>
@@ -384,7 +372,7 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          {/* ── No activity ── */}
+          {/* â”€â”€ No activity â”€â”€ */}
           {!hasAnyActivity && (
             <div className="rounded-xl p-12 text-center mb-8" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}>
               <TruvloLogo size="sm" className="mx-auto mb-4" />
@@ -396,7 +384,7 @@ const ProfilePage: React.FC = () => {
 
           {hasAnyActivity && (
             <>
-              {/* ── Reputation score — hero ── */}
+              {/* â”€â”€ Reputation score â€” hero â”€â”€ */}
               <div
                 className="rounded-xl p-8 mb-6 flex flex-col md:flex-row items-center gap-8"
                 style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderLeft: '4px solid #2DD4BF' }}
@@ -406,7 +394,7 @@ const ProfilePage: React.FC = () => {
                 <div className="flex-1 text-center md:text-left">
                   <div className="flex items-center gap-2 justify-center md:justify-start mb-2">
                     <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.25rem', color: '#F8FAFC', letterSpacing: '-0.01em' }}>
-                      Reputation Score
+                      Wallet Reputation
                     </p>
                     <button
                       onClick={() => setShowBreakdown(v => !v)}
@@ -451,18 +439,18 @@ const ProfilePage: React.FC = () => {
                 </div>
               </div>
 
-              {/* ── Breakdown (expandable via ℹ️ button) ── */}
+              {/* â”€â”€ Breakdown (expandable via â„¹ï¸ button) â”€â”€ */}
               {showBreakdown && (
                 <div className="rounded-xl p-6 mb-6 space-y-3" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.06)' }}>
                   <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 500, fontSize: '13px', color: '#F8FAFC', marginBottom: '16px' }}>
                     How the score is calculated
                   </p>
-                  <BreakdownRow label="Completion rate (×400)" pts={profile.score.completionPts} max={400} />
-                  <BreakdownRow label="Activity volume (×200)" pts={profile.score.activityPts} max={200} />
-                  <BreakdownRow label="Best streak (×200)" pts={profile.score.streakPts} max={200} />
-                  <BreakdownRow label="Two-sided (×100)" pts={profile.score.twoSidedPts} max={100} />
+                  <BreakdownRow label="Completion rate (Ã—400)" pts={profile.score.completionPts} max={400} />
+                  <BreakdownRow label="Activity volume (Ã—200)" pts={profile.score.activityPts} max={200} />
+                  <BreakdownRow label="Best streak (Ã—200)" pts={profile.score.streakPts} max={200} />
+                  <BreakdownRow label="Two-sided (Ã—100)" pts={profile.score.twoSidedPts} max={100} />
                   {profile.score.disputePenalty > 0 && (
-                    <BreakdownRow label="Dispute penalty (×100)" pts={profile.score.disputePenalty} max={100} negative />
+                    <BreakdownRow label="Dispute penalty (Ã—100)" pts={profile.score.disputePenalty} max={100} negative />
                   )}
                   <div className="flex justify-between pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                     <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#94A3B8' }}>Total</span>
@@ -473,7 +461,7 @@ const ProfilePage: React.FC = () => {
                 </div>
               )}
 
-              {/* ── As Creator ── */}
+              {/* â”€â”€ As Creator â”€â”€ */}
               {hasCreatorActivity && (
                 <div className="mb-6">
                   <div className="flex items-center gap-3 mb-4">
@@ -483,13 +471,13 @@ const ProfilePage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <StatCard label="Clean completions" value={profile.cleanCompletions} sub={`of ${profile.totalSent} sent`} accent={profile.cleanCompletions > 0} />
-                    <StatCard label="Completion rate" value={completionRate !== null ? `${completionRate}%` : '—'} sub={profile.disputedAsCreator > 0 ? `${profile.disputedAsCreator} disputed` : 'No disputes'} />
+                    <StatCard label="Completion rate" value={completionRate !== null ? `${completionRate}%` : 'â€”'} sub={profile.disputedAsCreator > 0 ? `${profile.disputedAsCreator} disputed` : 'No disputes'} />
                     <StatCard label="Best streak" value={profile.longestStreak} sub="dispute-free in a row" />
                   </div>
                 </div>
               )}
 
-              {/* ── As Client ── */}
+              {/* â”€â”€ As Client â”€â”€ */}
               {hasClientActivity && (
                 <div className="mb-6">
                   <div className="flex items-center gap-3 mb-4">
@@ -506,7 +494,7 @@ const ProfilePage: React.FC = () => {
             </>
           )}
 
-          {/* ── Verification footer ── */}
+          {/* â”€â”€ Verification footer â”€â”€ */}
           <div className="rounded-xl p-5 flex items-start gap-4" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}>
               <Shield className="h-4 w-4" style={{ color: '#2DD4BF' }} />
@@ -516,8 +504,12 @@ const ProfilePage: React.FC = () => {
                 This record is verified on-chain
               </p>
               <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#64748B', lineHeight: 1.6 }}>
-                Every figure is derived directly from the Truvlo smart contract on Solana.
-                No wallet connection required to view.{' '}
+                Every figure here is derived from one wallet's on-chain activity.
+                For pooled account reputation across linked wallets, open the{' '}
+                <Link to="/account" style={{ color: '#2DD4BF', textDecoration: 'none' }}>
+                  Account page
+                </Link>{' '}
+                instead. {' '}
                 <a href={`https://explorer.solana.com/address/${profile.walletAddress}?cluster=devnet`}
                   target="_blank" rel="noopener noreferrer" style={{ color: '#2DD4BF', textDecoration: 'none' }}>
                   Verify yourself →
@@ -526,7 +518,7 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          {/* ── Wallet match warning ── */}
+          {/* â”€â”€ Wallet match warning â”€â”€ */}
           <div
             className="rounded-xl p-4 flex items-start gap-3 mt-3"
             style={{ backgroundColor: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}
@@ -534,8 +526,8 @@ const ProfilePage: React.FC = () => {
             <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#F59E0B' }} />
             <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#94A3B8', lineHeight: 1.6 }}>
               <span style={{ color: '#F8FAFC', fontWeight: 500 }}>Always verify the wallet address matches. </span>
-              This profile is public — anyone can share it. Before paying an invoice, confirm the wallet shown here
-              matches the one on the invoice you received. Only the holder of the private key can send invoices from this wallet.
+              This page is public and wallet-specific. Before paying an invoice, confirm the wallet shown here
+              matches the one on the invoice you received. For pooled account reputation, use the Account page.
             </p>
           </div>
 

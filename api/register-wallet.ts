@@ -5,7 +5,7 @@ import {
   normalizeSolanaAddress,
   requireUserId,
   supabase,
-} from './_shared';
+} from './_shared.js';
 
 function generateSlug(displayName: string | null): string {
   const suffix = Math.random().toString(16).slice(2, 6);

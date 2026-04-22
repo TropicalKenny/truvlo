@@ -6,7 +6,7 @@ import {
   requireUserId,
   supabase,
   walletBelongsToUser,
-} from './_shared';
+} from './_shared.js';
 
 type TokenType = 'USDC' | 'SOL';
 

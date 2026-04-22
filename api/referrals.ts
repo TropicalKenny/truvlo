@@ -11,7 +11,7 @@ import {
   supabase,
   walletBelongsToUser,
   chooseReferralShares,
-} from './_shared';
+} from './_shared.js';
 
 type TokenType = 'USDC' | 'SOL';
 type RewardSourceRole = 'creator' | 'client';

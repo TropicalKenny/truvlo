@@ -16,15 +16,6 @@ import {
 type TokenType = 'USDC' | 'SOL';
 type RewardSourceRole = 'creator' | 'client';
 
-function parseAmount(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return null;
-}
-
 function parseTokenType(value: unknown): TokenType | null {
   return value === 'SOL' || value === 'USDC' ? value : null;
 }
@@ -140,23 +131,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       creatorWallet,
       clientWallet,
       tokenType: rawTokenType,
-      invoiceAmount,
-      isFinalRelease,
+      // FIX: invoiceAmount and isFinalRelease are no longer accepted from the caller.
+      // They are read from invoice_meta (a server-controlled source of truth) below.
     } = req.body as {
       invoiceId?: string;
       creatorWallet?: string;
       clientWallet?: string;
       tokenType?: TokenType;
-      invoiceAmount?: number | string;
-      isFinalRelease?: boolean;
     };
 
     if (!invoiceId || !creatorWallet || !clientWallet || !rawTokenType) {
       return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    if (!isFinalRelease) {
-      return res.status(200).json({ success: true, skipped: true, reason: 'Invoice is not final yet' });
     }
 
     if (!isValidSolanaAddress(creatorWallet) || !isValidSolanaAddress(clientWallet)) {
@@ -168,9 +153,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const tokenType = parseTokenType(rawTokenType);
-    const amount = parseAmount(invoiceAmount);
-    if (!tokenType || amount === null) {
-      return res.status(400).json({ error: 'Invalid token type or amount' });
+    if (!tokenType) {
+      return res.status(400).json({ error: 'Invalid token type' });
+    }
+
+    // FIX: Look up the invoice from invoice_meta to get the canonical amount
+    // and to check whether rewards have already been recorded (idempotency guard).
+    const { data: invoiceMeta, error: metaError } = await supabase
+      .from('invoice_meta')
+      .select('amount, is_final_release, referral_reward_recorded_at, creator_wallet')
+      .eq('invoice_id', invoiceId)
+      .eq('creator_wallet', normalizeSolanaAddress(creatorWallet))
+      .maybeSingle();
+
+    if (metaError) return res.status(500).json({ error: metaError.message });
+    if (!invoiceMeta) return res.status(404).json({ error: 'Invoice not found' });
+
+    // FIX: Reject if rewards have already been recorded for this invoice.
+    if (invoiceMeta.referral_reward_recorded_at) {
+      return res.status(409).json({
+        error: 'Referral rewards have already been recorded for this invoice',
+        recorded_at: invoiceMeta.referral_reward_recorded_at,
+      });
+    }
+
+    // FIX: Use the server-stored final-release flag, not the caller's input.
+    if (!invoiceMeta.is_final_release) {
+      return res.status(200).json({ success: true, skipped: true, reason: 'Invoice is not final yet' });
+    }
+
+    // FIX: Use the server-stored amount.
+    const amount = Number(invoiceMeta.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Invoice has no valid amount recorded' });
     }
 
     const [creatorPrivyId, clientPrivyId] = await Promise.all([

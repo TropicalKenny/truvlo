@@ -9,6 +9,8 @@ import {
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@truvlo.io';
+// FIX: Use a server-controlled origin so the approve URL cannot be forged by the caller.
+const APP_ORIGIN = process.env.APP_ORIGIN;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -18,16 +20,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = await requireUserId(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { invoiceId, creatorWallet, amount, description, senderName, invoiceUrl } = req.body as {
+  if (!APP_ORIGIN) {
+    console.error('APP_ORIGIN env var is not configured');
+    return res.status(500).json({ error: 'Server misconfiguration' });
+  }
+
+  // FIX: invoiceUrl is removed from the destructured body — it is no longer trusted.
+  const { invoiceId, creatorWallet, amount, description, senderName } = req.body as {
     invoiceId?: string;
     creatorWallet?: string;
     amount?: string;
     description?: string;
     senderName?: string;
-    invoiceUrl?: string;
   };
 
-  if (!invoiceId || !creatorWallet || !amount || !invoiceUrl) {
+  if (!invoiceId || !creatorWallet || !amount) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -55,7 +62,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'No client email on record for this invoice' });
   }
 
-  const approveUrl = invoiceUrl.replace('/invoice/', '/approve/');
+  // FIX: Generate approve URL server-side from a trusted, allowlisted origin.
+  // invoiceId is already validated to belong to this creator, so it is safe to embed.
+  const approveUrl = `${APP_ORIGIN}/approve/${encodeURIComponent(invoiceId)}`;
+
   const shortCreator = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
   const headline = senderName ? `${senderName} requested payment approval` : 'Release requested';
   const body = senderName

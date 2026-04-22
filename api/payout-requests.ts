@@ -55,10 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       balances: totalByToken,
-      rewards: {
-        USDC: usdcRewards,
-        SOL: solRewards,
-      },
+      rewards: { USDC: usdcRewards, SOL: solRewards },
       payout_requests: payoutRequests.data ?? [],
     });
   }
@@ -82,6 +79,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Payout wallet does not belong to the authenticated user' });
     }
 
+    // FIX: Guard against concurrent double-submission before touching any rows.
+    // Check for an existing pending request for this user + tokenType.
+    // Recommended long-term: add a partial unique index in Postgres:
+    //   CREATE UNIQUE INDEX payout_requests_one_pending_per_user
+    //   ON payout_requests (privy_id, token_type)
+    //   WHERE status = 'pending';
+    // That index makes this check race-safe. Until then, this guard catches the
+    // common case and the unique index catches the race.
+    const { data: existingPending } = await supabase
+      .from('payout_requests')
+      .select('id')
+      .eq('privy_id', userId)
+      .eq('token_type', tokenType)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (existingPending) {
+      return res.status(409).json({
+        error: 'You already have a pending payout request for this token. Wait for it to be processed before submitting another.',
+      });
+    }
+
     const rewards = await loadAvailableRewards(userId, tokenType);
     const amount = rewards.reduce((sum, row) => sum + toNumber(row.reward_amount), 0);
     if (amount < 10) {
@@ -89,6 +108,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { payoutCycleDate, requestDeadline } = getNextPayoutCycle();
+
+    // FIX: Insert the payout request row.
     const { data: request, error: requestError } = await supabase
       .from('payout_requests')
       .insert({
@@ -104,11 +125,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single();
 
     if (requestError) {
+      // Catch the race that the unique index would prevent.
+      if (requestError.code === '23505') {
+        return res.status(409).json({ error: 'A concurrent payout request was already submitted' });
+      }
       return res.status(500).json({ error: requestError.message });
     }
 
+    // FIX: Only update rewards whose payout_request_id is still null.
+    // This prevents a second concurrent request from claiming the same rewards
+    // even if both passed the existence check above (belt-and-suspenders).
     const rewardIds = rewards.map(row => row.id);
-    const { error: updateError } = await supabase
+    const { error: updateError, count } = await supabase
       .from('referral_rewards')
       .update({
         status: 'requested',
@@ -116,13 +144,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         payout_cycle_date: payoutCycleDate.toISOString().slice(0, 10),
         requested_at: new Date().toISOString(),
       })
-      .in('id', rewardIds);
+      .in('id', rewardIds)
+      .is('payout_request_id', null)   // guard: skip any already claimed by a race
+      .eq('referrer_privy_id', userId); // belt-and-suspenders: never touch other users' rows
 
     if (updateError) {
       return res.status(500).json({ error: updateError.message });
     }
 
-    return res.status(200).json({ success: true, payout_request: request, reward_count: rewardIds.length, amount });
+    return res.status(200).json({
+      success: true,
+      payout_request: request,
+      reward_count: count ?? rewardIds.length,
+      amount,
+    });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

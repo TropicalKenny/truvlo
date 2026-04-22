@@ -12,12 +12,31 @@ function isReferralCodeCandidate(value: string): boolean {
   return /^[A-Z0-9]{4,32}$/.test(value);
 }
 
+// Safely read from localStorage without throwing.
+function readPendingCode(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// Safely remove from localStorage without throwing.
+function clearPendingCode(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // non-blocking
+  }
+}
+
 const ReferralBootstrap: React.FC = () => {
   const location = useLocation();
   const { ready, authenticated, getAccessToken } = usePrivy();
   const appliedCodeRef = useRef<string | null>(null);
   const bootstrapCompleteRef = useRef(false);
 
+  // Capture ?ref= into localStorage whenever the query param is present.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const referral = params.get('ref');
@@ -33,13 +52,21 @@ const ReferralBootstrap: React.FC = () => {
     }
   }, [location.search]);
 
+  // FIX: When the user logs out, clear any pending referral code from localStorage
+  // so it cannot be inherited by the next session on a shared device.
   useEffect(() => {
     if (!ready) return;
-
     if (!authenticated) {
       bootstrapCompleteRef.current = false;
-      return;
+      appliedCodeRef.current = null;
+      clearPendingCode();
     }
+  }, [ready, authenticated]);
+
+  // On login, apply the pending code — but only after verifying the server
+  // has not already set referred_by_code for this account.
+  useEffect(() => {
+    if (!ready || !authenticated) return;
 
     let cancelled = false;
 
@@ -51,18 +78,26 @@ const ReferralBootstrap: React.FC = () => {
         const token = await getAccessToken();
         if (!token || cancelled) return;
 
-        await fetch('/api/profile', {
+        // Fetch profile to ensure the user row exists AND to check the
+        // server-side referred_by_code state before doing anything.
+        const profileRes = await fetch('/api/profile', {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const pendingCode = (() => {
-          try {
-            return localStorage.getItem(STORAGE_KEY);
-          } catch {
-            return null;
-          }
-        })();
+        if (!profileRes.ok || cancelled) return;
 
+        const profile = await profileRes.json() as {
+          referred_by_code?: string | null;
+        };
+
+        // FIX: If the server already has a referral code recorded, discard the
+        // pending localStorage value — nothing to do.
+        if (profile.referred_by_code) {
+          clearPendingCode();
+          return;
+        }
+
+        const pendingCode = readPendingCode();
         if (!pendingCode || pendingCode === appliedCodeRef.current || cancelled) return;
 
         const response = await fetch('/api/referrals', {
@@ -76,22 +111,15 @@ const ReferralBootstrap: React.FC = () => {
 
         if (response.ok) {
           appliedCodeRef.current = pendingCode;
-          try {
-            localStorage.removeItem(STORAGE_KEY);
-          } catch {
-            // non-blocking
-          }
+          clearPendingCode();
           return;
         }
 
+        // 400 / 404 / 409 all mean we should not retry — discard.
         const status = response.status;
         if ([400, 404, 409].includes(status)) {
           appliedCodeRef.current = pendingCode;
-          try {
-            localStorage.removeItem(STORAGE_KEY);
-          } catch {
-            // non-blocking
-          }
+          clearPendingCode();
         }
       } catch {
         bootstrapCompleteRef.current = false;

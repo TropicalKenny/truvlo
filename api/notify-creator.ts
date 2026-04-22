@@ -6,7 +6,7 @@ import {
   requireUserId,
   supabase,
   walletBelongsToUser,
-} from './_shared';
+} from './_shared.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@truvlo.io';

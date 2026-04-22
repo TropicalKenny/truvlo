@@ -71,3 +71,7 @@ CODEBASE_TEACHER.md
 .claude
 .vercel
 .env*.local
+.playwright-mcp
+AUDIT_POLICY_PACK.md
+.playwright-mcp
+.worktrees/

@@ -32,7 +32,7 @@ const features = [
   {
     icon: Star,
     title: 'Reputation',
-    body: 'Every completed invoice builds your on-chain reputation score. Verified track record follows your wallet across every client.',
+    body: 'Every completed invoice builds your reputation score, visible to new clients before the first invoice. Your track record follows your wallet.',
   },
 ];
 

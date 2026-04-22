@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
@@ -12,7 +13,6 @@ import {
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType, PLATFORM_FEE_BPS, PLATFORM_FLAT_FEE_USD, PLATFORM_FEE_THRESHOLD_USD } from '@/lib/escrowPaySDK';
 import { useToast } from '@/hooks/use-toast';
 
-// ── types — preserved exactly ──────────────────────────────────
 type PageState =
   | { type: 'loading' }
   | { type: 'error'; message: string }
@@ -22,7 +22,6 @@ type PageState =
 interface Installment {
   percentage: number;
 }
-// ───────────────────────────────────────────────────────────────
 
 const cardStyle: React.CSSProperties = {
   maxWidth: '440px',
@@ -42,6 +41,7 @@ const InvoicePayment: React.FC = () => {
   const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
 
   const [pageState, setPageState] = useState<PageState>({ type: 'loading' });
   const [paying, setPaying] = useState(false);
@@ -50,7 +50,6 @@ const InvoicePayment: React.FC = () => {
   const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
 
-  // ── preserved exactly ──────────────────────────────────────────
   const urlParams = useMemo(() => {
     if (!invoiceId || !creator) return { valid: false, error: 'Invalid invoice link - missing parameters' };
     try {
@@ -88,7 +87,15 @@ const InvoicePayment: React.FC = () => {
         },
       };
       const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
-      return new EscrowPaySDK(provider);
+      const sponsorFn = async (tx: Uint8Array): Promise<string> => {
+        const result = await signAndSendTransaction({
+          transaction: Buffer.from(tx).toString('base64'),
+          wallet: privyWallet,
+          options: { sponsor: true },
+        });
+        return result.signature;
+      };
+      return new EscrowPaySDK(provider, false, sponsorFn);
     } catch { return null; }
   }, [connection, publicKey, privyWallet]);
 
@@ -245,7 +252,6 @@ const InvoicePayment: React.FC = () => {
         paidAmount: breakdown.amount,
         txSignature: payResult.data?.signature || '',
       });
-      // Notify creator — fire-and-forget, non-blocking
       fetch('/api/notify-creator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -266,7 +272,6 @@ const InvoicePayment: React.FC = () => {
       setPaying(false);
     }
   };
-  // ───────────────────────────────────────────────────────────────
 
   // ── LOADING ─────────────────────────────────────────────────────
   if (pageState.type === 'loading') {
@@ -338,7 +343,6 @@ const InvoicePayment: React.FC = () => {
             </p>
           </div>
 
-          {/* Summary */}
           <div className="w-full rounded-lg p-4 text-left space-y-2.5" style={{ backgroundColor: '#1C2128' }}>
             {[
               { label: 'Amount paid', value: formatAmount(paidAmount, invoice.tokenType) },
@@ -352,7 +356,6 @@ const InvoicePayment: React.FC = () => {
             ))}
           </div>
 
-          {/* Schedule summary */}
           {installments.length > 1 && (
             <div className="w-full rounded-lg p-4 text-left" style={{ backgroundColor: '#1C2128' }}>
               <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500, color: '#F8FAFC', marginBottom: '8px' }}>Release schedule</p>
@@ -367,7 +370,6 @@ const InvoicePayment: React.FC = () => {
             </div>
           )}
 
-          {/* Escrow note */}
           <div
             className="w-full rounded-lg p-4 flex items-start gap-3 text-left"
             style={{ backgroundColor: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)' }}
@@ -449,7 +451,6 @@ const InvoicePayment: React.FC = () => {
           </span>
         </div>
 
-        {/* Amount — dominant element (3rem+) */}
         <p
           style={{
             fontFamily: '"Space Grotesk", sans-serif',
@@ -467,7 +468,6 @@ const InvoicePayment: React.FC = () => {
           <span style={{ fontSize: '1.125rem', color: '#64748B', marginLeft: '8px', fontWeight: 500 }}>{symbol}</span>
         </p>
 
-        {/* Progress bar for partial */}
         {(isPartiallyPaid || isPaid) && (
           <div className="mt-4">
             <div className="flex justify-between text-xs mb-1.5" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
@@ -502,26 +502,19 @@ const InvoicePayment: React.FC = () => {
 
       {/* Body */}
       <div className="p-6 space-y-4">
-        {/* Creator & description */}
-        <div className="space-y-3">
+        {/* Creator */}
+        <div>
           <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
             <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px' }}>From</p>
             <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#F8FAFC' }}>
               {creator ? `${creator.slice(0, 6)}...${creator.slice(-6)}` : 'Unknown'}
             </p>
           </div>
-          {invoice.description && (
-            <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
-              <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px' }}>Description</p>
-              <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>{invoice.description}</p>
-            </div>
-          )}
         </div>
 
         {/* Pay section — only if not yet fully paid */}
         {!isPaid && remaining > 0 && (
           <>
-            {/* Escrow info banner */}
             <div
               className="rounded-lg p-3.5 flex items-start gap-3"
               style={{ backgroundColor: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)' }}

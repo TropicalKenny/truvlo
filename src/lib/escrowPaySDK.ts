@@ -13,41 +13,32 @@ import {
 import { 
   PublicKey, 
   SystemProgram,
+  Transaction,
 } from "@solana/web3.js";
 import IDL from "../idl/workspace.json";
 
-// Program ID from the deployed contract
 const PROGRAM_ID = new PublicKey(IDL.address || "12mH9wkUUvyQmhqD9A6gJzLGxEUCTZCCuddK6W9EbG2w");
 
-// Anchor discriminator for Invoice accounts — sha256("account:Invoice")[0..8]
-// Source: workspace.json accounts[0].discriminator
 const INVOICE_DISCRIMINATOR = Buffer.from([51, 194, 250, 114, 6, 104, 18, 164]);
 
-// Minimum byte length of a valid new-schema Invoice account.
-// Old devnet PDAs share the same discriminator but have a different field layout and will
-// fail Borsh decode; filtering them out by size avoids unnecessary decode attempts.
 const MIN_INVOICE_BYTES = 100;
 
-// Token Mints
 export const USDC_MINT_DEVNET = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 export const USDC_MINT_MAINNET = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
-// Platform Treasury (from smart contract)
 export const PLATFORM_TREASURY = new PublicKey("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
-export const PLATFORM_FEE_BPS = 100; // 1% above $200
-export const PLATFORM_FLAT_FEE_USD = 2; // $2 flat below $200
-export const PLATFORM_FEE_THRESHOLD_USD = 200; // $200 threshold
+export const PLATFORM_FEE_BPS = 100;
+export const PLATFORM_FLAT_FEE_USD = 2;
+export const PLATFORM_FEE_THRESHOLD_USD = 200;
 export const PYTH_SOL_USD_FEED_ID = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
 
 const RENT_SYSVAR_ID = new PublicKey("SysvarRent111111111111111111111111111111111");
 
-// Token Type Enum
 export enum TokenType {
   USDC = 0,
   SOL = 1,
 }
 
-// Invoice Status Enum
 export enum InvoiceStatus {
   Unpaid = 0,
   PartiallyPaid = 1,
@@ -56,7 +47,6 @@ export enum InvoiceStatus {
   Disputed = 4,
 }
 
-// Type Definitions
 export interface InvoiceData {
   bump: number;
   escrowBump: number;
@@ -76,7 +66,7 @@ export interface InvoiceData {
   completionRequestedAt: BN | null;
   clientApproved: boolean;
   disputeRaisedAt: BN | null;
-  verdictHash: number[] | null; // SHA-512 of off-chain dispute verdict
+  verdictHash: number[] | null;
 }
 
 export interface CreateInvoiceParams {
@@ -98,15 +88,13 @@ export interface SDKResult<T> {
   error?: string;
 }
 
-/**
- * Safely stringify any value for error messages
- */
+export type SponsorFn = (tx: Uint8Array) => Promise<string>;
+
 function safeStringify(obj: any): string {
   if (obj === null) return 'null';
   if (obj === undefined) return 'undefined';
   if (typeof obj === 'string') return obj;
   if (typeof obj === 'number' || typeof obj === 'boolean') return String(obj);
-  
   try {
     if (obj instanceof Error) {
       return obj.message || obj.toString() || 'Error';
@@ -126,7 +114,7 @@ function safeStringify(obj: any): string {
       return str.length > 300 ? str.substring(0, 300) + '...' : str;
     }
   } catch {
-    // Ignore stringify errors
+    // ignore
   }
   try {
     return String(obj);
@@ -135,9 +123,6 @@ function safeStringify(obj: any): string {
   }
 }
 
-/**
- * EscrowPay SDK for invoice and escrow management
- */
 export class EscrowPaySDK {
   private readonly provider: Provider;
   private program: Program<Idl> | null = null;
@@ -146,12 +131,13 @@ export class EscrowPaySDK {
   private coder: BorshCoder | null = null;
   private initialized: boolean = false;
   private initError: string | null = null;
+  private readonly sponsorFn: SponsorFn | null;
 
-  constructor(provider: Provider, useMainnet: boolean = false) {
+  constructor(provider: Provider, useMainnet: boolean = false, sponsorFn: SponsorFn | null = null) {
     this.provider = provider;
     this.programId = PROGRAM_ID;
     this.usdcMint = useMainnet ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
-    
+    this.sponsorFn = sponsorFn;
     try {
       this.program = new Program(IDL as Idl, this.provider);
       this.coder = new BorshCoder(IDL as Idl);
@@ -188,7 +174,6 @@ export class EscrowPaySDK {
       try {
         return this.coder.accounts.decode('invoice', data);
       } catch {
-        // Old-schema accounts on devnet are expected to fail — skip silently
         return null;
       }
     }
@@ -196,9 +181,7 @@ export class EscrowPaySDK {
 
   private parseInvoiceData(raw: any): InvoiceData | null {
     if (!raw) return null;
-    
     try {
-      // Anchor preserves IDL variant name casing, so check both PascalCase (IDL) and camelCase (older)
       let tokenType = TokenType.USDC;
       const tt = raw.tokenType ?? raw.token_type;
       if (typeof tt === 'number' || typeof tt === 'bigint') {
@@ -249,7 +232,6 @@ export class EscrowPaySDK {
   calculatePaymentBreakdown(paymentAmount: number, tokenType: TokenType, solPriceUsd?: number): PaymentBreakdown {
     let platformFee: number;
     let feePercentage: number;
-    
     if (tokenType === TokenType.USDC) {
       if (paymentAmount < PLATFORM_FEE_THRESHOLD_USD) {
         platformFee = PLATFORM_FLAT_FEE_USD;
@@ -273,7 +255,6 @@ export class EscrowPaySDK {
         feePercentage = PLATFORM_FEE_BPS / 100;
       }
     }
-    
     const totalPayable = paymentAmount + platformFee;
     return {
       invoiceAmount: paymentAmount,
@@ -283,9 +264,6 @@ export class EscrowPaySDK {
     };
   }
 
-  /**
-   * Convert to smallest unit — BigInt string-based to avoid float precision loss
-   */
   private toSmallestUnit(amount: number, tokenType: TokenType): BN {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     const amountStr = amount.toFixed(decimals);
@@ -295,9 +273,6 @@ export class EscrowPaySDK {
     return new BN(smallestUnit.toString());
   }
 
-  /**
-   * Convert from smallest unit — BigInt string-based to avoid float precision loss
-   */
   private fromSmallestUnit(amount: BN, tokenType: TokenType): number {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     try {
@@ -326,24 +301,21 @@ export class EscrowPaySDK {
   private parseError(error: any): string {
     if (!error) return 'Unknown error occurred.';
     if (typeof error === 'string') return error;
-    
     let message = '';
     try {
       message = error.message || error.msg || '';
       if (typeof message !== 'string') message = safeStringify(message);
     } catch { message = ''; }
-    
     let errorStr = '';
     try {
       errorStr = typeof error.toString === 'function' ? error.toString() : '';
       if (errorStr === '[object Object]') errorStr = '';
     } catch { errorStr = ''; }
-    
     if (message.includes('User rejected') || message.includes('rejected the request') ||
         errorStr.includes('User rejected') || errorStr.includes('rejected the request')) {
       return 'Transaction was cancelled.';
     }
-    if (message.toLowerCase().includes('insufficient') || 
+    if (message.toLowerCase().includes('insufficient') ||
         errorStr.toLowerCase().includes('insufficient') ||
         message.includes('no record of a prior credit') ||
         errorStr.includes('no record of a prior credit') ||
@@ -419,6 +391,20 @@ export class EscrowPaySDK {
     console.error('SDK Error:', JSON.stringify(safeError, null, 2));
   }
 
+  private async sendTx(builder: any): Promise<string> {
+    if (this.sponsorFn) {
+      const tx: Transaction = await builder.transaction();
+      const { blockhash, lastValidBlockHeight } =
+        await this.provider.connection.getLatestBlockhash('confirmed');
+      tx.recentBlockhash = blockhash;
+      tx.lastValidBlockHeight = lastValidBlockHeight;
+      tx.feePayer = this.provider.publicKey!;
+      const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+      return await this.sponsorFn(Uint8Array.from(serialized));
+    }
+    return await builder.rpc();
+  }
+
   async getInvoicePDA(invoiceId: string, creator: PublicKey): Promise<[PublicKey, number]> {
     return PublicKey.findProgramAddressSync(
       [Buffer.from("invoice"), Buffer.from(invoiceId), creator.toBuffer()],
@@ -442,12 +428,8 @@ export class EscrowPaySDK {
     return result;
   }
 
-  /**
-   * Create a new invoice (USDC or SOL)
-   * description and clientEmail are now stored in Supabase — not on-chain
-   */
-  async createInvoice(params: CreateInvoiceParams): Promise<SDKResult<{ 
-    signature: string; 
+  async createInvoice(params: CreateInvoiceParams): Promise<SDKResult<{
+    signature: string;
     invoiceAddress: string;
     invoiceId: string;
   }>> {
@@ -457,7 +439,6 @@ export class EscrowPaySDK {
     if (!this.initialized || !this.program) {
       return { success: false, error: this.initError || "SDK not initialized" };
     }
-
     try {
       if (!(await this.testConnection())) {
         return { success: false, error: "Network unavailable" };
@@ -469,31 +450,22 @@ export class EscrowPaySDK {
       if (params.amount <= 0) {
         return { success: false, error: "Amount must be greater than 0" };
       }
-
       const [invoiceAddress] = await this.getInvoicePDA(params.invoiceId, this.provider.publicKey);
       const amountSmallestUnit = this.toSmallestUnit(params.amount, params.tokenType);
-
       let tx: string;
-
       if (params.tokenType === TokenType.SOL) {
-        tx = await this.program.methods
-          .initializeConfigSol(
-            params.invoiceId,
-            amountSmallestUnit,
-          )
+        const builder = this.program.methods
+          .initializeConfigSol(params.invoiceId, amountSmallestUnit)
           .accounts({
             invoice: invoiceAddress,
             creator: this.provider.publicKey,
             systemProgram: SystemProgram.programId,
-          })
-          .rpc();
+          });
+        tx = await this.sendTx(builder);
       } else {
         const [escrowAddress] = await this.getEscrowPDA(params.invoiceId, this.provider.publicKey);
-        tx = await this.program.methods
-          .initializeConfig(
-            params.invoiceId,
-            amountSmallestUnit,
-          )
+        const builder = this.program.methods
+          .initializeConfig(params.invoiceId, amountSmallestUnit)
           .accounts({
             invoice: invoiceAddress,
             escrow: escrowAddress,
@@ -502,10 +474,9 @@ export class EscrowPaySDK {
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: RENT_SYSVAR_ID,
-          })
-          .rpc();
+          });
+        tx = await this.sendTx(builder);
       }
-
       return {
         success: true,
         data: {
@@ -520,12 +491,9 @@ export class EscrowPaySDK {
     }
   }
 
-  /**
-   * Pay an invoice (supports partial/milestone payments)
-   */
   async payInvoice(
-    invoiceId: string, 
-    creatorPubkey: PublicKey, 
+    invoiceId: string,
+    creatorPubkey: PublicKey,
     paymentAmount: number,
     tokenType: TokenType,
     solPriceUsd?: number
@@ -536,37 +504,33 @@ export class EscrowPaySDK {
     if (!this.initialized || !this.program) {
       return { success: false, error: this.initError || "SDK not initialized" };
     }
-
     try {
       if (!(await this.testConnection())) {
         return { success: false, error: "Network unavailable" };
       }
-
       const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
       const paymentSmallestUnit = this.toSmallestUnit(paymentAmount, tokenType);
       const resolvedSolPrice = tokenType === TokenType.SOL && !solPriceUsd
         ? await this.getSolPriceUsd()
         : solPriceUsd ?? null;
       const breakdown = this.calculatePaymentBreakdown(paymentAmount, tokenType, resolvedSolPrice ?? undefined);
-
       let tx: string;
-
       if (tokenType === TokenType.SOL) {
         const feeSmallestUnit = this.toSmallestUnit(breakdown.platformFee, TokenType.SOL);
-        tx = await this.program.methods
+        const builder = this.program.methods
           .payInvoiceSol(invoiceId, paymentSmallestUnit, feeSmallestUnit)
           .accounts({
             invoice: invoiceAddress,
             platformTreasury: PLATFORM_TREASURY,
             client: this.provider.publicKey,
             systemProgram: SystemProgram.programId,
-          })
-          .rpc();
+          });
+        tx = await this.sendTx(builder);
       } else {
         const [escrowAddress] = await this.getEscrowPDA(invoiceId, creatorPubkey);
         const clientToken = getAssociatedTokenAddressSync(this.usdcMint, this.provider.publicKey);
         const treasuryToken = getAssociatedTokenAddressSync(this.usdcMint, PLATFORM_TREASURY);
-        tx = await this.program.methods
+        const builder = this.program.methods
           .payInvoice(invoiceId, paymentSmallestUnit)
           .accounts({
             invoice: invoiceAddress,
@@ -576,10 +540,9 @@ export class EscrowPaySDK {
             usdcMint: this.usdcMint,
             client: this.provider.publicKey,
             tokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .rpc();
+          });
+        tx = await this.sendTx(builder);
       }
-
       return { success: true, data: { signature: tx, breakdown } };
     } catch (error: any) {
       this.logError('payInvoice', error);
@@ -587,9 +550,6 @@ export class EscrowPaySDK {
     }
   }
 
-  /**
-   * Set release schedule — called by client after paying full amount
-   */
   async setReleaseSchedule(
     invoiceId: string,
     creatorPubkey: PublicKey,
@@ -600,10 +560,10 @@ export class EscrowPaySDK {
     try {
       if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
       const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
-      const tx = await this.program.methods
+      const builder = this.program.methods
         .setReleaseSchedule(invoiceId, scheduleBps)
-        .accounts({ invoice: invoiceAddress, client: this.provider.publicKey })
-        .rpc();
+        .accounts({ invoice: invoiceAddress, client: this.provider.publicKey });
+      const tx = await this.sendTx(builder);
       return { success: true, data: { signature: tx } };
     } catch (error: any) {
       this.logError('setReleaseSchedule', error);
@@ -611,11 +571,8 @@ export class EscrowPaySDK {
     }
   }
 
-  /**
-   * Release funds from escrow (supports partial releases)
-   */
   async releaseFunds(
-    invoiceId: string, 
+    invoiceId: string,
     releaseAmount: number,
     tokenType: TokenType
   ): Promise<SDKResult<{ signature: string }>> {
@@ -625,30 +582,26 @@ export class EscrowPaySDK {
     if (!this.initialized || !this.program) {
       return { success: false, error: this.initError || "SDK not initialized" };
     }
-
     try {
       if (!(await this.testConnection())) {
         return { success: false, error: "Network unavailable" };
       }
-
       const [invoiceAddress] = await this.getInvoicePDA(invoiceId, this.provider.publicKey);
       const releaseSmallestUnit = this.toSmallestUnit(releaseAmount, tokenType);
-
       let tx: string;
-
       if (tokenType === TokenType.SOL) {
-        tx = await this.program.methods
+        const builder = this.program.methods
           .releaseFundsSol(invoiceId, releaseSmallestUnit)
           .accounts({
             invoice: invoiceAddress,
             creator: this.provider.publicKey,
             systemProgram: SystemProgram.programId,
-          })
-          .rpc();
+          });
+        tx = await this.sendTx(builder);
       } else {
         const [escrowAddress] = await this.getEscrowPDA(invoiceId, this.provider.publicKey);
         const creatorToken = getAssociatedTokenAddressSync(this.usdcMint, this.provider.publicKey);
-        tx = await this.program.methods
+        const builder = this.program.methods
           .releaseFunds(invoiceId, releaseSmallestUnit)
           .accounts({
             invoice: invoiceAddress,
@@ -659,10 +612,9 @@ export class EscrowPaySDK {
             associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
-          })
-          .rpc();
+          });
+        tx = await this.sendTx(builder);
       }
-
       return { success: true, data: { signature: tx } };
     } catch (error: any) {
       this.logError('releaseFunds', error);
@@ -670,9 +622,6 @@ export class EscrowPaySDK {
     }
   }
 
-  /**
-   * Fetch invoice by ID and creator
-   */
   async fetchInvoice(invoiceId: string, creator: PublicKey): Promise<SDKResult<InvoiceData>> {
     try {
       if (!this.initialized || !this.program) {
@@ -681,9 +630,7 @@ export class EscrowPaySDK {
       if (!(await this.testConnection())) {
         return { success: false, error: "Network unavailable" };
       }
-
       const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creator);
-      
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
@@ -694,17 +641,13 @@ export class EscrowPaySDK {
       } catch (anchorError) {
         console.log('Anchor fetch failed, trying direct RPC:', anchorError);
       }
-      
       const accountInfo = await this.provider.connection.getAccountInfo(invoiceAddress);
       if (!accountInfo || !accountInfo.data) {
         return { success: false, error: "Invoice not found" };
       }
-      
       const decoded = this.decodeInvoiceAccount(accountInfo.data);
       const parsed = this.parseInvoiceData(decoded);
-      
       if (!parsed) return { success: false, error: "Failed to decode invoice data" };
-      
       return { success: true, data: parsed };
     } catch (error: any) {
       this.logError('fetchInvoice', error);
@@ -716,13 +659,9 @@ export class EscrowPaySDK {
     }
   }
 
-  /**
-   * Fetch all invoices by creator
-   */
   async fetchInvoicesByCreator(creator?: PublicKey): Promise<SDKResult<Array<{ publicKey: PublicKey; account: InvoiceData }>>> {
     const targetCreator = creator || this.provider.publicKey;
     if (!targetCreator) return { success: false, error: "No creator provided" };
-
     try {
       if (!this.initialized || !this.program) {
         return { success: false, error: this.initError || "SDK not initialized" };
@@ -730,12 +669,9 @@ export class EscrowPaySDK {
       if (!(await this.testConnection())) {
         return { success: false, error: "Network unavailable" };
       }
-
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
-          // No RPC-level creator filter: invoice_id is variable-length (Borsh string) and sits
-          // between escrow_bump and creator, so creator has no fixed byte offset. Filter client-side.
           const allInvoices = await this.withTimeout(invoiceAccessor.all(), 8_000);
           if (Array.isArray(allInvoices)) {
             const filtered = allInvoices.filter((inv: any) => {
@@ -753,15 +689,12 @@ export class EscrowPaySDK {
       } catch (anchorError) {
         console.log('Anchor fetchAll failed, trying direct RPC:', anchorError);
       }
-
       const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
         filters: [
           { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
         ],
       });
-
       if (!accounts?.length) return { success: true, data: [] };
-
       const targetCreatorStr = targetCreator.toBase58();
       const mapped = accounts
         .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
@@ -776,7 +709,6 @@ export class EscrowPaySDK {
           }
           return null;
         }).filter((inv): inv is { publicKey: PublicKey; account: InvoiceData } => inv !== null);
-
       return { success: true, data: mapped };
     } catch (error: any) {
       this.logError('fetchInvoicesByCreator', error);
@@ -784,19 +716,13 @@ export class EscrowPaySDK {
     }
   }
 
-  /**
-   * Fetch all invoices where the connected wallet is the CLIENT who paid.
-   * Uses fetchAll + client-side filter — memcmp is unreliable due to variable-length invoice_id.
-   */
   async fetchInvoicesByClient(client?: PublicKey): Promise<SDKResult<Array<{ publicKey: PublicKey; account: InvoiceData }>>> {
     const targetClient = client || this.provider.publicKey;
     if (!targetClient) return { success: false, error: 'No client provided' };
     if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
     try {
       if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
-
       const targetStr = targetClient.toString();
-
       try {
         const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
         if (invoiceAccessor) {
@@ -831,14 +757,12 @@ export class EscrowPaySDK {
       } catch (anchorError) {
         console.log('Anchor fetchAll failed for client invoices, trying RPC fallback:', anchorError);
       }
-
       const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
         filters: [
           { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
         ],
       });
       if (!accounts?.length) return { success: true, data: [] };
-
       const mapped = accounts
         .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
         .map((acc) => {
@@ -851,7 +775,6 @@ export class EscrowPaySDK {
             return { publicKey: acc.pubkey, account: parsed };
           } catch { return null; }
         }).filter(Boolean) as Array<{ publicKey: PublicKey; account: InvoiceData }>;
-
       return { success: true, data: mapped };
     } catch (error: any) {
       this.logError('fetchInvoicesByClient', error);
@@ -869,7 +792,6 @@ export class EscrowPaySDK {
       const price = data?.parsed?.[0]?.price;
       if (!price) return null;
       const computed = parseFloat(price.price) * Math.pow(10, price.expo);
-      // Reject unrealistic or malformed prices (SOL realistically $0.10–$100,000)
       if (!isFinite(computed) || computed < 0.10 || computed > 100_000) return null;
       return computed;
     } catch {
@@ -877,23 +799,19 @@ export class EscrowPaySDK {
     }
   }
 
-  // ============================================================
-  // DUAL APPROVAL FLOW
-  // ============================================================
-
   async requestRelease(
     invoiceId: string,
-    tokenType: TokenType
+    _tokenType?: TokenType,
   ): Promise<SDKResult<{ signature: string }>> {
     if (!this.provider.publicKey) return { success: false, error: 'Wallet not connected' };
     if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
     try {
       if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
       const [invoiceAddress] = await this.getInvoicePDA(invoiceId, this.provider.publicKey);
-      const tx = await this.program.methods
+      const builder = this.program.methods
         .requestRelease(invoiceId)
-        .accounts({ invoice: invoiceAddress, creator: this.provider.publicKey })
-        .rpc();
+        .accounts({ invoice: invoiceAddress, creator: this.provider.publicKey });
+      const tx = await this.sendTx(builder);
       return { success: true, data: { signature: tx } };
     } catch (error: any) {
       this.logError('requestRelease', error);
@@ -910,10 +828,10 @@ export class EscrowPaySDK {
     try {
       if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
       const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
-      const tx = await this.program.methods
+      const builder = this.program.methods
         .approveRelease(invoiceId)
-        .accounts({ invoice: invoiceAddress, client: this.provider.publicKey })
-        .rpc();
+        .accounts({ invoice: invoiceAddress, client: this.provider.publicKey });
+      const tx = await this.sendTx(builder);
       return { success: true, data: { signature: tx } };
     } catch (error: any) {
       this.logError('approveRelease', error);
@@ -930,20 +848,16 @@ export class EscrowPaySDK {
     try {
       if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
       const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
-      const tx = await this.program.methods
+      const builder = this.program.methods
         .raiseDispute(invoiceId)
-        .accounts({ invoice: invoiceAddress, client: this.provider.publicKey })
-        .rpc();
+        .accounts({ invoice: invoiceAddress, client: this.provider.publicKey });
+      const tx = await this.sendTx(builder);
       return { success: true, data: { signature: tx } };
     } catch (error: any) {
       this.logError('raiseDispute', error);
       return { success: false, error: this.parseError(error) };
     }
   }
-
-  // ============================================================
-  // HELPERS
-  // ============================================================
 
   isAutoReleaseReady(invoice: InvoiceData): boolean {
     if (!invoice.completionRequestedAt) return false;
@@ -979,6 +893,7 @@ export class EscrowPaySDK {
   }
 
   getProgramId(): PublicKey {
+    if (!this.program) throw new Error('SDK not initialized');
     return this.program.programId;
   }
 

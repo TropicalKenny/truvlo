@@ -62,7 +62,7 @@ export async function getProfileByPrivyId<T extends Record<string, unknown> = Re
     .eq('privy_id', privyId)
     .maybeSingle();
   if (error || !data) return null;
-  return data as T;
+  return data as unknown as T;
 }
 
 export async function getPrivyIdForWallet(client: SupabaseClient, walletAddress: string): Promise<string | null> {

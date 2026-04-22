@@ -3,12 +3,9 @@ import { Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { ConnectionProvider } from '@solana/wallet-adapter-react';
 import { clusterApiUrl } from '@solana/web3.js';
-import { usePrivy } from '@privy-io/react-auth';
-import { useWallets as useSolanaWallets } from '@privy-io/react-auth/solana';
 import NotFound from './pages/NotFound';
 import Index from './pages/Index';
 import { NotificationProvider } from './components/NotificationProvider';
-import WalletOnboarding from './components/WalletOnboarding';
 import { ActiveWalletProvider } from './contexts/ActiveWalletContext';
 
 const CreateInvoicePage      = lazy(() => import('./pages/CreateInvoicePage'));
@@ -26,15 +23,11 @@ const App = () => {
     () => import.meta.env.VITE_SOLANA_RPC_URL || clusterApiUrl('devnet'),
     [],
   );
-  const { authenticated, ready } = usePrivy();
-  const { wallets } = useSolanaWallets();
-  const needsWallet = ready && authenticated && wallets.length === 0;
 
   return (
     <ConnectionProvider endpoint={endpoint}>
       <ActiveWalletProvider>
         <NotificationProvider>
-          {needsWallet && <WalletOnboarding />}
           <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0D1117' }} />}>
             <Routes>
               <Route path="/" element={<Index />} />

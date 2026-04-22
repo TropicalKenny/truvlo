@@ -1,14 +1,13 @@
-﻿import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
-import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
+import { AnchorProvider } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
   RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp,
-  ArrowDownLeft, ExternalLink, Wallet
+  ArrowDownLeft, ExternalLink, Wallet as WalletIcon
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -24,7 +23,7 @@ interface InvoiceWithKey {
 }
 
 type AmountLike =
-  | BN
+
   | number
   | string
   | bigint
@@ -109,7 +108,6 @@ const DarkBadge = ({
 const Dashboard: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
-  const { signAndSendTransaction } = useSignAndSendTransaction();
   const { activeWallet: privyWallet, allWallets } = useActiveWallet();
   const privyWalletRef = useRef(privyWallet);
   privyWalletRef.current = privyWallet;
@@ -117,7 +115,6 @@ const Dashboard: React.FC = () => {
   const publicKey = useMemo(() => walletAddress ? new PublicKey(walletAddress) : null, [walletAddress]);
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
-  const { signAndSendTransaction } = useSignAndSendTransaction();
   const { unreadCount, addNotification, markAllAsRead } = useNotifications();
 
   const addNotificationRef = useRef(addNotification);
@@ -164,7 +161,7 @@ const Dashboard: React.FC = () => {
 
   const sdk = useMemo(() => {
     if (!publicKey || !walletAddress) return null;
-    const anchorWallet: Wallet = {
+    const anchorWallet = {
       publicKey,
       signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
         const w = privyWalletRef.current;
@@ -191,21 +188,11 @@ const Dashboard: React.FC = () => {
         }));
       },
     };
-    const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
-    const sponsorFn = async (tx: Uint8Array): Promise<string> => {
-      const w = privyWalletRef.current;
-      if (!w) throw new Error('Wallet disconnected');
-      const result = await signAndSendTransaction({
-        transaction: Buffer.from(tx).toString('base64'),
-        wallet: w,
-        options: { sponsor: true },
-      });
-      return result.signature;
-    };
-    const instance = new EscrowPaySDK(provider, false, sponsorFn);
+    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
+    const instance = new EscrowPaySDK(provider, false);
     if (!instance.isInitialized()) console.error('SDK init error:', instance.getInitError());
     return instance;
-  }, [connection, publicKey, walletAddress, signAndSendTransaction]);
+  }, [connection, publicKey, walletAddress]);
 
   const isFetching = useRef(false);
 
@@ -293,7 +280,7 @@ const Dashboard: React.FC = () => {
     } catch (e) {
       const isTimeout = e instanceof Error && e.message === 'timeout';
       setFetchError(isTimeout
-        ? 'Could not reach Solana â€” check your connection and try refreshing.'
+        ? 'Could not reach Solana — check your connection and try refreshing.'
         : 'Failed to load invoices. Try refreshing.'
       );
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
@@ -338,7 +325,11 @@ const Dashboard: React.FC = () => {
   const fromSmallestUnit = (amount: AmountLike, tokenType: TokenType) => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     try {
-      const raw = amount?.toNumber ? amount.toNumber() : Number(amount ?? 0);
+      // FIX: Properly narrow the union type instead of accessing .toNumber directly,
+      // which TypeScript rejects because string/number/bigint don't have that property.
+      const raw = (amount != null && typeof amount === 'object' && typeof amount.toNumber === 'function')
+        ? amount.toNumber()
+        : Number(amount ?? 0);
       const int = BigInt(Math.round(raw));
       const divisor = BigInt(10 ** decimals);
       const whole = int / divisor;
@@ -356,7 +347,13 @@ const Dashboard: React.FC = () => {
 
   const formatDate = (timestamp: AmountLike): string => {
     try {
-      const ts = timestamp.toNumber ? timestamp.toNumber() : Number(timestamp);
+      // FIX 1: Guard against null/undefined before any property access.
+      // FIX 2: Narrow the type before calling .toNumber() to satisfy TypeScript,
+      // because string/number/bigint members of AmountLike don't have .toNumber.
+      if (timestamp == null) return '-';
+      const ts = (typeof timestamp === 'object' && typeof timestamp.toNumber === 'function')
+        ? timestamp.toNumber()
+        : Number(timestamp);
       return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch { return '-'; }
   };
@@ -365,7 +362,7 @@ const Dashboard: React.FC = () => {
     const lines = [];
     if (usdc > 0) lines.push(parseFloat(usdc.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' USDC');
     if (sol > 0) lines.push(parseFloat(sol.toFixed(4)).toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' SOL');
-    return lines.length > 0 ? lines : ['â€”'];
+    return lines.length > 0 ? lines : ['—'];
   };
 
   const getReleaseable = (inv: InvoiceData) => {
@@ -407,11 +404,11 @@ const Dashboard: React.FC = () => {
             },
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
-              creatorWallet: publicKey.toBase58(),
-              clientWallet: publicKey.toBase58(),
+              creatorWallet: publicKey!.toBase58(),
+              clientWallet: publicKey?.toBase58() ?? null,
               amount: formatAmount(inv.amountPaid, inv.tokenType),
               senderName: displayName || undefined,
-              invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey.toBase58()}`,
+              invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey!.toBase58()}`,
             }),
           });
         } catch { /* non-blocking */ }
@@ -524,7 +521,7 @@ const Dashboard: React.FC = () => {
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               creatorWallet: inv.creator.toBase58(),
-              clientWallet: publicKey.toBase58(),
+              clientWallet: publicKey?.toBase58() ?? null,
               event: 'release_approved',
               amount: formatAmount(inv.amountPaid, inv.tokenType),
             }),
@@ -558,7 +555,7 @@ const Dashboard: React.FC = () => {
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               creatorWallet: inv.creator.toBase58(),
-              clientWallet: publicKey.toBase58(),
+              clientWallet: publicKey?.toBase58() ?? null,
               event: 'disputed',
               amount: formatAmount(inv.amountPaid, inv.tokenType),
             }),
@@ -652,7 +649,7 @@ const Dashboard: React.FC = () => {
       >
         <FileText className="h-10 w-10 mx-auto mb-4" style={{ color: '#64748B' }} />
         <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
-          Connect to continue â€” your invoices will appear here.
+          Connect to continue — your invoices will appear here.
         </p>
       </div>
     );
@@ -745,16 +742,16 @@ const Dashboard: React.FC = () => {
 
             {hasSchedule && !isDisputed && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
               <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>
-                Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) â€” installment {scheduleIdx + 1} of {schedule.length}
+                Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) — installment {scheduleIdx + 1} of {schedule.length}
               </p>
             )}
-            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen â€” dispute under review</p>}
+            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen — dispute under review</p>}
             {releaseRequested && !isDisputed && !releaseReady && (
-              <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Release requested Â· {formatCountdown(secondsLeft)}</p>
+              <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Release requested · {formatCountdown(secondsLeft)}</p>
             )}
             {releaseRequested && !isDisputed && releaseReady && (
               <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>
-                {inv.clientApproved ? 'Client approved â€” ready to release' : 'Timeout passed â€” ready to release'}
+                {inv.clientApproved ? 'Client approved — ready to release' : 'Timeout passed — ready to release'}
               </p>
             )}
 
@@ -930,16 +927,16 @@ const Dashboard: React.FC = () => {
               {formatAmount(inv.amount, inv.tokenType)}
             </p>
             <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-              To: <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{truncateWallet(inv.creator.toBase58())}</span> Â· {formatDate(inv.createdAt)}
+              To: <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{truncateWallet(inv.creator.toBase58())}</span> · {formatDate(inv.createdAt)}
             </p>
 
             {schedule.length > 1 && (
               <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                Installment {scheduleIdx + 1} of {schedule.length} â€” {formatAmount(released, inv.tokenType)} released of {formatAmount(paid, inv.tokenType)}
+                Installment {scheduleIdx + 1} of {schedule.length} — {formatAmount(released, inv.tokenType)} released of {formatAmount(paid, inv.tokenType)}
               </p>
             )}
-            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen â€” dispute under review</p>}
-            {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested release Â· {formatCountdown(secondsLeft)}</p>}
+            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen — dispute under review</p>}
+            {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested release · {formatCountdown(secondsLeft)}</p>}
             {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this release</p>}
 
             {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
@@ -1037,7 +1034,7 @@ const Dashboard: React.FC = () => {
   );
 
   // ============================================================
-  // TAB STYLES â€” MOBILE FIX: scrollable, no clipping
+  // TAB STYLES — MOBILE FIX: scrollable, no clipping
   // ============================================================
 
   const tabListStyle: React.CSSProperties = {
@@ -1071,7 +1068,7 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Page header â€” MOBILE FIX: stacks vertically on mobile */}
+      {/* Page header — MOBILE FIX: stacks vertically on mobile */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1
@@ -1133,7 +1130,7 @@ const Dashboard: React.FC = () => {
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
               style={{ backgroundColor: '#2DD4BF', color: '#0D1117', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
             >
-              <Wallet className="h-4 w-4" />
+              <WalletIcon className="h-4 w-4" />
               Set up wallet
             </Link>
           </div>
@@ -1239,7 +1236,7 @@ const Dashboard: React.FC = () => {
             Received ({receivedStats.total})
           </TabsTrigger>
           <TabsTrigger value="client" style={tabTriggerStyle(roleTab === 'client')} className="flex items-center gap-1.5 relative">
-            <Wallet className="h-3.5 w-3.5" />
+            <WalletIcon className="h-3.5 w-3.5" />
             Client ({clientStats.total})
             {clientStats.awaitingAction > 0 && (
               <span
@@ -1257,7 +1254,7 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Pending Release" accentLeft={sentStats.pendingReleaseUSDC > 0 || sentStats.pendingReleaseSOL > 0 ? '#F59E0B' : undefined}>
               {formatStat(sentStats.pendingReleaseUSDC, sentStats.pendingReleaseSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === 'â€”' ? '#64748B' : '#FCD34D', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#FCD34D', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="In Escrow" accentLeft={sentStats.inEscrow > 0 ? '#3B82F6' : undefined}>
@@ -1270,7 +1267,7 @@ const Dashboard: React.FC = () => {
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: '#F8FAFC' }}>{sentStats.total}</p>
               <div className="flex gap-2 flex-wrap">
                 <span className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>{sentStats.unpaid} pending</span>
-                {sentStats.disputed > 0 && <span className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>Â· {sentStats.disputed} disputed</span>}
+                {sentStats.disputed > 0 && <span className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>· {sentStats.disputed} disputed</span>}
               </div>
             </StatCard>
           </div>
@@ -1301,12 +1298,12 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total Received">
               {formatStat(receivedStats.totalReceivedUSDC, receivedStats.totalReceivedSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === 'â€”' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="In Escrow" accentLeft={receivedStats.inEscrow > 0 ? '#3B82F6' : undefined}>
               {formatStat(receivedStats.inEscrowUSDC, receivedStats.inEscrowSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === 'â€”' ? '#64748B' : '#93C5FD', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#93C5FD', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="Released" accentLeft={receivedStats.released > 0 ? '#22C55E' : undefined}>
@@ -1342,7 +1339,7 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total Paid Out">
               {formatStat(clientStats.totalPaidUSDC, clientStats.totalPaidSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === 'â€”' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="Awaiting Action" accentLeft={clientStats.awaitingAction > 0 ? '#3B82F6' : undefined}>
@@ -1430,4 +1427,3 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
-

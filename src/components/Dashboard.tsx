@@ -1493,36 +1493,39 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* Referral + dispute surfaces */}
-      <div className="grid gap-4 lg:grid-cols-3 mb-4">
+      <div className="grid gap-3 lg:grid-cols-3 mb-4">
         <div
-          className="rounded-xl p-4"
-          style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+          className="rounded-xl p-3 sm:p-4"
+          style={{
+            background: 'linear-gradient(180deg, rgba(22,27,34,0.98) 0%, rgba(22,27,34,0.92) 100%)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
         >
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start justify-between gap-3 mb-3">
             <div>
               <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
                 Referrals
               </p>
-              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1rem' }}>
-                Earn from completed invoices
+              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '0.98rem' }}>
+                Completed fees, manual payout
               </h3>
             </div>
-            <DarkBadge variant="green">10% fee share</DarkBadge>
+            <DarkBadge variant="green">10% pool</DarkBadge>
           </div>
 
           {referralLoading && !referralPanel ? (
             <div className="flex items-center gap-2 text-sm" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading referral ledger...
+              Loading rewards...
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="space-y-3">
+              <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
                   Your code
                 </p>
                 <div className="flex items-center justify-between gap-2">
-                  <p style={{ fontFamily: '"JetBrains Mono", monospace', color: '#F8FAFC', wordBreak: 'break-word' }}>
+                  <p style={{ fontFamily: '"JetBrains Mono", monospace', color: '#F8FAFC', wordBreak: 'break-word', fontSize: '0.95rem' }}>
                     {referralCode || 'Create or load a profile to see your code'}
                   </p>
                   <button
@@ -1547,12 +1550,12 @@ const Dashboard: React.FC = () => {
                     }}
                   >
                     <Copy className="h-3.5 w-3.5" />
-                    {referralCopied ? 'Copied' : 'Copy'}
+                    {referralCopied ? 'Copied' : 'Copy code'}
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 {(['USDC', 'SOL'] as const).map(tokenType => {
                   const total = requestableTotal(tokenType);
                   const requestable = referralSummary[tokenType].requestable;
@@ -1561,7 +1564,7 @@ const Dashboard: React.FC = () => {
                   return (
                     <div key={tokenType} className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                       <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>{tokenType}</p>
-                      <p className="mt-1" style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1.15rem' }}>
+                      <p className="mt-1" style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1.05rem' }}>
                         {total.toFixed(tokenType === 'USDC' ? 2 : 4)}
                       </p>
                       <p className="text-xs mt-1" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
@@ -1606,8 +1609,8 @@ const Dashboard: React.FC = () => {
               )}
 
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                  Rewards are stored off-chain and paid manually after the cycle cutoff.
+                <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.4 }}>
+                  Off-chain ledger. Manual payout after the cycle cutoff.
                 </p>
                 <Link
                   to="/settings"
@@ -1622,15 +1625,18 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div
-          className="rounded-xl p-4"
-          style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+          className="rounded-xl p-3 sm:p-4"
+          style={{
+            background: 'linear-gradient(180deg, rgba(22,27,34,0.98) 0%, rgba(22,27,34,0.92) 100%)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
         >
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start justify-between gap-3 mb-3">
             <div>
               <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
                 Payout status
               </p>
-              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1rem' }}>
+              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '0.98rem' }}>
                 Manual cycle tracking
               </h3>
             </div>
@@ -1641,11 +1647,11 @@ const Dashboard: React.FC = () => {
 
           {latestPayoutRequest ? (
             <div className="space-y-3">
-              <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
                   Latest request
                 </p>
-                <p className="mt-1" style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1.15rem' }}>
+                <p className="mt-1" style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1.05rem' }}>
                   {latestPayoutRequest.amount.toFixed(latestPayoutRequest.token_type === 'USDC' ? 2 : 4)} {latestPayoutRequest.token_type}
                 </p>
                 <p className="text-xs mt-1" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
@@ -1663,7 +1669,7 @@ const Dashboard: React.FC = () => {
               <p className="text-sm" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
                 No payout request has been filed yet. Available rewards will appear here once invoices complete.
               </p>
-              <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
                   Policy
                 </p>
@@ -1676,15 +1682,18 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div
-          className="rounded-xl p-4"
-          style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+          className="rounded-xl p-3 sm:p-4"
+          style={{
+            background: 'linear-gradient(180deg, rgba(22,27,34,0.98) 0%, rgba(22,27,34,0.92) 100%)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
         >
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start justify-between gap-3 mb-3">
             <div>
               <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
                 Disputes
               </p>
-              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '1rem' }}>
+              <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', fontSize: '0.98rem' }}>
                 Platform-reviewed resolution
               </h3>
             </div>
@@ -1692,23 +1701,23 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
                 How it works
               </p>
               <ul className="space-y-2 text-xs" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.5 }}>
-                <li>• Client or creator opens a dispute from the invoice flow.</li>
+                <li>• Open from the invoice flow.</li>
                 <li>• Funds freeze while both sides submit evidence.</li>
-                <li>• A platform admin decides the split and settles it on-chain.</li>
+                <li>• Admin decides the split and settles on-chain.</li>
               </ul>
             </div>
 
-            <div className="rounded-lg p-3" style={{ backgroundColor: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.16)' }}>
+            <div className="rounded-lg px-3 py-2.5" style={{ backgroundColor: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.16)' }}>
               <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
                 Current rule
               </p>
               <p className="text-xs" style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.6 }}>
-                Disputes are handled by a single admin for now. Additional admins can be added later when the workload grows.
+                Single-admin review for now. Additional admins can be added later when the workload grows.
               </p>
             </div>
           </div>

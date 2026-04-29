@@ -179,9 +179,12 @@ const ProfileSettingsPage: React.FC = () => {
 
               {/* Display name */}
               <div>
-                <label style={labelStyle}>Display name</label>
+                <label htmlFor="displayName" style={labelStyle}>Display name</label>
                 <DarkInput
+                  id="displayName"
+                  name="displayName"
                   type="text"
+                  autoComplete="name"
                   value={displayName}
                   onChange={e => setDisplayName(e.target.value.slice(0, 50))}
                   placeholder="Your name or business"
@@ -192,7 +195,7 @@ const ProfileSettingsPage: React.FC = () => {
 
               {/* Default token */}
               <div>
-                <label style={labelStyle}>Default token</label>
+                <p style={labelStyle}>Default token</p>
                 <div
                   style={{
                     display: 'flex',
@@ -231,9 +234,12 @@ const ProfileSettingsPage: React.FC = () => {
 
               {/* Notification email */}
               <div>
-                <label style={labelStyle}>Notification email</label>
+                <label htmlFor="notificationEmail" style={labelStyle}>Notification email</label>
                 <DarkInput
+                  id="notificationEmail"
+                  name="notificationEmail"
                   type="email"
+                  autoComplete="email"
                   value={notificationEmail}
                   onChange={e => setNotificationEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -243,10 +249,13 @@ const ProfileSettingsPage: React.FC = () => {
 
               {/* Referral code */}
               <div>
-                <label style={labelStyle}>Referral code</label>
+                <label htmlFor="referralCode" style={labelStyle}>Referral code</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <DarkInput
+                    id="referralCode"
+                    name="referralCode"
                     type="text"
+                    autoComplete="off"
                     value={referralCode}
                     readOnly
                     aria-readonly="true"
@@ -274,9 +283,12 @@ const ProfileSettingsPage: React.FC = () => {
 
               {/* Referred by */}
               <div>
-                <label style={labelStyle}>Referred by code</label>
+                <label htmlFor="referredByCode" style={labelStyle}>Referred by code</label>
                 <DarkInput
+                  id="referredByCode"
+                  name="referredByCode"
                   type="text"
+                  autoComplete="off"
                   value={referredByCode}
                   onChange={e => setReferredByCode(e.target.value.toUpperCase().slice(0, 32))}
                   placeholder="Enter a referral code"

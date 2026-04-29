@@ -546,7 +546,9 @@ const InvoicePayment: React.FC = () => {
                     </span>
                     <div className="relative flex-1">
                       <input
+                        aria-label={`Installment ${idx + 1} percentage`}
                         type="number"
+                        autoComplete="off"
                         value={inst.percentage || ''}
                         onChange={(e) => updateInstallment(idx, parseFloat(e.target.value) || 0)}
                         placeholder="0"

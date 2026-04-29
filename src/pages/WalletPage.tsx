@@ -706,7 +706,7 @@ const WalletPage: React.FC = () => {
           <p style={{ ...sectionTitle, marginBottom: '16px' }}>Send</p>
           <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label style={labelStyle}>Token</label>
+              <p style={labelStyle}>Token</p>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {(['SOL', 'USDC'] as const).map(t => (
                   <button
@@ -732,9 +732,12 @@ const WalletPage: React.FC = () => {
             </div>
 
             <div>
-              <label style={labelStyle}>Recipient Address</label>
+              <label htmlFor="recipientAddress" style={labelStyle}>Recipient Address</label>
               <DarkInput
+                id="recipientAddress"
+                name="recipientAddress"
                 type="text"
+                autoComplete="off"
                 placeholder="Solana wallet address"
                 value={recipient}
                 onChange={e => setRecipient(e.target.value)}
@@ -742,9 +745,12 @@ const WalletPage: React.FC = () => {
             </div>
 
             <div>
-              <label style={labelStyle}>Amount ({sendToken})</label>
+              <label htmlFor="sendAmount" style={labelStyle}>Amount ({sendToken})</label>
               <DarkInput
+                id="sendAmount"
+                name="sendAmount"
                 type="number"
+                autoComplete="off"
                 step={sendToken === 'USDC' ? '0.01' : '0.000001'}
                 min="0"
                 placeholder="0.00"
@@ -814,9 +820,12 @@ const WalletPage: React.FC = () => {
           <form onSubmit={handleImport} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {importTab === 'privateKey' ? (
               <div>
-                <label style={labelStyle}>Private Key (base58)</label>
+                <label htmlFor="walletPrivateKey" style={labelStyle}>Private Key (base58)</label>
                 <input
+                  id="walletPrivateKey"
+                  name="walletPrivateKey"
                   type="password"
+                  autoComplete="off"
                   value={importKey}
                   onChange={e => { setImportKey(e.target.value); setImportError(''); }}
                   placeholder="Paste your base58-encoded private key"
@@ -825,8 +834,11 @@ const WalletPage: React.FC = () => {
               </div>
             ) : (
               <div>
-                <label style={labelStyle}>Seed Phrase</label>
+                <label htmlFor="walletSeedPhrase" style={labelStyle}>Seed Phrase</label>
                 <textarea
+                  id="walletSeedPhrase"
+                  name="walletSeedPhrase"
+                  autoComplete="off"
                   value={importSeed}
                   onChange={e => { setImportSeed(e.target.value); setImportError(''); }}
                   placeholder="Enter your 12 or 24-word seed phrase..."

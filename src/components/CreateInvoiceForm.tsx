@@ -429,7 +429,7 @@ const CreateInvoiceForm: React.FC = () => {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Token selector */}
         <div>
-          <label style={labelStyle}>Token</label>
+          <p style={labelStyle}>Token</p>
           <div className="flex gap-2">
             {([TokenType.USDC, TokenType.SOL] as const).map((t) => {
               const active = tokenType === t;
@@ -462,7 +462,9 @@ const CreateInvoiceForm: React.FC = () => {
           </label>
           <DarkInput
             id="amount"
+            name="amount"
             type="number"
+            autoComplete="off"
             step={tokenType === TokenType.USDC ? '0.01' : '0.0001'}
             min="0"
             placeholder="0.00"
@@ -476,7 +478,9 @@ const CreateInvoiceForm: React.FC = () => {
           <label htmlFor="senderName" style={labelStyle}>Your name or company</label>
           <DarkInput
             id="senderName"
+            name="senderName"
             type="text"
+            autoComplete="name"
             placeholder="e.g. Kenny Fafimiye or Truvlo Studio"
             value={senderName}
             onChange={(e) => setSenderName(e.target.value)}
@@ -494,7 +498,9 @@ const CreateInvoiceForm: React.FC = () => {
           <label htmlFor="email" style={labelStyle}>Client Email</label>
           <DarkInput
             id="email"
+            name="email"
             type="email"
+            autoComplete="email"
             placeholder="client@company.com"
             value={clientEmail}
             onChange={(e) => setClientEmail(e.target.value)}
@@ -506,6 +512,8 @@ const CreateInvoiceForm: React.FC = () => {
           <label htmlFor="description" style={labelStyle}>Description</label>
           <DarkTextarea
             id="description"
+            name="description"
+            autoComplete="off"
             placeholder="Describe the work or services..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}

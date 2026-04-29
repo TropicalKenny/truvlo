@@ -249,9 +249,12 @@ const WalletOnboarding: React.FC = () => {
 
             {tab === 'privateKey' ? (
               <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>Private Key (base58)</label>
+                <label htmlFor="onboardingPrivateKey" style={labelStyle}>Private Key (base58)</label>
                 <input
+                  id="onboardingPrivateKey"
+                  name="onboardingPrivateKey"
                   type="password"
+                  autoComplete="off"
                   value={privateKey}
                   onChange={e => { setPrivateKey(e.target.value); setError(''); }}
                   placeholder="Paste your base58-encoded private key"
@@ -260,8 +263,11 @@ const WalletOnboarding: React.FC = () => {
               </div>
             ) : (
               <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>Seed Phrase</label>
+                <label htmlFor="onboardingSeedPhrase" style={labelStyle}>Seed Phrase</label>
                 <textarea
+                  id="onboardingSeedPhrase"
+                  name="onboardingSeedPhrase"
+                  autoComplete="off"
                   value={seedPhrase}
                   onChange={e => { setSeedPhrase(e.target.value); setError(''); }}
                   placeholder="Enter your 12 or 24-word seed phrase..."

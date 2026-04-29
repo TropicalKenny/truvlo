@@ -11,6 +11,35 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@truvlo.io';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const invoiceId = typeof req.query.invoiceId === 'string' ? req.query.invoiceId : '';
+    const creatorWallet = typeof req.query.creatorWallet === 'string' ? req.query.creatorWallet : '';
+
+    if (!invoiceId || !creatorWallet) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    if (!isValidSolanaAddress(creatorWallet)) {
+      return res.status(400).json({ error: 'Invalid creator wallet' });
+    }
+
+    const { data, error } = await supabase
+      .from('invoice_meta')
+      .select('sender_name, description, token_type, amount')
+      .eq('invoice_id', invoiceId)
+      .eq('creator_wallet', normalizeSolanaAddress(creatorWallet))
+      .maybeSingle();
+
+    if (error) return res.status(500).json({ error: 'Failed to load invoice metadata' });
+    if (!data) return res.status(404).json({ error: 'Invoice metadata not found' });
+
+    return res.status(200).json({
+      sender_name: data.sender_name,
+      description: data.description,
+      token_type: data.token_type,
+      amount: data.amount,
+    });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -75,9 +104,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 4. Send invoice email — non-fatal if it fails
+  let emailStatus: 'email_sent' | 'email_skipped' | 'email_error' = 'email_skipped';
+  let emailError: string | null = null;
+
   if (clientEmail && RESEND_API_KEY) {
     try {
-      const shortCreator = `${creatorWallet.slice(0, 8)}...${creatorWallet.slice(-8)}`;
+      const shortCreator = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
       const emailHtml = buildInvoiceEmail({
         invoiceId, senderName, amount, tokenType, description, invoiceUrl, shortCreator,
       });
@@ -101,15 +133,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('invoice_meta')
           .update({ email_sent: true })
           .eq('invoice_id', invoiceId);
+        emailStatus = 'email_sent';
       } else {
-        console.error('Resend error:', await emailRes.text());
+        console.error('Resend error (create-invoice-meta):', await emailRes.text());
+        emailStatus = 'email_error';
+        emailError = 'Invoice email could not be sent';
       }
     } catch (emailErr) {
-      console.error('Email send error:', emailErr);
+      console.error('Email send error (create-invoice-meta):', emailErr);
+      emailStatus = 'email_error';
+      emailError = 'Invoice email could not be sent';
     }
   }
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({ success: true, email_status: emailStatus, email_error: emailError });
 }
 
 // ── Email template ─────────────────────────────────────────────────────────────

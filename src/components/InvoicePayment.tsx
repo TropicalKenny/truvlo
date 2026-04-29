@@ -14,6 +14,7 @@ import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType, PLATFORM_FEE_BPS, 
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
 import { getSolanaExplorerTxUrl } from '@/lib/solanaConfig';
+import { formatTokenAmount, formatTokenAmountValue } from '@/lib/amountFormat';
 import { useToast } from '@/hooks/use-toast';
 
 type PageState =
@@ -24,6 +25,13 @@ type PageState =
 
 interface Installment {
   percentage: number;
+}
+
+interface InvoiceMeta {
+  sender_name: string | null;
+  description: string | null;
+  token_type: 'USDC' | 'SOL' | null;
+  amount: number | string | null;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -55,6 +63,7 @@ const InvoicePayment: React.FC = () => {
   const [installments, setInstallments] = useState<Installment[]>([{ percentage: 100 }]);
   const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [invoiceMeta, setInvoiceMeta] = useState<InvoiceMeta | null>(null);
 
   const urlParams = useMemo(() => {
     if (!invoiceId || !creator) return { valid: false, error: 'Invalid invoice link - missing parameters' };
@@ -102,11 +111,18 @@ const InvoicePayment: React.FC = () => {
       if (!readOnlySdk) { setPageState({ type: 'error', message: sdkInitError || 'Failed to initialize.' }); return; }
       try {
         const creatorPubkey = new PublicKey(urlParams.creator!);
-        const [result, price] = await Promise.all([
+        const metadataUrl = `/api/create-invoice-meta?invoiceId=${encodeURIComponent(urlParams.invoiceId!)}&creatorWallet=${encodeURIComponent(urlParams.creator!)}`;
+        const [result, price, metaRes] = await Promise.all([
           readOnlySdk.fetchInvoice(urlParams.invoiceId!, creatorPubkey),
           readOnlySdk.getSolPriceUsd(),
+          fetch(metadataUrl).catch(() => null),
         ]);
         if (price) setSolPriceUsd(price);
+        if (metaRes?.ok) {
+          setInvoiceMeta(await metaRes.json() as InvoiceMeta);
+        } else {
+          setInvoiceMeta(null);
+        }
         if (result.success && result.data) {
           setPageState({ type: 'invoice_loaded', invoice: result.data });
         } else {
@@ -138,9 +154,7 @@ const InvoicePayment: React.FC = () => {
   };
 
   const formatAmount = (value: number, tokenType: TokenType) => {
-    const symbol = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
-    const decimals = tokenType === TokenType.USDC ? 2 : 4;
-    return `${parseFloat(value.toFixed(decimals)).toLocaleString('en-US', { maximumFractionDigits: decimals })} ${symbol}`;
+    return formatTokenAmount(value, tokenType);
   };
 
   const calculateBreakdown = (inv: InvoiceData) => {
@@ -224,7 +238,7 @@ const InvoicePayment: React.FC = () => {
       const scheduleBps = installments.map(i => Math.round(i.percentage * 100));
       const scheduleResult = await sdk.setReleaseSchedule(invoice.invoiceId, creatorPubkey, scheduleBps);
       if (!scheduleResult.success) {
-        toast({ title: 'Schedule not set', description: 'Payment succeeded but release schedule failed. Creator can release freely.', variant: 'destructive' });
+        toast({ title: 'Schedule not set', description: 'Payment succeeded but withdrawal schedule failed. Creator can withdraw freely.', variant: 'destructive' });
       }
       const updated = await sdk.fetchInvoice(invoice.invoiceId, creatorPubkey);
       setPageState({
@@ -344,12 +358,12 @@ const InvoicePayment: React.FC = () => {
 
           {installments.length > 1 && (
             <div className="w-full rounded-lg p-4 text-left" style={{ backgroundColor: '#1C2128' }}>
-              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500, color: '#F8FAFC', marginBottom: '8px' }}>Release schedule</p>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500, color: '#F8FAFC', marginBottom: '8px' }}>Withdrawal schedule</p>
               {installments.map((inst, i) => (
                 <div key={i} className="flex justify-between py-0.5">
                   <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>Installment {i + 1}</span>
                   <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>
-                    {inst.percentage}% — {formatAmount(paidAmount * inst.percentage / 100, invoice.tokenType)}
+                    {inst.percentage}% - {formatAmount(paidAmount * inst.percentage / 100, invoice.tokenType)}
                   </span>
                 </div>
               ))}
@@ -362,7 +376,7 @@ const InvoicePayment: React.FC = () => {
           >
             <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#38BDF8' }} />
             <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
-              Funds are secured on-chain. The creator can only release according to the schedule you set.
+              Funds are secured on-chain. The creator can only withdraw according to the schedule you set.
             </p>
           </div>
 
@@ -411,7 +425,7 @@ const InvoicePayment: React.FC = () => {
     [InvoiceStatus.Unpaid]: { label: 'Pending', bg: 'rgba(249,115,22,0.1)', color: '#FB923C' },
     [InvoiceStatus.PartiallyPaid]: { label: 'Partial', bg: 'rgba(59,130,246,0.1)', color: '#93C5FD' },
     [InvoiceStatus.FullyPaid]: { label: 'In Escrow', bg: 'rgba(59,130,246,0.1)', color: '#93C5FD' },
-    [InvoiceStatus.Released]: { label: 'Released', bg: 'rgba(34,197,94,0.1)', color: '#4ADE80' },
+    [InvoiceStatus.Released]: { label: 'Withdrawn', bg: 'rgba(34,197,94,0.1)', color: '#4ADE80' },
     [InvoiceStatus.Disputed]: { label: 'Disputed', bg: 'rgba(245,158,11,0.1)', color: '#FCD34D' },
   }[invoice.status] ?? { label: 'Unknown', bg: 'rgba(255,255,255,0.06)', color: '#94A3B8' };
 
@@ -448,9 +462,7 @@ const InvoicePayment: React.FC = () => {
             marginBottom: '8px',
           }}
         >
-          {parseFloat(totalAmount.toFixed(invoice.tokenType === TokenType.USDC ? 2 : 4)).toLocaleString('en-US', {
-            maximumFractionDigits: invoice.tokenType === TokenType.USDC ? 2 : 4,
-          })}
+          {formatTokenAmountValue(totalAmount, invoice.tokenType)}
           <span style={{ fontSize: '1.125rem', color: '#64748B', marginLeft: '8px', fontWeight: 500 }}>{symbol}</span>
         </p>
 
@@ -492,13 +504,27 @@ const InvoicePayment: React.FC = () => {
         <div>
           <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
             <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px' }}>From</p>
-            <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#F8FAFC' }}>
-              {creator ? `${creator.slice(0, 6)}...${creator.slice(-6)}` : 'Unknown'}
+            <p style={{ fontFamily: invoiceMeta?.sender_name ? '"DM Sans", sans-serif' : '"JetBrains Mono", monospace', fontSize: invoiceMeta?.sender_name ? '14px' : '12px', color: '#F8FAFC', fontWeight: invoiceMeta?.sender_name ? 600 : 400 }}>
+              {invoiceMeta?.sender_name || (creator ? `${creator.slice(0, 6)}...${creator.slice(-6)}` : 'Unknown')}
             </p>
+            {invoiceMeta?.sender_name && creator && (
+              <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '11px', color: '#64748B', marginTop: '3px' }}>
+                {creator.slice(0, 6)}...{creator.slice(-6)}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Pay section — only if not yet fully paid */}
+        {invoiceMeta?.description && (
+          <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+            <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px' }}>Description</p>
+            <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', lineHeight: 1.5 }}>
+              {invoiceMeta.description}
+            </p>
+          </div>
+        )}
+
+        {/* Pay section - only if not yet fully paid */}
         {!isPaid && remaining > 0 && (
           <>
             <div
@@ -507,19 +533,19 @@ const InvoicePayment: React.FC = () => {
             >
               <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#38BDF8' }} />
               <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
-                Your payment is held securely in a smart contract. You decide how funds are released to the creator.
+                Your payment is held securely in a smart contract. You decide how funds are withdrawn by the creator.
               </p>
             </div>
 
-            {/* Release schedule builder */}
+            {/* Withdrawal schedule builder */}
             <div
               className="rounded-lg p-4"
               style={{ border: '1px solid rgba(255,255,255,0.08)', backgroundColor: 'transparent' }}
             >
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: 500, color: '#F8FAFC' }}>Release schedule</p>
-                  <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#64748B', marginTop: '2px' }}>How should funds be released to the creator?</p>
+                  <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: 500, color: '#F8FAFC' }}>Withdrawal schedule</p>
+                  <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#64748B', marginTop: '2px' }}>How should the creator withdraw funds?</p>
                 </div>
                 <button
                   type="button"
@@ -570,7 +596,7 @@ const InvoicePayment: React.FC = () => {
                       <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748B', fontSize: '12px' }}>%</span>
                     </div>
                     <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#64748B', width: '88px', textAlign: 'right', flexShrink: 0 }}>
-                      {inst.percentage > 0 ? formatAmount(breakdown.amount * inst.percentage / 100, invoice.tokenType) : '—'}
+                      {inst.percentage > 0 ? formatAmount(breakdown.amount * inst.percentage / 100, invoice.tokenType) : '-'}
                     </span>
                     {installments.length > 1 && (
                       <button
@@ -670,7 +696,7 @@ const InvoicePayment: React.FC = () => {
                 >
                   {paying
                     ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
-                    : `Lock Funds — ${formatAmount(breakdown.total, invoice.tokenType)}`}
+                    : `Lock Funds - ${formatAmount(breakdown.total, invoice.tokenType)}`}
                 </button>
               )}
             </div>
@@ -691,8 +717,8 @@ const InvoicePayment: React.FC = () => {
             </h3>
             <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', lineHeight: 1.5 }}>
               {invoice.status === InvoiceStatus.Released
-                ? 'Funds have been released to the creator.'
-                : 'This invoice has been fully paid. Awaiting release.'}
+                ? 'Funds have been withdrawn by the creator.'
+                : 'This invoice has been fully paid. Awaiting withdrawal.'}
             </p>
           </div>
         )}

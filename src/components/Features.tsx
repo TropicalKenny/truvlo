@@ -12,7 +12,7 @@ const features = [
   {
     icon: Users,
     title: 'Dual approval',
-    body: 'You request release. Client approves. Neither side can move funds unilaterally. A 7-day timeout auto-releases funds if the client goes dark.',
+    body: 'You request withdrawal. Client approves. Neither side can move funds unilaterally. A 7-day timeout lets you withdraw if the client goes dark.',
   },
   {
     icon: Coins,
@@ -26,8 +26,8 @@ const features = [
   },
   {
     icon: Clock,
-    title: 'Release schedule',
-    body: 'Break projects into milestones. Each milestone has its own escrow. Release funds incrementally as deliverables are approved.',
+    title: 'Withdrawal schedule',
+    body: 'Break projects into milestones. Each milestone has its own escrow. Withdraw funds incrementally as deliverables are approved.',
   },
   {
     icon: Star,

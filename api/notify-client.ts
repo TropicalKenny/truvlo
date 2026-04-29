@@ -67,10 +67,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const approveUrl = `${APP_ORIGIN}/approve/${encodeURIComponent(invoiceId)}`;
 
   const shortCreator = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
-  const headline = senderName ? `${senderName} requested payment approval` : 'Release requested';
-  const body = senderName
-    ? `<strong style="color:#F8FAFC;">${senderName}</strong> has marked the work complete and requested release.`
-    : 'The creator has marked the work complete and requested release.';
+  const displayName = senderName || meta?.sender_name || '';
+  const headline = displayName ? `${displayName} requested withdrawal approval` : 'Withdrawal requested';
+  const body = displayName
+    ? `<strong style="color:#F8FAFC;">${displayName}</strong> has marked the work complete and requested withdrawal.`
+    : 'The creator has marked the work complete and requested withdrawal.';
 
   const html = `
 <!DOCTYPE html>
@@ -92,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       </div>
       <div style="background:#1C2128;border-left:3px solid #2DD4BF;border-radius:10px;padding:14px 16px;margin-bottom:20px;">
         <div style="color:#F8FAFC;font-size:13px;font-weight:600;margin-bottom:4px;">You have 7 days to respond</div>
-        <div style="color:#94A3B8;font-size:13px;line-height:1.6;">Review the work and approve the release, or raise a dispute if there is an issue.</div>
+        <div style="color:#94A3B8;font-size:13px;line-height:1.6;">Review the work and approve the withdrawal, or raise a dispute if there is an issue.</div>
       </div>
       <a href="${approveUrl}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Approve or Dispute</a>
     </div>
@@ -110,7 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         from: `Truvlo <${FROM_EMAIL}>`,
         to: [clientEmail],
-        subject: `Release requested — ${senderName || shortCreator} (${invoiceId})`,
+        subject: `Withdrawal requested - ${displayName || shortCreator} (${invoiceId})`,
         html,
       }),
     });

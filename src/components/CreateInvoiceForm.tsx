@@ -11,6 +11,7 @@ import { EscrowPaySDK, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
 import { getSolanaExplorerTxUrl } from '@/lib/solanaConfig';
+import { formatTokenAmount } from '@/lib/amountFormat';
 import { useToast } from '@/hooks/use-toast';
 
 // ── preserved exactly ──────────────────────────────────────────
@@ -200,11 +201,11 @@ const CreateInvoiceForm: React.FC = () => {
           invoiceId: result.data.invoiceId,
           signature: result.data.signature,
         });
-        toast({ title: 'Invoice ready to send' });
+        toast({ title: 'Invoice created' });
 
         try {
           const token = await getAccessToken();
-          await fetch('/api/create-invoice-meta', {
+          const metaRes = await fetch('/api/create-invoice-meta', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -221,9 +222,26 @@ const CreateInvoiceForm: React.FC = () => {
               invoiceUrl,
             }),
           });
-          toast({ title: 'Invoice ready to send', description: `Payment link sent to ${clientEmail.trim()}` });
+
+          if (!metaRes.ok) {
+            toast({ title: 'Invoice created, but email failed', description: 'Copy the link below to share with your client.', variant: 'destructive' });
+            return;
+          }
+
+          const meta = await metaRes.json() as {
+            email_status?: 'email_sent' | 'email_skipped' | 'email_error';
+            email_error?: string | null;
+          };
+
+          if (meta.email_status === 'email_sent') {
+            toast({ title: 'Invoice email sent', description: `${formatTokenAmount(amountNum, tokenType)} sent to ${clientEmail.trim()}` });
+          } else if (meta.email_status === 'email_error') {
+            toast({ title: 'Invoice created, but email failed', description: meta.email_error || 'Copy the link below to share with your client.', variant: 'destructive' });
+          } else {
+            toast({ title: 'Invoice created', description: 'Copy the link below to share with your client.' });
+          }
         } catch {
-          toast({ title: 'Invoice ready to send', description: 'Copy the link below to share with your client.' });
+          toast({ title: 'Invoice created, but email failed', description: 'Copy the link below to share with your client.', variant: 'destructive' });
         }
       } else {
         const errorMsg = getErrorMessage(result.error);

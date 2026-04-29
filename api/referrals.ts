@@ -13,16 +13,13 @@ import {
   walletBelongsToUser,
   chooseReferralShares,
 } from './_shared.js';
-import {
-  EscrowPaySDK,
-  InvoiceStatus,
-  PLATFORM_FEE_BPS,
-  PLATFORM_FEE_THRESHOLD_USD,
-  PLATFORM_FLAT_FEE_USD,
-} from '../src/lib/escrowPaySDK.js';
-
 type TokenType = 'USDC' | 'SOL';
 type RewardSourceRole = 'creator' | 'client';
+
+const INVOICE_STATUS_RELEASED = 3;
+const PLATFORM_FEE_BPS = 100;
+const PLATFORM_FEE_THRESHOLD_USD = 200;
+const PLATFORM_FLAT_FEE_USD = 2;
 
 function parseTokenType(value: unknown): TokenType | null {
   return value === 'SOL' || value === 'USDC' ? value : null;
@@ -32,7 +29,8 @@ function getSolanaRpcUrl(): string {
   return process.env.SOLANA_RPC_URL || process.env.VITE_SOLANA_RPC_URL || clusterApiUrl('devnet');
 }
 
-function createReadOnlyEscrowSdk(): EscrowPaySDK {
+async function createReadOnlyEscrowSdk() {
+  const { EscrowPaySDK } = await import('../src/lib/escrowPaySDK.js');
   const payer = Keypair.generate();
   const mockWallet: Wallet = {
     payer,
@@ -45,12 +43,12 @@ function createReadOnlyEscrowSdk(): EscrowPaySDK {
 }
 
 async function isInvoiceReleasedOnChain(invoiceId: string, creatorWallet: string): Promise<boolean> {
-  const sdk = createReadOnlyEscrowSdk();
+  const sdk = await createReadOnlyEscrowSdk();
   const result = await sdk.fetchInvoice(invoiceId, new PublicKey(creatorWallet));
   if (!result.success || !result.data) {
     throw new Error(typeof result.error === 'string' ? result.error : 'Unable to verify invoice release state');
   }
-  return result.data.status === InvoiceStatus.Released;
+  return result.data.status === INVOICE_STATUS_RELEASED;
 }
 
 async function calculateServerPlatformFee(amount: number, tokenType: TokenType): Promise<number> {
@@ -59,7 +57,7 @@ async function calculateServerPlatformFee(amount: number, tokenType: TokenType):
     return amount < PLATFORM_FEE_THRESHOLD_USD ? PLATFORM_FLAT_FEE_USD : amount * (PLATFORM_FEE_BPS / 10000);
   }
 
-  const sdk = createReadOnlyEscrowSdk();
+  const sdk = await createReadOnlyEscrowSdk();
   const solPriceUsd = await sdk.getSolPriceUsd();
   if (solPriceUsd && solPriceUsd > 0 && amount * solPriceUsd < PLATFORM_FEE_THRESHOLD_USD) {
     return Number((PLATFORM_FLAT_FEE_USD / solPriceUsd).toFixed(9));
@@ -98,29 +96,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
   if (req.method === 'GET') {
-    const referralCode = await ensureReferralCode(supabase, userId);
-    const profile = await getProfileByPrivyId<{
-      display_name: string | null;
-      referral_code: string | null;
-      referred_by_code: string | null;
-      referral_linked_at: string | null;
-      created_at: string | null;
-    }>(supabase, userId, 'display_name, referral_code, referred_by_code, referral_linked_at, created_at');
+    try {
+      const referralCode = await ensureReferralCode(supabase, userId);
+      const profile = await getProfileByPrivyId<{
+        display_name: string | null;
+        referral_code: string | null;
+        referred_by_code: string | null;
+        referral_linked_at: string | null;
+        created_at: string | null;
+      }>(supabase, userId, 'display_name, referral_code, referred_by_code, referral_linked_at, created_at');
 
-    const { summary, rewards } = await loadRewardSummary(userId);
-    const { data: payoutRequests } = await supabase
-      .from('payout_requests')
-      .select('id, token_type, amount, status, payout_cycle_date, request_deadline, requested_at, processed_at, admin_note')
-      .eq('privy_id', userId)
-      .order('requested_at', { ascending: false })
-      .limit(12);
+      const { summary, rewards } = await loadRewardSummary(userId);
+      const { data: payoutRequests, error: payoutError } = await supabase
+        .from('payout_requests')
+        .select('id, token_type, amount, status, payout_cycle_date, request_deadline, requested_at, processed_at, admin_note')
+        .eq('privy_id', userId)
+        .order('requested_at', { ascending: false })
+        .limit(12);
 
-    return res.status(200).json({
-      profile: profile ? { ...profile, referral_code: referralCode ?? profile.referral_code } : null,
-      rewards,
-      summary,
-      payout_requests: payoutRequests ?? [],
-    });
+      if (payoutError) throw payoutError;
+
+      return res.status(200).json({
+        profile: profile ? { ...profile, referral_code: referralCode ?? profile.referral_code } : null,
+        rewards,
+        summary,
+        payout_requests: payoutRequests ?? [],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Rewards data could not be loaded';
+      console.error('Rewards load error:', error);
+      return res.status(500).json({ error: message });
+    }
   }
 
   if (req.method === 'PATCH') {

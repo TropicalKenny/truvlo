@@ -14,11 +14,11 @@ const steps = [
   {
     number: '03',
     title: 'Work is done',
-    description: 'Deliver your work. Request release when you are ready. Both sides can review the same payment state.',
+    description: 'Deliver your work. Request withdrawal when you are ready. Both sides can review the same payment state.',
   },
   {
     number: '04',
-    title: 'Funds released',
+    title: 'Funds withdrawn',
     description: 'Client approves, or the platform resolves a dispute, then funds go straight to your wallet.',
   },
 ];

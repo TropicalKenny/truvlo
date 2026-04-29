@@ -48,7 +48,7 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
             }}
           >
             <ArrowUpRight className="h-5 w-5" style={{ color: '#2DD4BF' }} />
-            Release to Wallet
+            Withdraw to Wallet
           </DialogTitle>
           <DialogDescription
             style={{
@@ -56,8 +56,8 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
               color: '#94A3B8',
             }}
           >
-            The client has already approved this release. Funds will be
-            transferred directly to your wallet — this cannot be undone.
+            The client has already approved this withdrawal. Funds will be
+            transferred directly to your wallet. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
@@ -76,7 +76,7 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
                   letterSpacing: '0.08em',
                 }}
               >
-                Releasing
+                Withdrawing
               </p>
               <p
                 style={{
@@ -100,7 +100,7 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
                   letterSpacing: '0.08em',
                 }}
               >
-                Release amount
+                Withdrawal amount
               </p>
               <p
                 style={{
@@ -156,10 +156,10 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
             {isReleasing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Releasing...
+                Withdrawing...
               </>
             ) : (
-              'Release to Wallet'
+              'Withdraw to Wallet'
             )}
           </Button>
         </DialogFooter>

@@ -100,13 +100,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     paid: {
       subject: `Payment received — ${invoiceId}`,
       headline: 'Your invoice was paid',
-      body: `Your client has paid <strong style="color:#F8FAFC;">${amount || 'the invoice amount'}</strong> into escrow. Funds are held on-chain until release.`,
+      body: `Your client has paid <strong style="color:#F8FAFC;">${amount || 'the invoice amount'}</strong> into escrow. Funds are held on-chain until withdrawal.`,
       accent: '#2DD4BF',
     },
     release_approved: {
-      subject: `Release approved — ${invoiceId}`,
-      headline: 'Client approved your release request',
-      body: `Your client has approved release for <strong style="color:#F8FAFC;">${invoiceId}</strong>. You can now release the funds from your dashboard.`,
+      subject: `Withdrawal approved - ${invoiceId}`,
+      headline: 'Client approved your withdrawal request',
+      body: `Your client has approved withdrawal for <strong style="color:#F8FAFC;">${invoiceId}</strong>. You can now withdraw the funds from your dashboard.`,
       accent: '#4ADE80',
     },
     disputed: {
@@ -137,8 +137,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       </div>
       <div style="background:#1C2128;border-left:3px solid ${accent};border-radius:10px;padding:14px 16px;margin-bottom:20px;">
         <div style="color:#94A3B8;font-size:13px;line-height:1.6;">
-          ${event === 'paid' ? 'Go to your dashboard when you are ready to request release.' : ''}
-          ${event === 'release_approved' ? 'Go to your dashboard to complete the release.' : ''}
+          ${event === 'paid' ? 'Go to your dashboard when you are ready to request withdrawal.' : ''}
+          ${event === 'release_approved' ? 'Go to your dashboard to withdraw the funds.' : ''}
           ${event === 'disputed' ? 'Open the dispute case in your dashboard to review evidence.' : ''}
         </div>
       </div>

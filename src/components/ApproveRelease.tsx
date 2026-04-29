@@ -10,6 +10,7 @@ import { Loader2, AlertCircle, Check, AlertTriangle, Clock } from 'lucide-react'
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
+import { formatTokenAmountValue } from '@/lib/amountFormat';
 import { useToast } from '@/hooks/use-toast';
 
 type PageState =
@@ -252,7 +253,7 @@ const ApproveRelease: React.FC = () => {
                 marginBottom: '10px',
               }}
             >
-              Release approved
+              Withdrawal approved
             </h2>
             <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', lineHeight: 1.6, marginBottom: '28px' }}>
               The creator can now withdraw the funds from escrow. Thank you for confirming.
@@ -332,9 +333,6 @@ const ApproveRelease: React.FC = () => {
   const alreadyApproved = inv.clientApproved;
   const amountValue = fromSmallestUnit(inv.amountPaid || inv.amount, inv.tokenType);
   const symbol = inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
-  const decimals = inv.tokenType === TokenType.USDC ? 2 : 4;
-  const amountWhole = Math.floor(amountValue);
-  const amountFrac = (amountValue - amountWhole).toFixed(decimals).slice(1);
 
   return (
     <div style={cardStyle}>
@@ -344,7 +342,7 @@ const ApproveRelease: React.FC = () => {
           className="uppercase tracking-widest mb-2"
           style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', letterSpacing: '0.08em' }}
         >
-          Release amount
+          Withdrawal amount
         </p>
         <div className="flex items-baseline gap-1">
           <span
@@ -357,19 +355,7 @@ const ApproveRelease: React.FC = () => {
               lineHeight: 1,
             }}
           >
-            {amountWhole}
-          </span>
-          <span
-            style={{
-              fontFamily: '"Space Grotesk", sans-serif',
-              fontWeight: 700,
-              fontSize: '2rem',
-              color: '#94A3B8',
-              letterSpacing: '-0.02em',
-              lineHeight: 1,
-            }}
-          >
-            {amountFrac}
+            {formatTokenAmountValue(amountValue, inv.tokenType)}
           </span>
           <span
             style={{
@@ -408,7 +394,7 @@ const ApproveRelease: React.FC = () => {
               {formatCountdown(secondsLeft)}
             </p>
             <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#64748B' }}>
-              Funds auto-release if you take no action
+              Funds can be withdrawn if you take no action
             </p>
           </div>
         </div>
@@ -422,7 +408,7 @@ const ApproveRelease: React.FC = () => {
         >
           <Check className="h-4 w-4 flex-shrink-0" style={{ color: '#22C55E' }} />
           <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#4ADE80' }}>
-            You've already approved this release
+            You've already approved this withdrawal
           </p>
         </div>
       )}
@@ -448,7 +434,7 @@ const ApproveRelease: React.FC = () => {
               className="text-center text-sm mb-2"
               style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}
             >
-              Connect your wallet to approve or dispute this release.
+              Connect your wallet to approve or dispute this withdrawal.
             </p>
           )}
 
@@ -466,7 +452,7 @@ const ApproveRelease: React.FC = () => {
           >
             {approving
               ? <><Loader2 className="h-4 w-4 animate-spin" />Approving...</>
-              : <><Check className="h-4 w-4" />Approve Release</>}
+              : <><Check className="h-4 w-4" />Approve Withdrawal</>}
           </button>
 
           <button

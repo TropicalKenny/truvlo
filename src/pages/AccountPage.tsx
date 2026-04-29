@@ -4,6 +4,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import Header from '@/components/Header';
 import { useToast } from '@/hooks/use-toast';
+import { formatTokenAmountValue } from '@/lib/amountFormat';
 import { Check, Copy, ExternalLink, Loader2, Wallet, ArrowRight } from 'lucide-react';
 
 type TokenType = 'USDC' | 'SOL';
@@ -84,6 +85,15 @@ const AccountPage: React.FC = () => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedReputation, setCopiedReputation] = useState(false);
 
+  const responseError = async (res: Response, fallback: string) => {
+    try {
+      const data = await res.json() as { error?: string };
+      return data.error ? `${fallback}: ${data.error}` : `${fallback}: HTTP ${res.status}`;
+    } catch {
+      return `${fallback}: HTTP ${res.status}`;
+    }
+  };
+
   useEffect(() => {
     if (ready && !authenticated) {
       navigate('/', { replace: true });
@@ -117,14 +127,14 @@ const AccountPage: React.FC = () => {
           const data = await profileRes.json() as ProfileData;
           if (!cancelled) setProfile(data);
         } else if (!cancelled) {
-          setError(`Profile load failed: HTTP ${profileRes.status}`);
+          setError(await responseError(profileRes, 'Profile load failed'));
         }
 
         if (referralsRes.ok) {
           const data = await referralsRes.json() as ReferralPanelData;
           if (!cancelled) setReferrals(data);
         } else if (!cancelled) {
-          setReferralError(`Rewards load failed: HTTP ${referralsRes.status}`);
+          setReferralError(await responseError(referralsRes, 'Rewards load failed'));
         }
       } catch (err) {
         if (!cancelled) {
@@ -428,10 +438,10 @@ const AccountPage: React.FC = () => {
                       <div key={tokenType} className="rounded-xl p-3" style={{ backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center justify-between">
                           <p style={labelStyle}>{tokenType}</p>
-                          <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC' }}>{total.toFixed(tokenType === 'USDC' ? 2 : 4)}</p>
+                          <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC' }}>{formatTokenAmountValue(total, tokenType)}</p>
                         </div>
                         <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#94A3B8', fontSize: '12px', marginTop: '6px' }}>
-                          {bucket.matured.toFixed(tokenType === 'USDC' ? 2 : 4)} matured · {bucket.requestable.toFixed(tokenType === 'USDC' ? 2 : 4)} ready
+                          {formatTokenAmountValue(bucket.matured, tokenType)} matured - {formatTokenAmountValue(bucket.requestable, tokenType)} ready
                         </p>
                       </div>
                     );

@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
+import { formatTokenAmount } from '@/lib/amountFormat';
 import { useToast } from '@/hooks/use-toast';
 import { PublicKey } from '@solana/web3.js';
 import ReleaseModal from './ReleaseModal';
@@ -233,7 +234,7 @@ const Dashboard: React.FC = () => {
             addNotificationRef.current({ type: 'success', title: 'Invoice paid', message: `#${id}` });
           }
           if (role === 'creator' && !prev.clientApproved && !!inv.clientApproved) {
-            addNotificationRef.current({ type: 'success', title: 'Release approved', message: `#${id}` });
+            addNotificationRef.current({ type: 'success', title: 'Withdrawal approved', message: `#${id}` });
           }
           if (!prev.disputed && nowDisputed) {
             addNotificationRef.current({ type: 'warning', title: 'Dispute raised', message: `#${id}` });
@@ -322,10 +323,8 @@ const Dashboard: React.FC = () => {
   };
 
   const formatAmount = (amount: AmountLike, tokenType: TokenType): string => {
-    const symbol = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
-    const decimals = tokenType === TokenType.USDC ? 2 : 4;
     const value = typeof amount === 'number' ? amount : fromSmallestUnit(amount, tokenType);
-    return `${parseFloat(value.toFixed(decimals)).toLocaleString('en-US', { maximumFractionDigits: decimals })} ${symbol}`;
+    return formatTokenAmount(value, tokenType);
   };
 
   const formatDate = (timestamp: AmountLike): string => {
@@ -343,9 +342,9 @@ const Dashboard: React.FC = () => {
 
   const formatStat = (usdc: number, sol: number) => {
     const lines = [];
-    if (usdc > 0) lines.push(parseFloat(usdc.toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' USDC');
-    if (sol > 0) lines.push(parseFloat(sol.toFixed(4)).toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' SOL');
-    return lines.length > 0 ? lines : ['—'];
+    if (usdc > 0) lines.push(formatTokenAmount(usdc, TokenType.USDC));
+    if (sol > 0) lines.push(formatTokenAmount(sol, TokenType.SOL));
+    return lines.length > 0 ? lines : ['-'];
   };
 
   const getReleaseable = (inv: InvoiceData) => {
@@ -379,7 +378,7 @@ const Dashboard: React.FC = () => {
       if (result.success) {
         try {
           const token = await getAccessToken();
-          await fetch('/api/notify-client', {
+          const notifyRes = await fetch('/api/notify-client', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -388,15 +387,20 @@ const Dashboard: React.FC = () => {
             body: JSON.stringify({
               invoiceId: inv.invoiceId,
               creatorWallet: publicKey!.toBase58(),
-              clientWallet: publicKey?.toBase58() ?? null,
               amount: formatAmount(inv.amountPaid, inv.tokenType),
               senderName: displayName || undefined,
               invoiceUrl: `${window.location.origin}/invoice/${inv.invoiceId}/${publicKey!.toBase58()}`,
             }),
           });
-        } catch { /* non-blocking */ }
-        toast({ title: 'Release requested', description: 'Client notified by email.' });
-        addNotification({ type: 'info', title: 'Release Requested', message: `7-day window started for ${inv.invoiceId}.` });
+          if (notifyRes.ok) {
+            toast({ title: 'Withdrawal requested', description: 'Client notified by email.' });
+          } else {
+            toast({ title: 'Withdrawal requested', description: 'Email notification failed. Copy the invoice link if needed.', variant: 'destructive' });
+          }
+        } catch {
+          toast({ title: 'Withdrawal requested', description: 'Email notification failed. Copy the invoice link if needed.', variant: 'destructive' });
+        }
+        addNotification({ type: 'info', title: 'Withdrawal Requested', message: `7-day window started for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Request failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
@@ -436,7 +440,7 @@ const Dashboard: React.FC = () => {
     try {
       const result = await sdk.releaseFunds(releaseModal.invoiceId, releaseModal.releaseableAmount, releaseModal.tokenType);
       if (result.success) {
-        toast({ title: 'Funds released to wallet' });
+        toast({ title: 'Funds withdrawn to wallet' });
         if (releaseModal.isFinalRelease && releaseModal.clientWallet) {
           try {
             const token = await getAccessToken();
@@ -454,19 +458,17 @@ const Dashboard: React.FC = () => {
               }),
             });
           } catch {
-            // non-blocking: referral accrual should not block release success
+            // non-blocking: referral accrual should not block withdrawal success
           }
         }
-        const decimals = releaseModal.tokenType === TokenType.USDC ? 2 : 4;
-        const symbol = releaseModal.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
-        addNotification({ type: 'success', title: 'Funds Released', message: `Released ${releaseModal.releaseableAmount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${symbol} from ${releaseModal.invoiceId}` });
+        addNotification({ type: 'success', title: 'Funds Withdrawn', message: `Withdrew ${formatAmount(releaseModal.releaseableAmount, releaseModal.tokenType)} from ${releaseModal.invoiceId}` });
         lastFetchedAt.current = 0;
         await fetchAll();
       } else {
-        toast({ title: 'Release failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
+        toast({ title: 'Withdrawal failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
     } catch (e: unknown) {
-      toast({ title: 'Release failed', description: e instanceof Error && e.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
+      toast({ title: 'Withdrawal failed', description: e instanceof Error && e.message.includes('rejected') ? 'Cancelled.' : 'Transaction failed.', variant: 'destructive' });
     } finally { setReleasing(null); setReleaseModal(null); }
   };
 
@@ -507,8 +509,8 @@ const Dashboard: React.FC = () => {
             }),
           });
         } catch { /* non-blocking */ }
-        toast({ title: 'Release approved' });
-        addNotification({ type: 'success', title: 'Release Approved', message: `You approved release for ${inv.invoiceId}.` });
+        toast({ title: 'Withdrawal approved' });
+        addNotification({ type: 'success', title: 'Withdrawal Approved', message: `You approved withdrawal for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();
       } else {
         toast({ title: 'Approval failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
@@ -655,7 +657,7 @@ const Dashboard: React.FC = () => {
     const hasSchedule = schedule.length > 0;
     const currentBps = hasSchedule && scheduleIdx < schedule.length ? schedule[scheduleIdx] : null;
     const currentInstallment = currentBps !== null
-      ? parseFloat((paid * currentBps / 10000).toFixed(inv.tokenType === TokenType.USDC ? 2 : 4))
+      ? parseFloat((paid * currentBps / 10000).toFixed(inv.tokenType === TokenType.USDC ? 6 : 9))
       : releaseable;
     const isDisputed = inv.status === InvoiceStatus.Disputed;
     const releaseRequested = !!inv.completionRequestedAt;
@@ -699,7 +701,7 @@ const Dashboard: React.FC = () => {
                 {!isDisputed && inv.status === InvoiceStatus.Unpaid && <><Clock className="h-3 w-3" />Pending</>}
                 {!isDisputed && inv.status === InvoiceStatus.PartiallyPaid && <><Clock className="h-3 w-3" />Partial</>}
                 {!isDisputed && inv.status === InvoiceStatus.FullyPaid && <><Check className="h-3 w-3" />In Escrow</>}
-                {!isDisputed && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Released</>}
+                {!isDisputed && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Withdrawn</>}
               </DarkBadge>
               <span
                 className="px-2 py-0.5 rounded-full text-xs font-medium"
@@ -727,11 +729,11 @@ const Dashboard: React.FC = () => {
             )}
             {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen — dispute under review</p>}
             {releaseRequested && !isDisputed && !releaseReady && (
-              <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Release requested · {formatCountdown(secondsLeft)}</p>
+              <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Withdrawal requested - {formatCountdown(secondsLeft)}</p>
             )}
             {releaseRequested && !isDisputed && releaseReady && (
               <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>
-                {inv.clientApproved ? 'Client approved — ready to release' : 'Timeout passed — ready to release'}
+                {inv.clientApproved ? 'Client approved - ready to withdraw' : 'Timeout passed - ready to withdraw'}
               </p>
             )}
 
@@ -786,7 +788,7 @@ const Dashboard: React.FC = () => {
               >
                 {requesting === inv.invoiceId
                   ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Requesting...</>
-                  : <><SendHorizonal className="h-3.5 w-3.5" />Request Release</>}
+                  : <><SendHorizonal className="h-3.5 w-3.5" />Request Withdrawal</>}
               </button>
             )}
 
@@ -819,7 +821,7 @@ const Dashboard: React.FC = () => {
                   }}
                 >
                   <Check className="h-3.5 w-3.5" />
-                  {hasSchedule ? `Release ${formatAmount(currentInstallment, inv.tokenType)}` : `Release to Wallet`}
+                  {hasSchedule ? `Withdraw ${formatAmount(currentInstallment, inv.tokenType)}` : `Withdraw to Wallet`}
                 </button>
               </div>
             )}
@@ -888,7 +890,7 @@ const Dashboard: React.FC = () => {
                 {isDisputed && <><AlertTriangle className="h-3 w-3" />Disputed</>}
                 {!isDisputed && needsAction && <><Clock className="h-3 w-3" />Action needed</>}
                 {!isDisputed && !needsAction && clientApproved && <><Check className="h-3 w-3" />Approved</>}
-                {!isDisputed && !needsAction && !clientApproved && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Released</>}
+                {!isDisputed && !needsAction && !clientApproved && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Withdrawn</>}
                 {!isDisputed && !needsAction && !clientApproved && inv.status !== InvoiceStatus.Released && <><Check className="h-3 w-3" />In escrow</>}
               </DarkBadge>
               <span
@@ -912,12 +914,12 @@ const Dashboard: React.FC = () => {
 
             {schedule.length > 1 && (
               <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-                Installment {scheduleIdx + 1} of {schedule.length} — {formatAmount(released, inv.tokenType)} released of {formatAmount(paid, inv.tokenType)}
+                Installment {scheduleIdx + 1} of {schedule.length} - {formatAmount(released, inv.tokenType)} withdrawn of {formatAmount(paid, inv.tokenType)}
               </p>
             )}
             {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen — dispute under review</p>}
-            {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested release · {formatCountdown(secondsLeft)}</p>}
-            {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this release</p>}
+            {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested withdrawal - {formatCountdown(secondsLeft)}</p>}
+            {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this withdrawal</p>}
 
             {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
               <div className="mt-3">
@@ -968,7 +970,7 @@ const Dashboard: React.FC = () => {
                 >
                   {approving === inv.invoiceId
                     ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Approving...</>
-                    : <><ThumbsUp className="h-3.5 w-3.5" />Approve Release</>}
+                    : <><ThumbsUp className="h-3.5 w-3.5" />Approve Withdrawal</>}
                 </button>
                 <button
                   onClick={() => handleDispute(inv)}
@@ -1232,15 +1234,15 @@ const Dashboard: React.FC = () => {
         {/* ======= SENT TAB ======= */}
         <TabsContent value="sent" className="mt-4 space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="Pending Release" accentLeft={sentStats.pendingReleaseUSDC > 0 || sentStats.pendingReleaseSOL > 0 ? '#F59E0B' : undefined}>
+            <StatCard label="Pending Withdrawal" accentLeft={sentStats.pendingReleaseUSDC > 0 || sentStats.pendingReleaseSOL > 0 ? '#F59E0B' : undefined}>
               {formatStat(sentStats.pendingReleaseUSDC, sentStats.pendingReleaseSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#FCD34D', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '-' ? '#64748B' : '#FCD34D', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="In Escrow" accentLeft={sentStats.inEscrow > 0 ? '#3B82F6' : undefined}>
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: sentStats.inEscrow > 0 ? '#93C5FD' : '#64748B' }}>{sentStats.inEscrow}</p>
             </StatCard>
-            <StatCard label="Released" accentLeft={sentStats.released > 0 ? '#22C55E' : undefined}>
+            <StatCard label="Withdrawn" accentLeft={sentStats.released > 0 ? '#22C55E' : undefined}>
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: sentStats.released > 0 ? '#4ADE80' : '#64748B' }}>{sentStats.released}</p>
             </StatCard>
             <StatCard label="Total Invoices">
@@ -1258,7 +1260,7 @@ const Dashboard: React.FC = () => {
               <TabsTrigger value="all" style={tabTriggerStyle(sentFilter === 'all')}>All ({sentStats.total})</TabsTrigger>
               <TabsTrigger value="unpaid" style={tabTriggerStyle(sentFilter === 'unpaid')}>Pending ({sentStats.unpaid})</TabsTrigger>
               <TabsTrigger value="escrow" style={tabTriggerStyle(sentFilter === 'escrow')}>In Escrow ({sentStats.inEscrow})</TabsTrigger>
-              <TabsTrigger value="released" style={tabTriggerStyle(sentFilter === 'released')}>Released ({sentStats.released})</TabsTrigger>
+              <TabsTrigger value="released" style={tabTriggerStyle(sentFilter === 'released')}>Withdrawn ({sentStats.released})</TabsTrigger>
               {sentStats.disputed > 0 && <TabsTrigger value="disputed" style={tabTriggerStyle(sentFilter === 'disputed')}>Disputed ({sentStats.disputed})</TabsTrigger>}
             </TabsList>
             <TabsContent value={sentFilter} className="mt-3">
@@ -1278,15 +1280,15 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total Received">
               {formatStat(receivedStats.totalReceivedUSDC, receivedStats.totalReceivedSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '-' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="In Escrow" accentLeft={receivedStats.inEscrow > 0 ? '#3B82F6' : undefined}>
               {formatStat(receivedStats.inEscrowUSDC, receivedStats.inEscrowSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#93C5FD', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '-' ? '#64748B' : '#93C5FD', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
-            <StatCard label="Released" accentLeft={receivedStats.released > 0 ? '#22C55E' : undefined}>
+            <StatCard label="Withdrawn" accentLeft={receivedStats.released > 0 ? '#22C55E' : undefined}>
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: receivedStats.released > 0 ? '#4ADE80' : '#64748B' }}>{receivedStats.released}</p>
             </StatCard>
             <StatCard label="Invoices Paid">
@@ -1299,7 +1301,7 @@ const Dashboard: React.FC = () => {
             <TabsList style={tabListStyle}>
               <TabsTrigger value="all" style={tabTriggerStyle(receivedFilter === 'all')}>All ({receivedStats.total})</TabsTrigger>
               <TabsTrigger value="escrow" style={tabTriggerStyle(receivedFilter === 'escrow')}>In Escrow ({receivedStats.inEscrow})</TabsTrigger>
-              <TabsTrigger value="released" style={tabTriggerStyle(receivedFilter === 'released')}>Released ({receivedStats.released})</TabsTrigger>
+              <TabsTrigger value="released" style={tabTriggerStyle(receivedFilter === 'released')}>Withdrawn ({receivedStats.released})</TabsTrigger>
               {receivedStats.disputed > 0 && <TabsTrigger value="disputed" style={tabTriggerStyle(receivedFilter === 'disputed')}>Disputed ({receivedStats.disputed})</TabsTrigger>}
             </TabsList>
             <TabsContent value={receivedFilter} className="mt-3">
@@ -1319,13 +1321,13 @@ const Dashboard: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total Paid Out">
               {formatStat(clientStats.totalPaidUSDC, clientStats.totalPaidSOL).map((l, i) => (
-                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '—' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
+                <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '-' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
               ))}
             </StatCard>
             <StatCard label="Awaiting Action" accentLeft={clientStats.awaitingAction > 0 ? '#3B82F6' : undefined}>
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: clientStats.awaitingAction > 0 ? '#93C5FD' : '#64748B' }}>{clientStats.awaitingAction}</p>
             </StatCard>
-            <StatCard label="Released" accentLeft={clientStats.released > 0 ? '#22C55E' : undefined}>
+            <StatCard label="Withdrawn" accentLeft={clientStats.released > 0 ? '#22C55E' : undefined}>
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: clientStats.released > 0 ? '#4ADE80' : '#64748B' }}>{clientStats.released}</p>
             </StatCard>
             <StatCard label="Invoices Paid">
@@ -1390,7 +1392,7 @@ const Dashboard: React.FC = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Release Modal */}
+      {/* Withdrawal Modal */}
       {releaseModal && (
         <ReleaseModal
           open={releaseModal.open}

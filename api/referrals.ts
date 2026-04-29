@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
+import { clusterApiUrl, Connection, Keypair, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import {
-  calculatePlatformFee,
   calculateReferralPool,
   ensureReferralCode,
   getProfileByPrivyId,
@@ -12,12 +13,58 @@ import {
   walletBelongsToUser,
   chooseReferralShares,
 } from './_shared.js';
+import {
+  EscrowPaySDK,
+  InvoiceStatus,
+  PLATFORM_FEE_BPS,
+  PLATFORM_FEE_THRESHOLD_USD,
+  PLATFORM_FLAT_FEE_USD,
+} from '../src/lib/escrowPaySDK.js';
 
 type TokenType = 'USDC' | 'SOL';
 type RewardSourceRole = 'creator' | 'client';
 
 function parseTokenType(value: unknown): TokenType | null {
   return value === 'SOL' || value === 'USDC' ? value : null;
+}
+
+function getSolanaRpcUrl(): string {
+  return process.env.SOLANA_RPC_URL || process.env.VITE_SOLANA_RPC_URL || clusterApiUrl('devnet');
+}
+
+function createReadOnlyEscrowSdk(): EscrowPaySDK {
+  const payer = Keypair.generate();
+  const mockWallet: Wallet = {
+    payer,
+    publicKey: payer.publicKey,
+    signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T) => tx,
+    signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]) => txs,
+  };
+  const connection = new Connection(getSolanaRpcUrl(), 'confirmed');
+  return new EscrowPaySDK(new AnchorProvider(connection, mockWallet, { commitment: 'confirmed' }));
+}
+
+async function isInvoiceReleasedOnChain(invoiceId: string, creatorWallet: string): Promise<boolean> {
+  const sdk = createReadOnlyEscrowSdk();
+  const result = await sdk.fetchInvoice(invoiceId, new PublicKey(creatorWallet));
+  if (!result.success || !result.data) {
+    throw new Error(typeof result.error === 'string' ? result.error : 'Unable to verify invoice release state');
+  }
+  return result.data.status === InvoiceStatus.Released;
+}
+
+async function calculateServerPlatformFee(amount: number, tokenType: TokenType): Promise<number> {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  if (tokenType === 'USDC') {
+    return amount < PLATFORM_FEE_THRESHOLD_USD ? PLATFORM_FLAT_FEE_USD : amount * (PLATFORM_FEE_BPS / 10000);
+  }
+
+  const sdk = createReadOnlyEscrowSdk();
+  const solPriceUsd = await sdk.getSolPriceUsd();
+  if (solPriceUsd && solPriceUsd > 0 && amount * solPriceUsd < PLATFORM_FEE_THRESHOLD_USD) {
+    return Number((PLATFORM_FLAT_FEE_USD / solPriceUsd).toFixed(9));
+  }
+  return amount * (PLATFORM_FEE_BPS / 10000);
 }
 
 async function loadRewardSummary(privyId: string) {
@@ -131,8 +178,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       creatorWallet,
       clientWallet,
       tokenType: rawTokenType,
-      // FIX: invoiceAmount and isFinalRelease are no longer accepted from the caller.
-      // They are read from invoice_meta (a server-controlled source of truth) below.
     } = req.body as {
       invoiceId?: string;
       creatorWallet?: string;
@@ -157,11 +202,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Invalid token type' });
     }
 
-    // FIX: Look up the invoice from invoice_meta to get the canonical amount
-    // and to check whether rewards have already been recorded (idempotency guard).
+    // Look up the invoice from invoice_meta to get the canonical amount and
+    // check whether rewards have already been recorded.
     const { data: invoiceMeta, error: metaError } = await supabase
       .from('invoice_meta')
-      .select('amount, is_final_release, referral_reward_recorded_at, creator_wallet')
+      .select('amount, referral_reward_recorded_at, creator_wallet')
       .eq('invoice_id', invoiceId)
       .eq('creator_wallet', normalizeSolanaAddress(creatorWallet))
       .maybeSingle();
@@ -169,7 +214,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (metaError) return res.status(500).json({ error: metaError.message });
     if (!invoiceMeta) return res.status(404).json({ error: 'Invoice not found' });
 
-    // FIX: Reject if rewards have already been recorded for this invoice.
     if (invoiceMeta.referral_reward_recorded_at) {
       return res.status(409).json({
         error: 'Referral rewards have already been recorded for this invoice',
@@ -177,12 +221,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // FIX: Use the server-stored final-release flag, not the caller's input.
-    if (!invoiceMeta.is_final_release) {
+    let isReleased: boolean;
+    try {
+      isReleased = await isInvoiceReleasedOnChain(invoiceId, normalizeSolanaAddress(creatorWallet));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to verify invoice release state';
+      return res.status(503).json({ error: message });
+    }
+
+    if (!isReleased) {
       return res.status(200).json({ success: true, skipped: true, reason: 'Invoice is not final yet' });
     }
 
-    // FIX: Use the server-stored amount.
     const amount = Number(invoiceMeta.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ error: 'Invoice has no valid amount recorded' });
@@ -213,7 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }>(supabase, clientPrivyId, 'privy_id, referral_code, referred_by_code, created_at')
       : null;
 
-    const platformFee = calculatePlatformFee(amount);
+    const platformFee = await calculateServerPlatformFee(amount, tokenType);
     const rewardPool = calculateReferralPool(platformFee);
 
     const shares = chooseReferralShares(

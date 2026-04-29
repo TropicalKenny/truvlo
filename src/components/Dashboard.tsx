@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import {
@@ -13,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
+import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
 import { useToast } from '@/hooks/use-toast';
 import { PublicKey } from '@solana/web3.js';
 import ReleaseModal from './ReleaseModal';
@@ -117,6 +119,7 @@ const Dashboard: React.FC = () => {
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
   const { unreadCount, addNotification, markAllAsRead } = useNotifications();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
 
   const addNotificationRef = useRef(addNotification);
   addNotificationRef.current = addNotification;
@@ -144,7 +147,7 @@ const Dashboard: React.FC = () => {
   const [releaseModal, setReleaseModal] = useState<{
     open: boolean; invoiceId: string; amount: string;
     tokenType: TokenType; releaseableAmount: number; isFinalRelease: boolean;
-    creatorWallet: string; clientWallet: string | null; invoiceAmount: number;
+    creatorWallet: string; clientWallet: string | null;
   } | null>(null);
   const lastFetchedAt = useRef<number>(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -164,10 +167,15 @@ const Dashboard: React.FC = () => {
     if (!publicKey || !walletAddress) return null;
     const anchorWallet = createPrivySolanaAnchorWallet(() => privyWalletRef.current, publicKey);
     const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
-    const instance = new EscrowPaySDK(provider, false);
+    const sponsorFn = async (tx: Uint8Array): Promise<string> => {
+      const wallet = privyWalletRef.current;
+      if (!wallet) throw new Error('Wallet disconnected');
+      return sendSponsoredSolanaTransaction(signAndSendTransaction, wallet, tx);
+    };
+    const instance = new EscrowPaySDK(provider, false, sponsorFn);
     if (!instance.isInitialized()) console.error('SDK init error:', instance.getInitError());
     return instance;
-  }, [connection, publicKey, walletAddress]);
+  }, [connection, publicKey, signAndSendTransaction, walletAddress]);
 
   const isFetching = useRef(false);
 
@@ -419,7 +427,6 @@ const Dashboard: React.FC = () => {
       isFinalRelease,
       creatorWallet: publicKey?.toBase58() || '',
       clientWallet: invoice.client?.toBase58() ?? null,
-      invoiceAmount: fromSmallestUnit(invoice.amountPaid, invoice.tokenType),
     });
   };
 
@@ -444,8 +451,6 @@ const Dashboard: React.FC = () => {
                 creatorWallet: releaseModal.creatorWallet,
                 clientWallet: releaseModal.clientWallet,
                 tokenType: releaseModal.tokenType,
-                invoiceAmount: releaseModal.invoiceAmount,
-                isFinalRelease: true,
               }),
             });
           } catch {

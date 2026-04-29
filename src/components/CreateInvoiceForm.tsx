@@ -9,7 +9,8 @@ import { PublicKey } from '@solana/web3.js';
 import { Loader2, Copy, ExternalLink, Check } from 'lucide-react';
 import { EscrowPaySDK, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
-import { getSolanaExplorerTxUrl, PRIVY_SOLANA_CHAIN } from '@/lib/solanaConfig';
+import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
+import { getSolanaExplorerTxUrl } from '@/lib/solanaConfig';
 import { useToast } from '@/hooks/use-toast';
 
 // ── preserved exactly ──────────────────────────────────────────
@@ -145,13 +146,7 @@ const CreateInvoiceForm: React.FC = () => {
     const anchorWallet = createPrivySolanaAnchorWallet(privyWallet, publicKey);
     const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
     const sponsorFn = async (tx: Uint8Array): Promise<string> => {
-      const result = await signAndSendTransaction({
-        transaction: Buffer.from(tx).toString('base64'),
-        wallet: privyWallet,
-        options: { sponsor: true },
-        chainId: PRIVY_SOLANA_CHAIN,
-      });
-      return result.signature;
+      return sendSponsoredSolanaTransaction(signAndSendTransaction, privyWallet, tx);
     };
     const instance = new EscrowPaySDK(provider, false, sponsorFn);
     if (!instance.isInitialized()) {

@@ -12,7 +12,8 @@ import {
 } from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType, PLATFORM_FEE_BPS, PLATFORM_FLAT_FEE_USD, PLATFORM_FEE_THRESHOLD_USD } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
-import { getSolanaExplorerTxUrl, PRIVY_SOLANA_CHAIN } from '@/lib/solanaConfig';
+import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
+import { getSolanaExplorerTxUrl } from '@/lib/solanaConfig';
 import { useToast } from '@/hooks/use-toast';
 
 type PageState =
@@ -71,13 +72,7 @@ const InvoicePayment: React.FC = () => {
       const anchorWallet = createPrivySolanaAnchorWallet(privyWallet, publicKey);
       const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
       const sponsorFn = async (tx: Uint8Array): Promise<string> => {
-        const result = await signAndSendTransaction({
-          transaction: Buffer.from(tx).toString('base64'),
-          wallet: privyWallet,
-          options: { sponsor: true },
-          chainId: PRIVY_SOLANA_CHAIN,
-        });
-        return result.signature;
+        return sendSponsoredSolanaTransaction(signAndSendTransaction, privyWallet, tx);
       };
       return new EscrowPaySDK(provider, false, sponsorFn);
     } catch { return null; }

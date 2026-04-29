@@ -37,7 +37,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  if (!RESEND_API_KEY) return res.status(500).json({ error: 'Email service not configured' });
   if (!isValidSolanaAddress(creatorWallet) || !isValidSolanaAddress(clientWallet)) {
     return res.status(400).json({ error: 'Invalid wallet address' });
   }
@@ -61,6 +60,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: 'Client wallet does not match this invoice' });
   }
 
+  await ensureReferralCode(supabase, userId);
+
+  await supabase
+    .from('invoice_meta')
+    .update({
+      client_wallet: normalizedClientWallet,
+      client_privy_id: userId,
+    })
+    .eq('invoice_id', invoiceId)
+    .eq('creator_wallet', normalizedCreatorWallet);
+
+  if (!RESEND_API_KEY) return res.status(200).json({ success: true, skipped: true });
+
   const { data: walletRow } = await supabase
     .from('wallets')
     .select('privy_id')
@@ -81,17 +93,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!creatorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(creatorEmail)) {
     return res.status(200).json({ success: true, skipped: true });
   }
-
-  await ensureReferralCode(supabase, userId);
-
-  await supabase
-    .from('invoice_meta')
-    .update({
-      client_wallet: normalizedClientWallet,
-      client_privy_id: userId,
-    })
-    .eq('invoice_id', invoiceId)
-    .eq('creator_wallet', normalizedCreatorWallet);
 
   const shortWallet = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
   const dashboardUrl = 'https://truvlo.io/dashboard';

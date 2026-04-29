@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { PrivyProvider } from '@privy-io/react-auth';
+import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit';
 import { getSolanaRpcUrl, PRIVY_SOLANA_CHAIN } from './lib/solanaConfig';
 
 // Make Buffer available globally for Solana libraries
@@ -13,6 +14,9 @@ import App from './App.tsx';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
+
+const solanaRpcUrl = getSolanaRpcUrl();
+const solanaRpcSubscriptionsUrl = solanaRpcUrl.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
 
 createRoot(rootElement).render(
   <BrowserRouter>
@@ -29,7 +33,11 @@ createRoot(rootElement).render(
         },
         solana: {
           rpcs: {
-            [PRIVY_SOLANA_CHAIN]: getSolanaRpcUrl(),
+            [PRIVY_SOLANA_CHAIN]: {
+              rpc: createSolanaRpc(solanaRpcUrl),
+              rpcSubscriptions: createSolanaRpcSubscriptions(solanaRpcSubscriptionsUrl),
+              blockExplorerUrl: 'https://explorer.solana.com',
+            },
           },
         },
       }}

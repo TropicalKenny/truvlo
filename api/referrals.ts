@@ -13,13 +13,11 @@ import {
   walletBelongsToUser,
   chooseReferralShares,
 } from './_shared.js';
+import { calculatePlatformFeeBreakdown } from '../src/lib/platformFees.js';
 type TokenType = 'USDC' | 'SOL';
 type RewardSourceRole = 'creator' | 'client';
 
 const INVOICE_STATUS_RELEASED = 3;
-const PLATFORM_FEE_BPS = 100;
-const PLATFORM_FEE_THRESHOLD_USD = 200;
-const PLATFORM_FLAT_FEE_USD = 2;
 
 function parseTokenType(value: unknown): TokenType | null {
   return value === 'SOL' || value === 'USDC' ? value : null;
@@ -53,16 +51,10 @@ async function isInvoiceReleasedOnChain(invoiceId: string, creatorWallet: string
 
 async function calculateServerPlatformFee(amount: number, tokenType: TokenType): Promise<number> {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
-  if (tokenType === 'USDC') {
-    return amount < PLATFORM_FEE_THRESHOLD_USD ? PLATFORM_FLAT_FEE_USD : amount * (PLATFORM_FEE_BPS / 10000);
-  }
-
-  const sdk = await createReadOnlyEscrowSdk();
-  const solPriceUsd = await sdk.getSolPriceUsd();
-  if (solPriceUsd && solPriceUsd > 0 && amount * solPriceUsd < PLATFORM_FEE_THRESHOLD_USD) {
-    return Number((PLATFORM_FLAT_FEE_USD / solPriceUsd).toFixed(9));
-  }
-  return amount * (PLATFORM_FEE_BPS / 10000);
+  const solPriceUsd = tokenType === 'SOL' ? await (await createReadOnlyEscrowSdk()).getSolPriceUsd() : null;
+  const breakdown = calculatePlatformFeeBreakdown({ amount, tokenType, solPriceUsd });
+  if (!breakdown) throw new Error('SOL price unavailable for referral reward calculation');
+  return breakdown.platformFee;
 }
 
 async function loadRewardSummary(privyId: string) {

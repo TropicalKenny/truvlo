@@ -10,11 +10,12 @@ import {
   Loader2, AlertCircle, Check, ArrowLeft, Shield,
   ExternalLink, Plus, Trash2, Wallet
 } from 'lucide-react';
-import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType, PLATFORM_FEE_BPS, PLATFORM_FLAT_FEE_USD, PLATFORM_FEE_THRESHOLD_USD } from '@/lib/escrowPaySDK';
+import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
 import { getSolanaExplorerTxUrl } from '@/lib/solanaConfig';
 import { formatTokenAmount, formatTokenAmountValue } from '@/lib/amountFormat';
+import { calculatePlatformFeeBreakdown } from '@/lib/platformFees';
 import { useToast } from '@/hooks/use-toast';
 
 type PageState =
@@ -159,31 +160,9 @@ const InvoicePayment: React.FC = () => {
 
   const calculateBreakdown = (inv: InvoiceData) => {
     const amount = getRemainingAmount(inv);
-    const dec = getDecimals(inv.tokenType);
-    let fee: number;
-    let feeLabel: string;
-
-    if (inv.tokenType === TokenType.USDC) {
-      if (amount < PLATFORM_FEE_THRESHOLD_USD) {
-        fee = PLATFORM_FLAT_FEE_USD;
-        feeLabel = `Platform Fee ($${PLATFORM_FLAT_FEE_USD} flat)`;
-      } else {
-        fee = parseFloat((amount * (PLATFORM_FEE_BPS / 10000)).toFixed(dec));
-        feeLabel = `Platform Fee (${PLATFORM_FEE_BPS / 100}%)`;
-      }
-    } else {
-      const valueUsd = solPriceUsd && solPriceUsd > 0 ? amount * solPriceUsd : null;
-      if (valueUsd !== null && valueUsd < PLATFORM_FEE_THRESHOLD_USD) {
-        fee = parseFloat((PLATFORM_FLAT_FEE_USD / solPriceUsd!).toFixed(dec));
-        feeLabel = `Platform Fee ($${PLATFORM_FLAT_FEE_USD} flat)`;
-      } else {
-        fee = parseFloat((amount * (PLATFORM_FEE_BPS / 10000)).toFixed(dec));
-        feeLabel = `Platform Fee (${PLATFORM_FEE_BPS / 100}%)`;
-      }
-    }
-
-    const total = parseFloat((amount + fee).toFixed(dec));
-    return { amount, fee, total, feeLabel };
+    const fee = calculatePlatformFeeBreakdown({ amount, tokenType: inv.tokenType, solPriceUsd });
+    if (!fee) return { amount, fee: 0, total: amount, feeLabel: 'Platform Fee', priceUnavailable: true };
+    return { amount, fee: fee.platformFee, total: fee.totalPayable, feeLabel: fee.feeLabel, priceUnavailable: false };
   };
 
   const totalPercentage = installments.reduce((sum, i) => sum + (i.percentage || 0), 0);
@@ -226,11 +205,15 @@ const InvoicePayment: React.FC = () => {
 
     const breakdown = calculateBreakdown(invoice);
     if (breakdown.amount <= 0) { toast({ title: 'Invalid amount', variant: 'destructive' }); return; }
+    if (breakdown.priceUnavailable) {
+      toast({ title: 'SOL price unavailable', description: 'Please wait a moment and try again.', variant: 'destructive' });
+      return;
+    }
 
     setPaying(true);
     try {
       const creatorPubkey = new PublicKey(creator);
-      const payResult = await sdk.payInvoice(invoice.invoiceId, creatorPubkey, breakdown.amount, invoice.tokenType);
+      const payResult = await sdk.payInvoice(invoice.invoiceId, creatorPubkey, breakdown.amount, invoice.tokenType, solPriceUsd ?? undefined);
       if (!payResult.success) {
         toast({ title: 'Payment failed', description: typeof payResult.error === 'string' ? payResult.error : 'Payment failed', variant: 'destructive' });
         return;
@@ -636,7 +619,10 @@ const InvoicePayment: React.FC = () => {
               <div className="rounded-lg p-4 space-y-2.5" style={{ backgroundColor: '#1C2128' }}>
                 {[
                   { label: 'Amount', value: formatAmount(breakdown.amount, invoice.tokenType) },
-                  { label: breakdown.feeLabel, value: formatAmount(breakdown.fee, invoice.tokenType) },
+                  {
+                    label: breakdown.priceUnavailable ? 'Platform Fee (waiting for SOL price)' : breakdown.feeLabel,
+                    value: breakdown.priceUnavailable ? 'Calculating...' : formatAmount(breakdown.fee, invoice.tokenType),
+                  },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between text-sm">
                     <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>{label}</span>
@@ -684,7 +670,7 @@ const InvoicePayment: React.FC = () => {
               ) : (
                 <button
                   onClick={handlePay}
-                  disabled={paying || breakdown.amount <= 0 || totalPercentage !== 100}
+                  disabled={paying || breakdown.amount <= 0 || totalPercentage !== 100 || breakdown.priceUnavailable}
                   className="w-full flex items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
                   style={{
                     backgroundColor: '#2DD4BF',
@@ -696,7 +682,9 @@ const InvoicePayment: React.FC = () => {
                 >
                   {paying
                     ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
-                    : `Lock Funds - ${formatAmount(breakdown.total, invoice.tokenType)}`}
+                    : breakdown.priceUnavailable
+                      ? 'Calculating SOL fee...'
+                      : `Lock Funds - ${formatAmount(breakdown.total, invoice.tokenType)}`}
                 </button>
               )}
             </div>

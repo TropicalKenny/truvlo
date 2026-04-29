@@ -63,6 +63,13 @@ const ProfileSettingsPage: React.FC = () => {
   const [notificationEmail, setNotificationEmail] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [referredByCode, setReferredByCode] = useState('');
+  const [savedValues, setSavedValues] = useState({
+    displayName: '',
+    defaultToken: 'USDC' as 'USDC' | 'SOL',
+    notificationEmail: '',
+    referredByCode: '',
+  });
+  const [copiedReferralCode, setCopiedReferralCode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -92,6 +99,12 @@ const ProfileSettingsPage: React.FC = () => {
           setNotificationEmail(data.notification_email ?? '');
           setReferralCode(data.referral_code ?? '');
           setReferredByCode(data.referred_by_code ?? '');
+          setSavedValues({
+            displayName: data.display_name ?? '',
+            defaultToken: data.default_token === 'SOL' ? 'SOL' : 'USDC',
+            notificationEmail: data.notification_email ?? '',
+            referredByCode: data.referred_by_code ?? '',
+          });
         }
       } catch { /* non-blocking */ } finally {
         clearTimeout(safetyTimer);
@@ -100,7 +113,32 @@ const ProfileSettingsPage: React.FC = () => {
     })();
   }, [authenticated, getAccessToken, navigate, ready]);
 
+  const isDirty =
+    displayName !== savedValues.displayName ||
+    defaultToken !== savedValues.defaultToken ||
+    notificationEmail !== savedValues.notificationEmail ||
+    referredByCode !== savedValues.referredByCode;
+
+  const resetForm = () => {
+    setDisplayName(savedValues.displayName);
+    setDefaultToken(savedValues.defaultToken);
+    setNotificationEmail(savedValues.notificationEmail);
+    setReferredByCode(savedValues.referredByCode);
+  };
+
+  const copyReferralCode = async () => {
+    if (!referralCode) return;
+    try {
+      await navigator.clipboard.writeText(referralCode);
+      setCopiedReferralCode(true);
+      setTimeout(() => setCopiedReferralCode(false), 1800);
+    } catch {
+      toast({ title: 'Failed to copy', variant: 'destructive' });
+    }
+  };
+
   const handleSave = async () => {
+    if (!isDirty) return;
     setSaving(true);
     try {
       const token = await getAccessToken();
@@ -118,6 +156,15 @@ const ProfileSettingsPage: React.FC = () => {
         }),
       });
       if (res.ok) {
+        setSavedValues({
+          displayName: displayName.trim(),
+          defaultToken,
+          notificationEmail: notificationEmail.trim(),
+          referredByCode: referredByCode.trim(),
+        });
+        setDisplayName(displayName.trim());
+        setNotificationEmail(notificationEmail.trim());
+        setReferredByCode(referredByCode.trim());
         toast({ title: 'Profile saved' });
       } else {
         const body = await res.json().catch(() => ({})) as { error?: string };
@@ -262,20 +309,21 @@ const ProfileSettingsPage: React.FC = () => {
                   />
                   <button
                     type="button"
-                    onClick={() => referralCode && navigator.clipboard.writeText(referralCode)}
+                    disabled={!referralCode}
+                    onClick={copyReferralCode}
                     style={{
                       flexShrink: 0,
                       padding: '0 14px',
                       borderRadius: '8px',
                       border: '1px solid rgba(255,255,255,0.08)',
-                      backgroundColor: '#1C2128',
-                      color: '#F8FAFC',
+                      backgroundColor: copiedReferralCode ? 'rgba(45,212,191,0.12)' : '#1C2128',
+                      color: copiedReferralCode ? '#2DD4BF' : '#F8FAFC',
                       fontFamily: '"DM Sans", sans-serif',
                       fontSize: '13px',
-                      cursor: 'pointer',
+                      cursor: referralCode ? 'pointer' : 'default',
                     }}
                   >
-                    Copy
+                    {copiedReferralCode ? 'Copied' : 'Copy'}
                   </button>
                 </div>
                 <p style={helpStyle}>Share this code so referrers can earn 10% of completed invoice platform fees.</p>
@@ -301,7 +349,7 @@ const ProfileSettingsPage: React.FC = () => {
         </div>
 
         {/* Actions */}
-        {!loading && (
+        {!loading && isDirty && (
           <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
             <button
               onClick={handleSave}
@@ -323,7 +371,8 @@ const ProfileSettingsPage: React.FC = () => {
               {saving ? 'Saving…' : 'Save'}
             </button>
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={resetForm}
+              disabled={saving}
               style={{
                 backgroundColor: 'transparent',
                 color: '#64748B',
@@ -332,7 +381,7 @@ const ProfileSettingsPage: React.FC = () => {
                 fontFamily: '"DM Sans", sans-serif',
                 fontSize: '14px',
                 padding: '10px 16px',
-                cursor: 'pointer',
+                cursor: saving ? 'not-allowed' : 'pointer',
               }}
             >
               Cancel

@@ -16,6 +16,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import IDL from "../idl/workspace.json";
+import { calculatePlatformFeeBreakdown, PLATFORM_FEE_BPS, PLATFORM_FLAT_FEE_USD, PLATFORM_FEE_THRESHOLD_USD } from "./platformFees";
 
 const PROGRAM_ID = new PublicKey(IDL.address || "12mH9wkUUvyQmhqD9A6gJzLGxEUCTZCCuddK6W9EbG2w");
 
@@ -27,9 +28,7 @@ export const USDC_MINT_DEVNET = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEER
 export const USDC_MINT_MAINNET = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
 export const PLATFORM_TREASURY = new PublicKey("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
-export const PLATFORM_FEE_BPS = 100;
-export const PLATFORM_FLAT_FEE_USD = 2;
-export const PLATFORM_FEE_THRESHOLD_USD = 200;
+export { PLATFORM_FEE_BPS, PLATFORM_FLAT_FEE_USD, PLATFORM_FEE_THRESHOLD_USD };
 export const PYTH_SOL_USD_FEED_ID = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
 
 const RENT_SYSVAR_ID = new PublicKey("SysvarRent111111111111111111111111111111111");
@@ -230,37 +229,15 @@ export class EscrowPaySDK {
   }
 
   calculatePaymentBreakdown(paymentAmount: number, tokenType: TokenType, solPriceUsd?: number): PaymentBreakdown {
-    let platformFee: number;
-    let feePercentage: number;
-    if (tokenType === TokenType.USDC) {
-      if (paymentAmount < PLATFORM_FEE_THRESHOLD_USD) {
-        platformFee = PLATFORM_FLAT_FEE_USD;
-        feePercentage = (PLATFORM_FLAT_FEE_USD / paymentAmount) * 100;
-      } else {
-        platformFee = paymentAmount * (PLATFORM_FEE_BPS / 10000);
-        feePercentage = PLATFORM_FEE_BPS / 100;
-      }
-    } else {
-      if (solPriceUsd && solPriceUsd > 0) {
-        const valueUsd = paymentAmount * solPriceUsd;
-        if (valueUsd < PLATFORM_FEE_THRESHOLD_USD) {
-          platformFee = PLATFORM_FLAT_FEE_USD / solPriceUsd;
-          feePercentage = (platformFee / paymentAmount) * 100;
-        } else {
-          platformFee = paymentAmount * (PLATFORM_FEE_BPS / 10000);
-          feePercentage = PLATFORM_FEE_BPS / 100;
-        }
-      } else {
-        platformFee = paymentAmount * (PLATFORM_FEE_BPS / 10000);
-        feePercentage = PLATFORM_FEE_BPS / 100;
-      }
+    const breakdown = calculatePlatformFeeBreakdown({ amount: paymentAmount, tokenType, solPriceUsd });
+    if (!breakdown) {
+      throw new Error('SOL price unavailable. Please try again in a moment.');
     }
-    const totalPayable = paymentAmount + platformFee;
     return {
       invoiceAmount: paymentAmount,
-      platformFee: parseFloat(platformFee.toFixed(tokenType === TokenType.USDC ? 6 : 9)),
-      totalPayable: parseFloat(totalPayable.toFixed(tokenType === TokenType.USDC ? 6 : 9)),
-      feePercentage,
+      platformFee: breakdown.platformFee,
+      totalPayable: breakdown.totalPayable,
+      feePercentage: breakdown.feePercentage,
     };
   }
 

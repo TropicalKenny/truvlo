@@ -6,10 +6,10 @@ import {
   supabase,
   walletBelongsToUser,
 } from './_shared.js';
+import { resolveAppOrigin } from './notify-client-origin.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@truvlo.io';
-// FIX: Use a server-controlled origin so the approve URL cannot be forged by the caller.
 const APP_ORIGIN = process.env.APP_ORIGIN;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -20,8 +20,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = await requireUserId(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  if (!APP_ORIGIN) {
-    console.error('APP_ORIGIN env var is not configured');
+  const appOrigin = resolveAppOrigin({
+    envOrigin: APP_ORIGIN,
+    vercelUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL,
+    headers: req.headers,
+  });
+  if (!appOrigin) {
+    console.error('Unable to resolve app origin for notify-client');
     return res.status(500).json({ error: 'Server misconfiguration' });
   }
 
@@ -64,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // FIX: Generate approve URL server-side from a trusted, allowlisted origin.
   // invoiceId is already validated to belong to this creator, so it is safe to embed.
-  const approveUrl = `${APP_ORIGIN}/approve/${encodeURIComponent(invoiceId)}`;
+  const approveUrl = `${appOrigin}/approve/${encodeURIComponent(invoiceId)}`;
 
   const shortCreator = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
   const displayName = senderName || meta?.sender_name || '';
@@ -117,6 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (!response.ok) {
+      console.error('Resend error (notify-client):', response.status, await response.text());
       return res.status(502).json({ error: 'Failed to send email' });
     }
 

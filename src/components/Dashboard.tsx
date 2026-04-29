@@ -395,7 +395,12 @@ const Dashboard: React.FC = () => {
           if (notifyRes.ok) {
             toast({ title: 'Withdrawal requested', description: 'Client notified by email.' });
           } else {
-            toast({ title: 'Withdrawal requested', description: 'Email notification failed. Copy the invoice link if needed.', variant: 'destructive' });
+            let notifyError = 'Email notification failed. Copy the invoice link if needed.';
+            try {
+              const body = await notifyRes.json() as { error?: string };
+              if (body.error) notifyError = `${body.error}. Copy the invoice link if needed.`;
+            } catch { /* keep fallback */ }
+            toast({ title: 'Withdrawal requested', description: notifyError, variant: 'destructive' });
           }
         } catch {
           toast({ title: 'Withdrawal requested', description: 'Email notification failed. Copy the invoice link if needed.', variant: 'destructive' });

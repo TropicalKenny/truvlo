@@ -169,8 +169,13 @@ const CreateInvoiceForm: React.FC = () => {
       return;
     }
 
-    const amountNum = parseFloat(amount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const amountText = amount.trim();
+    if (!/^\d+(\.\d+)?$/.test(amountText)) {
+      toast({ title: 'Enter a valid amount', variant: 'destructive' });
+      return;
+    }
+    const amountNum = Number(amountText);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
       toast({ title: 'Enter a valid amount', variant: 'destructive' });
       return;
     }
@@ -475,17 +480,17 @@ const CreateInvoiceForm: React.FC = () => {
 
         {/* Amount */}
         <div>
-          <label htmlFor="amount" style={labelStyle}>
+          <label htmlFor="invoiceAmount" style={labelStyle}>
             Amount ({tokenType === TokenType.USDC ? 'USDC' : 'SOL'})
           </label>
           <DarkInput
-            id="amount"
-            name="amount"
-            type="number"
+            id="invoiceAmount"
+            name="invoiceAmount"
+            type="text"
+            inputMode="decimal"
             autoComplete="off"
-            step={tokenType === TokenType.USDC ? '0.01' : '0.0001'}
-            min="0"
-            placeholder="0.00"
+            pattern="\d+(\.\d+)?"
+            placeholder="0"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />

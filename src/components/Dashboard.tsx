@@ -12,8 +12,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
+import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { useToast } from '@/hooks/use-toast';
-import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 import ReleaseModal from './ReleaseModal';
 import { NotificationList, NotificationHistory, useNotifications } from './NotificationProvider';
 
@@ -161,33 +162,7 @@ const Dashboard: React.FC = () => {
 
   const sdk = useMemo(() => {
     if (!publicKey || !walletAddress) return null;
-    const anchorWallet = {
-      publicKey,
-      signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-        const w = privyWalletRef.current;
-        if (!w) throw new Error('Wallet disconnected');
-        const bytes = tx instanceof VersionedTransaction
-          ? tx.serialize()
-          : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-        const { signedTransaction } = await w.signTransaction({ transaction: bytes });
-        return (tx instanceof VersionedTransaction
-          ? VersionedTransaction.deserialize(signedTransaction)
-          : Transaction.from(Buffer.from(signedTransaction))) as T;
-      },
-      signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-        const w = privyWalletRef.current;
-        if (!w) throw new Error('Wallet disconnected');
-        return Promise.all(txs.map(async (tx) => {
-          const bytes = tx instanceof VersionedTransaction
-            ? tx.serialize()
-            : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-          const { signedTransaction } = await w.signTransaction({ transaction: bytes });
-          return (tx instanceof VersionedTransaction
-            ? VersionedTransaction.deserialize(signedTransaction)
-            : Transaction.from(Buffer.from(signedTransaction))) as T;
-        }));
-      },
-    };
+    const anchorWallet = createPrivySolanaAnchorWallet(() => privyWalletRef.current, publicKey);
     const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
     const instance = new EscrowPaySDK(provider, false);
     if (!instance.isInitialized()) console.error('SDK init error:', instance.getInitError());

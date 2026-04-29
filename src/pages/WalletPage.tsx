@@ -5,7 +5,8 @@ import { usePrivy } from '@privy-io/react-auth';
 import { useImportWallet } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import {
-  PublicKey, Transaction, VersionedTransaction,
+  PublicKey,
+  Transaction,
   SystemProgram, LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import {
@@ -21,6 +22,7 @@ import { Copy, RefreshCw, Loader2, Check, Trash2, ExternalLink, AlertTriangle } 
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useToast } from '@/hooks/use-toast';
+import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 
 // Devnet USDC mint
 const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
@@ -115,7 +117,7 @@ async function unregisterWallet(address: string, getAccessToken: () => Promise<s
 }
 
 const WalletPage: React.FC = () => {
-  const { authenticated, ready, getAccessToken } = usePrivy();
+  const { authenticated, ready, getAccessToken, login } = usePrivy();
   const navigate = useNavigate();
   const { connection } = useConnection();
   const { activeWallet, allWallets, setActiveWallet } = useActiveWallet();
@@ -204,22 +206,47 @@ const WalletPage: React.FC = () => {
   // ─── anchor wallet for signing ────────────────────────────────────────────
   const anchorWallet = useMemo(() => {
     if (!publicKey || !activeWallet) return null;
-    return {
-      publicKey,
-      signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-        const bytes = tx instanceof VersionedTransaction
-          ? tx.serialize()
-          : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-        const { signedTransaction } = await activeWallet.signTransaction({ transaction: bytes });
-        return (tx instanceof VersionedTransaction
-          ? VersionedTransaction.deserialize(signedTransaction)
-          : Transaction.from(Buffer.from(signedTransaction))) as T;
-      },
-    };
+    return createPrivySolanaAnchorWallet(activeWallet, publicKey);
   }, [publicKey, activeWallet]);
 
   // Early return after all hooks
-  if (!ready || !authenticated) return <div style={{ minHeight: '100vh', backgroundColor: '#0D1117' }} />;
+  if (!ready || !authenticated) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#0D1117', display: 'flex', flexDirection: 'column' }}>
+        <Header />
+        <main style={{ flex: 1, maxWidth: '560px', margin: '0 auto', width: '100%', padding: '48px 16px' }}>
+          <div className="rounded-xl p-8 text-center" style={sectionCard}>
+            <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.25rem', color: '#F8FAFC', marginBottom: '8px' }}>
+              Connect your account
+            </p>
+            <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', color: '#94A3B8', marginBottom: '20px' }}>
+              Login to manage wallets, receive funds, and send devnet SOL or USDC.
+            </p>
+            <button
+              type="button"
+              disabled={!ready}
+              onClick={() => login()}
+              style={{
+                backgroundColor: '#2DD4BF',
+                color: '#0D1117',
+                border: 'none',
+                borderRadius: '8px',
+                fontFamily: '"DM Sans", sans-serif',
+                fontWeight: 600,
+                fontSize: '14px',
+                padding: '10px 22px',
+                cursor: ready ? 'pointer' : 'not-allowed',
+                opacity: ready ? 1 : 0.6,
+              }}
+            >
+              {ready ? 'Login' : 'Loading...'}
+            </button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   // ─── handlers ─────────────────────────────────────────────────────────────
   const handleCopyAddress = async () => {

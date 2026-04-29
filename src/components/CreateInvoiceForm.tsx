@@ -5,9 +5,11 @@ import { usePrivy } from '@privy-io/react-auth';
 import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
-import { PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 import { Loader2, Copy, ExternalLink, Check } from 'lucide-react';
 import { EscrowPaySDK, TokenType } from '@/lib/escrowPaySDK';
+import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
+import { getSolanaExplorerTxUrl, PRIVY_SOLANA_CHAIN } from '@/lib/solanaConfig';
 import { useToast } from '@/hooks/use-toast';
 
 // ── preserved exactly ──────────────────────────────────────────
@@ -16,7 +18,7 @@ function getErrorMessage(error: unknown): string {
   if (typeof error === 'string') return error;
   if (error instanceof Error) return error.message || 'An error occurred';
   if (typeof error === 'object') {
-    const obj = error as Record<string, any>;
+    const obj = error as Record<string, unknown>;
     if (typeof obj.message === 'string') return obj.message;
     if (typeof obj.msg === 'string') return obj.msg;
     if (typeof obj.error === 'string') return obj.error;
@@ -98,7 +100,10 @@ const CreateInvoiceForm: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
   const { activeWallet: privyWallet } = useActiveWallet();
-  const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
+  const publicKey = useMemo(
+    () => (privyWallet?.address ? new PublicKey(privyWallet.address) : null),
+    [privyWallet?.address],
+  );
   const connected = authenticated && !!publicKey;
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -137,36 +142,14 @@ const CreateInvoiceForm: React.FC = () => {
   // ── SDK init — preserved exactly ───────────────────────────────
   const sdk = useMemo(() => {
     if (!publicKey || !privyWallet) return null;
-    const anchorWallet = {
-      publicKey,
-      signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-        const bytes = tx instanceof VersionedTransaction
-          ? tx.serialize()
-          : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-        const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
-        return (tx instanceof VersionedTransaction
-          ? VersionedTransaction.deserialize(signedTransaction)
-          : Transaction.from(Buffer.from(signedTransaction))) as T;
-      },
-      signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-        return Promise.all(txs.map(async (tx) => {
-          const bytes = tx instanceof VersionedTransaction
-            ? tx.serialize()
-            : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-          const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
-          return (tx instanceof VersionedTransaction
-            ? VersionedTransaction.deserialize(signedTransaction)
-            : Transaction.from(Buffer.from(signedTransaction))) as T;
-        }));
-      },
-    };
-    const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
+    const anchorWallet = createPrivySolanaAnchorWallet(privyWallet, publicKey);
+    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
     const sponsorFn = async (tx: Uint8Array): Promise<string> => {
       const result = await signAndSendTransaction({
         transaction: Buffer.from(tx).toString('base64'),
         wallet: privyWallet,
         options: { sponsor: true },
-        chainId: 'solana:devnet',
+        chainId: PRIVY_SOLANA_CHAIN,
       });
       return result.signature;
     };
@@ -374,7 +357,7 @@ const CreateInvoiceForm: React.FC = () => {
 
           {/* Explorer link */}
           <a
-            href={`https://explorer.solana.com/tx/${createdInvoice.signature}?cluster=devnet`}
+            href={getSolanaExplorerTxUrl(createdInvoice.signature)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-1.5 text-xs transition-opacity duration-150 hover:opacity-70"

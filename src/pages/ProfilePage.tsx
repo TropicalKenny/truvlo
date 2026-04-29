@@ -5,6 +5,7 @@ import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection } from '@solana/web3.js';
 import { ExternalLink, AlertCircle, Loader2, Shield, Zap, TrendingUp, Calendar, Info, Copy, Check } from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus } from '@/lib/escrowPaySDK';
+import { getSolanaExplorerAddressUrl } from '@/lib/solanaConfig';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import TruvloLogo from '@/components/TruvloLogo';
@@ -340,7 +341,7 @@ const ProfilePage: React.FC = () => {
             </div>
             <div className="flex flex-col gap-2 flex-shrink-0">
               <a
-                href={`https://explorer.solana.com/address/${profile.walletAddress}?cluster=devnet`}
+                href={getSolanaExplorerAddressUrl(profile.walletAddress)}
                 target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-opacity duration-150 hover:opacity-70"
                 style={{ backgroundColor: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
@@ -510,7 +511,7 @@ const ProfilePage: React.FC = () => {
                   Account page
                 </Link>{' '}
                 instead. {' '}
-                <a href={`https://explorer.solana.com/address/${profile.walletAddress}?cluster=devnet`}
+                <a href={getSolanaExplorerAddressUrl(profile.walletAddress)}
                   target="_blank" rel="noopener noreferrer" style={{ color: '#2DD4BF', textDecoration: 'none' }}>
                   Verify yourself →
                 </a>

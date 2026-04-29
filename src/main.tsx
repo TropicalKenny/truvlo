@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { PrivyProvider } from '@privy-io/react-auth';
+import { getSolanaRpcUrl, PRIVY_SOLANA_CHAIN } from './lib/solanaConfig';
 
 // Make Buffer available globally for Solana libraries
 window.Buffer = Buffer;
@@ -28,10 +29,7 @@ createRoot(rootElement).render(
         },
         solana: {
           rpcs: {
-            'solana:devnet': import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
-            // Privy embedded wallets default to mainnet when no chain is specified.
-            // This redirects that lookup to devnet so signing doesn't break.
-            'solana:mainnet': import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
+            [PRIVY_SOLANA_CHAIN]: getSolanaRpcUrl(),
           },
         },
       }}

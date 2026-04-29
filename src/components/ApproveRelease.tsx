@@ -4,10 +4,12 @@ import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
-import { AnchorProvider } from '@coral-xyz/anchor';
+import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { Loader2, AlertCircle, Check, AlertTriangle, Clock } from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
+import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
+import { PRIVY_SOLANA_CHAIN } from '@/lib/solanaConfig';
 import { useToast } from '@/hooks/use-toast';
 
 type PageState =
@@ -42,7 +44,10 @@ const ApproveRelease: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
   const { activeWallet: privyWallet } = useActiveWallet();
-  const publicKey = privyWallet?.address ? new PublicKey(privyWallet.address) : null;
+  const publicKey = useMemo(
+    () => (privyWallet?.address ? new PublicKey(privyWallet.address) : null),
+    [privyWallet?.address],
+  );
   const connected = authenticated && !!publicKey;
   const { toast } = useToast();
   const { signAndSendTransaction } = useSignAndSendTransaction();
@@ -66,50 +71,29 @@ const ApproveRelease: React.FC = () => {
   const sdk = useMemo(() => {
     if (!publicKey || !privyWallet) return null;
     try {
-      const anchorWallet = {
-        publicKey,
-        signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T): Promise<T> => {
-          const bytes = tx instanceof VersionedTransaction
-            ? tx.serialize()
-            : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-          const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
-          return (tx instanceof VersionedTransaction
-            ? VersionedTransaction.deserialize(signedTransaction)
-            : Transaction.from(Buffer.from(signedTransaction))) as T;
-        },
-        signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> => {
-          return Promise.all(txs.map(async (tx) => {
-            const bytes = tx instanceof VersionedTransaction
-              ? tx.serialize()
-              : tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-            const { signedTransaction } = await privyWallet.signTransaction({ transaction: bytes });
-            return (tx instanceof VersionedTransaction
-              ? VersionedTransaction.deserialize(signedTransaction)
-              : Transaction.from(Buffer.from(signedTransaction))) as T;
-          }));
-        },
-      };
-      const provider = new AnchorProvider(connection, anchorWallet as any, { commitment: 'confirmed' });
+      const anchorWallet = createPrivySolanaAnchorWallet(privyWallet, publicKey);
+      const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
       const sponsorFn = async (tx: Uint8Array): Promise<string> => {
         const result = await signAndSendTransaction({
           transaction: Buffer.from(tx).toString('base64'),
           wallet: privyWallet,
           options: { sponsor: true },
+          chainId: PRIVY_SOLANA_CHAIN,
         });
         return result.signature;
       };
       return new EscrowPaySDK(provider, false, sponsorFn);
     } catch { return null; }
-  }, [connection, publicKey, privyWallet]);
+  }, [connection, publicKey, privyWallet, signAndSendTransaction]);
 
   const createReadOnlySdk = (conn: Connection): EscrowPaySDK | null => {
     try {
-      const mock = {
+      const mock: Wallet = {
         publicKey: new PublicKey('11111111111111111111111111111111'),
-        signTransaction: async (tx: any) => tx,
-        signAllTransactions: async (txs: any[]) => txs,
+        signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T) => tx,
+        signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]) => txs,
       };
-      const provider = new AnchorProvider(conn, mock as any, { commitment: 'confirmed' });
+      const provider = new AnchorProvider(conn, mock, { commitment: 'confirmed' });
       const instance = new EscrowPaySDK(provider);
       if (!instance.isInitialized()) { setSdkInitError(instance.getInitError()); return null; }
       return instance;
@@ -134,23 +118,18 @@ const ApproveRelease: React.FC = () => {
 
   useEffect(() => { fetchInvoice(); }, [connection, urlValid]);
 
-  const fromSmallestUnit = (amount: any, tokenType: TokenType) => {
+  const fromSmallestUnit = (amount: unknown, tokenType: TokenType) => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
     try {
-      const raw = amount?.toNumber ? amount.toNumber() : Number(amount ?? 0);
+      const raw = amount && typeof amount === 'object' && 'toNumber' in amount && typeof amount.toNumber === 'function'
+        ? amount.toNumber()
+        : Number(amount ?? 0);
       const int = BigInt(Math.round(raw));
       const divisor = BigInt(10 ** decimals);
       const whole = int / divisor;
       const remainder = int % divisor;
       return parseFloat(`${whole}.${remainder.toString().padStart(decimals, '0')}`);
     } catch { return 0; }
-  };
-
-  const formatAmount = (amount: any, tokenType: TokenType) => {
-    const symbol = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
-    const decimals = tokenType === TokenType.USDC ? 2 : 4;
-    const value = typeof amount === 'number' ? amount : fromSmallestUnit(amount, tokenType);
-    return `${parseFloat(value.toFixed(decimals)).toLocaleString('en-US', { maximumFractionDigits: decimals })} ${symbol}`;
   };
 
   const getSecondsRemaining = (inv: InvoiceData) => {

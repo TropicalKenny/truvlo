@@ -15,8 +15,6 @@ const Index: React.FC = () => {
     if (ready && authenticated) navigate('/dashboard', { replace: true });
   }, [ready, authenticated, navigate]);
 
-  if (!ready) return <div style={{ minHeight: '100vh', backgroundColor: '#0D1117' }} />;
-
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
       <Header />

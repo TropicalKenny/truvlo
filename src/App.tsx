@@ -2,12 +2,12 @@ import React, { lazy, Suspense, useMemo } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { ConnectionProvider } from '@solana/wallet-adapter-react';
-import { clusterApiUrl } from '@solana/web3.js';
 import NotFound from './pages/NotFound';
 import Index from './pages/Index';
 import ReferralBootstrap from './components/ReferralBootstrap';
 import { NotificationProvider } from './components/NotificationProvider';
 import { ActiveWalletProvider } from './contexts/ActiveWalletContext';
+import { getSolanaRpcUrl } from './lib/solanaConfig';
 
 const CreateInvoicePage      = lazy(() => import('./pages/CreateInvoicePage'));
 const PaymentPage            = lazy(() => import('./pages/PaymentPage'));
@@ -21,10 +21,7 @@ const WalletPage             = lazy(() => import('./pages/WalletPage'));
 const CombinedProfilePage    = lazy(() => import('./pages/CombinedProfilePage'));
 
 const App = () => {
-  const endpoint = useMemo(
-    () => import.meta.env.VITE_SOLANA_RPC_URL || clusterApiUrl('devnet'),
-    [],
-  );
+  const endpoint = useMemo(() => getSolanaRpcUrl(), []);
 
   return (
     <ConnectionProvider endpoint={endpoint}>

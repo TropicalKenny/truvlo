@@ -4,7 +4,7 @@ import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
-import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
+import { AnchorProvider, type Wallet as AnchorWallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 import {
   Loader2, AlertCircle, Check, ArrowLeft, Shield,
@@ -63,6 +63,7 @@ const InvoicePayment: React.FC = () => {
   const [sdkInitError, setSdkInitError] = useState<string | null>(null);
   const [installments, setInstallments] = useState<Installment[]>([{ percentage: 100 }]);
   const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
+  const [solPriceStatus, setSolPriceStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [invoiceMeta, setInvoiceMeta] = useState<InvoiceMeta | null>(null);
 
@@ -90,7 +91,7 @@ const InvoicePayment: React.FC = () => {
 
   const createReadOnlySdk = (conn: Connection): EscrowPaySDK | null => {
     try {
-      const mockWallet: Wallet = {
+      const mockWallet: AnchorWallet = {
         publicKey: new PublicKey('11111111111111111111111111111111'),
         signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T) => tx,
         signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]) => txs,
@@ -115,10 +116,22 @@ const InvoicePayment: React.FC = () => {
         const metadataUrl = `/api/create-invoice-meta?invoiceId=${encodeURIComponent(urlParams.invoiceId!)}&creatorWallet=${encodeURIComponent(urlParams.creator!)}`;
         const [result, price, metaRes] = await Promise.all([
           readOnlySdk.fetchInvoice(urlParams.invoiceId!, creatorPubkey),
-          readOnlySdk.getSolPriceUsd(),
+          fetch('/api/sol-price')
+            .then(async (res) => {
+              if (!res.ok) return null;
+              const data = await res.json() as { price?: number };
+              return typeof data.price === 'number' ? data.price : null;
+            })
+            .catch(() => null),
           fetch(metadataUrl).catch(() => null),
         ]);
-        if (price) setSolPriceUsd(price);
+        if (price) {
+          setSolPriceUsd(price);
+          setSolPriceStatus('ready');
+        } else {
+          setSolPriceUsd(null);
+          setSolPriceStatus('error');
+        }
         if (metaRes?.ok) {
           setInvoiceMeta(await metaRes.json() as InvoiceMeta);
         } else {
@@ -620,8 +633,14 @@ const InvoicePayment: React.FC = () => {
                 {[
                   { label: 'Amount', value: formatAmount(breakdown.amount, invoice.tokenType) },
                   {
-                    label: breakdown.priceUnavailable ? 'Platform Fee (waiting for SOL price)' : breakdown.feeLabel,
-                    value: breakdown.priceUnavailable ? 'Calculating...' : formatAmount(breakdown.fee, invoice.tokenType),
+                    label: breakdown.priceUnavailable
+                      ? solPriceStatus === 'loading'
+                        ? 'Platform Fee (waiting for SOL price)'
+                        : 'Platform Fee (SOL price unavailable)'
+                      : breakdown.feeLabel,
+                    value: breakdown.priceUnavailable
+                      ? solPriceStatus === 'loading' ? 'Calculating...' : 'Try refresh'
+                      : formatAmount(breakdown.fee, invoice.tokenType),
                   },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between text-sm">
@@ -683,7 +702,7 @@ const InvoicePayment: React.FC = () => {
                   {paying
                     ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
                     : breakdown.priceUnavailable
-                      ? 'Calculating SOL fee...'
+                      ? solPriceStatus === 'loading' ? 'Calculating SOL fee...' : 'SOL price unavailable'
                       : `Lock Funds - ${formatAmount(breakdown.total, invoice.tokenType)}`}
                 </button>
               )}

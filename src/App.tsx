@@ -41,7 +41,7 @@ const App = () => {
                 <Route path="/pay/:invoiceId" element={<InvalidInvoicePage />} />
                 <Route path="/onboarding" element={<OnboardingGate onboardingPage><OnboardingPage /></OnboardingGate>} />
                 <Route path="/dashboard" element={<OnboardingGate><DashboardPage /></OnboardingGate>} />
-                <Route path="/approve/:invoiceId/:creator" element={<OnboardingGate><ApprovePage /></OnboardingGate>} />
+                <Route path="/approve/:invoiceId/:creator" element={<ApprovePage />} />
                 <Route path="/account" element={<OnboardingGate><AccountPage /></OnboardingGate>} />
                 {/* /profile/account/:slug must come before /profile/:wallet */}
                 <Route path="/profile/account/:slug" element={<CombinedProfilePage />} />

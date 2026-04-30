@@ -372,7 +372,7 @@ const InvoicePayment: React.FC = () => {
           >
             <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#38BDF8' }} />
             <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
-              Funds are secured on-chain. The creator can only withdraw according to the schedule you set.
+              Funds are secured on-chain. The creator can only withdraw according to the schedule you set. Use this same wallet to approve releases or raise a dispute later.
             </p>
           </div>
 
@@ -665,7 +665,7 @@ const InvoicePayment: React.FC = () => {
                   >
                     <Wallet className="h-4 w-4" style={{ color: '#64748B' }} />
                     <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
-                      Connect to continue
+                      No Truvlo profile setup needed
                     </span>
                   </div>
                   <button
@@ -683,7 +683,7 @@ const InvoicePayment: React.FC = () => {
                       cursor: 'pointer',
                     }}
                   >
-                    Connect Wallet
+                    Continue as client
                   </button>
                 </div>
               ) : (
@@ -703,7 +703,7 @@ const InvoicePayment: React.FC = () => {
                     ? <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
                     : breakdown.priceUnavailable
                       ? solPriceStatus === 'loading' ? 'Calculating SOL fee...' : 'SOL price unavailable'
-                      : `Lock Funds - ${formatAmount(breakdown.total, invoice.tokenType)}`}
+                      : `Pay securely - ${formatAmount(breakdown.total, invoice.tokenType)}`}
                 </button>
               )}
             </div>

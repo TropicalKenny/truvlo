@@ -43,7 +43,7 @@ const ApproveRelease: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
   const navigate = useNavigate();
   const { connection } = useConnection();
-  const { authenticated, getAccessToken } = usePrivy();
+  const { authenticated, login, getAccessToken } = usePrivy();
   const { activeWallet: privyWallet } = useActiveWallet();
   const publicKey = useMemo(
     () => (privyWallet?.address ? new PublicKey(privyWallet.address) : null),
@@ -135,8 +135,16 @@ const ApproveRelease: React.FC = () => {
     return Math.max(0, 7 * 24 * 60 * 60 - (now - req));
   };
 
+  const isConnectedWalletInvoiceClient = (invoice: InvoiceData) =>
+    !!connected && !!publicKey && !!invoice.client && invoice.client.toBase58() === publicKey.toBase58();
+
   const handleApprove = async () => {
-    if (!sdk || !connected) { toast({ title: 'Connect your wallet first', variant: 'destructive' }); return; }
+    if (pageState.type !== 'loaded') return;
+    if (!isConnectedWalletInvoiceClient(pageState.invoice)) {
+      toast({ title: 'Connect the wallet you paid with', variant: 'destructive' });
+      return;
+    }
+    if (!sdk) { toast({ title: 'Wallet not ready', variant: 'destructive' }); return; }
     setApproving(true);
     try {
       const result = await sdk.approveRelease(invoiceId!, new PublicKey(creator!));
@@ -161,7 +169,12 @@ const ApproveRelease: React.FC = () => {
   };
 
   const handleDispute = async () => {
-    if (!sdk || !connected) { toast({ title: 'Connect your wallet first', variant: 'destructive' }); return; }
+    if (pageState.type !== 'loaded') return;
+    if (!isConnectedWalletInvoiceClient(pageState.invoice)) {
+      toast({ title: 'Connect the wallet you paid with', variant: 'destructive' });
+      return;
+    }
+    if (!sdk) { toast({ title: 'Wallet not ready', variant: 'destructive' }); return; }
     setDisputing(true);
     try {
       const result = await sdk.raiseDispute(invoiceId!, new PublicKey(creator!));
@@ -333,6 +346,8 @@ const ApproveRelease: React.FC = () => {
   const alreadyApproved = inv.clientApproved;
   const amountValue = fromSmallestUnit(inv.amountPaid || inv.amount, inv.tokenType);
   const symbol = inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
+  const connectedWalletMatchesClient = isConnectedWalletInvoiceClient(inv);
+  const connectedWrongWallet = connected && !connectedWalletMatchesClient;
 
   return (
     <div style={cardStyle}>
@@ -430,24 +445,56 @@ const ApproveRelease: React.FC = () => {
       {!alreadyApproved && !isDisputed && (
         <div className="flex flex-col gap-3">
           {!connected && (
-            <p
-              className="text-center text-sm mb-2"
-              style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}
+            <div className="space-y-3">
+              <div
+                className="rounded-lg p-3.5 text-center"
+                style={{ backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: 600 }}>
+                  Continue as client to approve or dispute
+                </p>
+                <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5, marginTop: '5px' }}>
+                  No Truvlo profile setup needed. Use the same wallet that paid this invoice.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => login()}
+                className="w-full rounded-lg py-3.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
+                style={{
+                  backgroundColor: '#2DD4BF',
+                  color: '#0D1117',
+                  fontFamily: '"DM Sans", sans-serif',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                Continue as client
+              </button>
+            </div>
+          )}
+
+          {connectedWrongWallet && (
+            <div
+              className="rounded-lg p-3.5"
+              style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
             >
-              Connect your wallet to approve or dispute this withdrawal.
-            </p>
+              <p style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', lineHeight: 1.5 }}>
+                This invoice was paid by another wallet. Switch to the wallet that paid this invoice.
+              </p>
+            </div>
           )}
 
           <button
             onClick={handleApprove}
-            disabled={approving || disputing || !connected}
+            disabled={approving || disputing || !connectedWalletMatchesClient}
             className="w-full flex items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
             style={{
               backgroundColor: '#2DD4BF',
               color: '#0D1117',
               fontFamily: '"DM Sans", sans-serif',
               border: 'none',
-              cursor: approving || !connected ? 'default' : 'pointer',
+              cursor: approving || !connectedWalletMatchesClient ? 'default' : 'pointer',
             }}
           >
             {approving
@@ -457,14 +504,14 @@ const ApproveRelease: React.FC = () => {
 
           <button
             onClick={handleDispute}
-            disabled={approving || disputing || !connected}
+            disabled={approving || disputing || !connectedWalletMatchesClient}
             className="w-full flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-medium transition-all duration-150 hover:opacity-80 disabled:opacity-50"
             style={{
               backgroundColor: 'transparent',
               border: '1px solid rgba(245,158,11,0.3)',
               color: '#FCD34D',
               fontFamily: '"DM Sans", sans-serif',
-              cursor: disputing || !connected ? 'default' : 'pointer',
+              cursor: disputing || !connectedWalletMatchesClient ? 'default' : 'pointer',
             }}
           >
             {disputing

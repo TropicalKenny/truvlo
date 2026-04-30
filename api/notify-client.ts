@@ -69,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // FIX: Generate approve URL server-side from a trusted, allowlisted origin.
   // invoiceId is already validated to belong to this creator, so it is safe to embed.
-  const approveUrl = `${appOrigin}/approve/${encodeURIComponent(invoiceId)}`;
+  const approveUrl = `${appOrigin}/approve/${encodeURIComponent(invoiceId)}/${encodeURIComponent(normalizedCreatorWallet)}`;
 
   const shortCreator = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
   const displayName = senderName || meta?.sender_name || '';

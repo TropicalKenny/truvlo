@@ -326,7 +326,7 @@ const ProfileSettingsPage: React.FC = () => {
                     {copiedReferralCode ? 'Copied' : 'Copy'}
                   </button>
                 </div>
-                <p style={helpStyle}>Share this code so referrers can earn 10% of completed invoice platform fees.</p>
+                <p style={helpStyle}>Rewards are recorded after completed transactions, paid manually, and valid for one year after a referral is linked.</p>
               </div>
 
               {/* Referred by */}

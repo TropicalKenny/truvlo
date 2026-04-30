@@ -26,6 +26,10 @@ interface InvoiceWithKey {
   account: InvoiceData;
 }
 
+interface ClientInvoiceMeta {
+  sender_name: string | null;
+}
+
 type AmountLike =
 
   | number
@@ -153,6 +157,7 @@ const Dashboard: React.FC = () => {
   const lastFetchedAt = useRef<number>(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [clientInvoiceMeta, setClientInvoiceMeta] = useState<Record<string, ClientInvoiceMeta>>({});
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -301,6 +306,35 @@ const Dashboard: React.FC = () => {
     };
     fetchProfile();
   }, [authenticated, getAccessToken]);
+
+  const loadClientInvoiceMeta = useCallback(async (invoices: InvoiceWithKey[]) => {
+    const missing = invoices.filter(({ account: inv }) => {
+      const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+      return !(key in clientInvoiceMeta);
+    });
+    if (missing.length === 0) return;
+
+    const loadedEntries = await Promise.all(missing.map(async ({ account: inv }) => {
+      const creatorWallet = inv.creator.toBase58();
+      const key = `${inv.invoiceId}:${creatorWallet}`;
+      try {
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet });
+        const res = await fetch(`/api/create-invoice-meta?${params.toString()}`);
+        if (!res.ok) return [key, { sender_name: null }] as const;
+        const data = await res.json() as { sender_name?: string | null };
+        return [key, { sender_name: data.sender_name?.trim() || null }] as const;
+      } catch {
+        return [key, { sender_name: null }] as const;
+      }
+    }));
+
+    setClientInvoiceMeta(prev => ({ ...prev, ...Object.fromEntries(loadedEntries) }));
+  }, [clientInvoiceMeta]);
+
+  useEffect(() => {
+    if (clientInvoices.length === 0) return;
+    void loadClientInvoiceMeta(clientInvoices);
+  }, [clientInvoices, loadClientInvoiceMeta]);
 
   // ============================================================
   // HELPERS
@@ -862,6 +896,8 @@ const Dashboard: React.FC = () => {
     const clientApproved = inv.clientApproved ?? false;
     const secondsLeft = getSecondsRemaining(inv);
     const needsAction = releaseRequested && !clientApproved && !isDisputed && secondsLeft > 0;
+    const creatorWallet = inv.creator.toBase58();
+    const creatorName = clientInvoiceMeta[`${inv.invoiceId}:${creatorWallet}`]?.sender_name;
 
     const leftBorderColor = isDisputed ? statusColors.amber
       : needsAction ? statusColors.blue
@@ -914,7 +950,7 @@ const Dashboard: React.FC = () => {
               {formatAmount(inv.amount, inv.tokenType)}
             </p>
             <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-              To: <span style={{ fontFamily: '"JetBrains Mono", monospace' }}>{truncateWallet(inv.creator.toBase58())}</span> · {formatDate(inv.createdAt)}
+              From: <span style={{ fontFamily: creatorName ? '"DM Sans", sans-serif' : '"JetBrains Mono", monospace' }}>{creatorName || truncateWallet(creatorWallet)}</span> · {formatDate(inv.createdAt)}
             </p>
 
             {schedule.length > 1 && (
@@ -1030,9 +1066,14 @@ const Dashboard: React.FC = () => {
     borderRadius: '8px',
     padding: '4px',
     overflowX: 'auto',
+    overflowY: 'hidden',
     display: 'flex',
     flexWrap: 'nowrap',
     width: '100%',
+    minHeight: '44px',
+    WebkitOverflowScrolling: 'touch',
+    touchAction: 'pan-x',
+    overscrollBehaviorY: 'none',
   };
 
   const tabTriggerStyle = (active: boolean): React.CSSProperties => ({
@@ -1044,9 +1085,10 @@ const Dashboard: React.FC = () => {
     padding: '6px 12px',
     border: active ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
     cursor: 'pointer',
-    transition: 'all 150ms ease',
+    transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease',
     flexShrink: 0,
     whiteSpace: 'nowrap',
+    minHeight: '34px',
   });
 
   // ============================================================

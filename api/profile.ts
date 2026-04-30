@@ -9,7 +9,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const referralCode = await ensureReferralCode(supabase, privyId);
     const { data, error } = await supabase
       .from('profiles')
-      .select('display_name, default_token, profile_slug, notification_email, email, created_at, referral_code, referred_by_code, referral_linked_at')
+      .select('display_name, default_token, profile_slug, notification_email, email, created_at, referral_code, referred_by_code, referral_linked_at, onboarding_completed_at')
       .eq('privy_id', privyId)
       .maybeSingle();
 
@@ -22,6 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       referral_code: referralCode ?? data?.referral_code ?? null,
       referred_by_code: data?.referred_by_code ?? null,
       referral_linked_at: data?.referral_linked_at ?? null,
+      onboarding_completed_at: data?.onboarding_completed_at ?? null,
     });
   }
 
@@ -29,11 +30,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const privyId = await requireUserId(req);
     if (!privyId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { display_name, default_token, notification_email, referred_by_code } = req.body as {
+    const { display_name, default_token, notification_email, referred_by_code, onboarding_completed_at } = req.body as {
       display_name?: string;
       default_token?: string;
       notification_email?: string;
       referred_by_code?: string | null;
+      onboarding_completed_at?: string | null;
     };
 
     if (typeof display_name !== 'string') {
@@ -79,6 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           default_token: tokenValue,
           ...(emailTrimmed !== undefined ? { notification_email: emailTrimmed } : {}),
           ...(referredByCode ? { referred_by_code: referredByCode, referral_linked_at: new Date().toISOString() } : {}),
+          ...(typeof onboarding_completed_at === 'string' ? { onboarding_completed_at } : {}),
           referral_code: referralCode,
         },
         { onConflict: 'privy_id' }
@@ -91,6 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       notification_email: emailTrimmed ?? null,
       referral_code: referralCode,
       referred_by_code: referredByCode,
+      onboarding_completed_at: typeof onboarding_completed_at === 'string' ? onboarding_completed_at : null,
     });
   }
 

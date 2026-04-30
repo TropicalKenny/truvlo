@@ -455,7 +455,7 @@ const AccountPage: React.FC = () => {
                     <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#94A3B8', fontSize: '12px', marginTop: '6px', lineHeight: 1.5 }}>
                       {latestPayout
                         ? `Cycle: ${latestPayout.payout_cycle_date ?? '—'} · Deadline: ${latestPayout.request_deadline ? new Date(latestPayout.request_deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}`
-                        : 'Completed invoices become requestable on the next payout cycle once the $10 threshold is met.'}
+                        : 'Completed transactions create rewards for one year after referral link. Payouts are requested manually once the $10 threshold is met.'}
                     </p>
                   </div>
 

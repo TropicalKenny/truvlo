@@ -94,6 +94,19 @@ function getErrorMessage(e: unknown): string {
   return 'Unknown error';
 }
 
+function sanitizeSendAmountInput(value: string, tokenType: TokenType): string {
+  const normalized = value.replace(',', '.').replace(/[^\d.]/g, '');
+  const firstDot = normalized.indexOf('.');
+  const withoutExtraDots = firstDot === -1
+    ? normalized
+    : `${normalized.slice(0, firstDot + 1)}${normalized.slice(firstDot + 1).replace(/\./g, '')}`;
+  const [whole, fraction = ''] = withoutExtraDots.split('.');
+  const decimals = tokenType === 'USDC' ? 6 : 9;
+  const safeWhole = whole.replace(/^0+(?=\d)/, '');
+  if (firstDot !== -1) return `${safeWhole || '0'}.${fraction.slice(0, decimals)}`;
+  return safeWhole;
+}
+
 async function registerWallet(address: string, getAccessToken: () => Promise<string | null>) {
   try {
     const token = await getAccessToken();
@@ -290,7 +303,7 @@ const WalletPage: React.FC = () => {
       return;
     }
 
-    const amount = parseFloat(sendAmount);
+    const amount = Number(sendAmount);
     if (isNaN(amount) || amount <= 0) {
       toast({ title: 'Enter a valid amount', variant: 'destructive' });
       return;
@@ -749,13 +762,12 @@ const WalletPage: React.FC = () => {
               <DarkInput
                 id="sendAmount"
                 name="sendAmount"
-                type="number"
+                type="text"
+                inputMode="decimal"
                 autoComplete="off"
-                step={sendToken === 'USDC' ? '0.01' : '0.000001'}
-                min="0"
                 placeholder="0.00"
                 value={sendAmount}
-                onChange={e => setSendAmount(e.target.value)}
+                onChange={e => setSendAmount(sanitizeSendAmountInput(e.target.value, sendToken))}
               />
             </div>
 

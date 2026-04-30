@@ -14,6 +14,7 @@ import {
   chooseReferralShares,
 } from './_shared.js';
 import { calculatePlatformFeeBreakdown } from '../src/lib/platformFees.js';
+import { isReferralRewardWindowActive } from '../src/lib/referralEligibility.js';
 type TokenType = 'USDC' | 'SOL';
 type RewardSourceRole = 'creator' | 'client';
 
@@ -249,16 +250,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       privy_id: string;
       referral_code: string | null;
       referred_by_code: string | null;
+      referral_linked_at: string | null;
       created_at: string | null;
-    }>(supabase, creatorPrivyId, 'privy_id, referral_code, referred_by_code, created_at');
+    }>(supabase, creatorPrivyId, 'privy_id, referral_code, referred_by_code, referral_linked_at, created_at');
 
     const clientProfile = clientPrivyId
       ? await getProfileByPrivyId<{
           privy_id: string;
           referral_code: string | null;
           referred_by_code: string | null;
+          referral_linked_at: string | null;
           created_at: string | null;
-        }>(supabase, clientPrivyId, 'privy_id, referral_code, referred_by_code, created_at')
+        }>(supabase, clientPrivyId, 'privy_id, referral_code, referred_by_code, referral_linked_at, created_at')
       : null;
 
     const platformFee = await calculateServerPlatformFee(amount, tokenType);
@@ -267,8 +270,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const shares = chooseReferralShares(
       creatorProfile?.created_at ?? null,
       clientProfile?.created_at ?? null,
-      Boolean(creatorProfile?.referred_by_code),
-      Boolean(clientProfile?.referred_by_code)
+      Boolean(creatorProfile?.referred_by_code) && isReferralRewardWindowActive(creatorProfile?.referral_linked_at),
+      Boolean(clientProfile?.referred_by_code) && isReferralRewardWindowActive(clientProfile?.referral_linked_at)
     );
 
     if (shares.length === 0 || rewardPool <= 0) {

@@ -6,7 +6,7 @@ import {
   supabase,
   walletBelongsToUser,
 } from './_shared.js';
-import { DEFAULT_FROM_EMAIL, VERIFIED_SENDER_ERROR, isResendTestSender, readResendError } from './_email.js';
+import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
 import { resolveAppOrigin } from './notify-client-origin.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -45,12 +45,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!RESEND_API_KEY) return res.status(500).json({ error: 'Email service not configured' });
-  if (isResendTestSender(FROM_EMAIL)) {
-    return res.status(500).json({
-      error: VERIFIED_SENDER_ERROR,
-      resend_error: 'FROM_EMAIL uses @resend.dev; configure a sender on a verified sender domain.',
-    });
-  }
   if (!isValidSolanaAddress(creatorWallet)) {
     return res.status(400).json({ error: 'Invalid creator wallet' });
   }
@@ -131,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!response.ok) {
       const resendError = await readResendError(response);
       console.error('Resend error (notify-client):', resendError);
-      return res.status(502).json({ error: resendError, resend_error: resendError });
+      return res.status(502).json({ error: PUBLIC_EMAIL_DELIVERY_ERROR });
     }
 
     await supabase

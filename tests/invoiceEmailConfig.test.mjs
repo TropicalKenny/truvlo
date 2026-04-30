@@ -10,38 +10,22 @@ const formSource = await readFile('src/components/CreateInvoiceForm.tsx', 'utf8'
 
 assert.match(
   metaApiSource,
-  /isResendTestSender/,
-  'invoice metadata API should explicitly detect resend.dev test sender configuration',
+  /PUBLIC_EMAIL_DELIVERY_ERROR/,
+  'invoice metadata API should return a friendly email delivery error',
 );
-assert.match(
-  metaApiSource,
-  /verified sender domain/,
-  'invoice metadata API should return a clear verified-domain configuration error',
-);
-assert.match(
-  metaApiSource,
-  /resend_error/,
-  'invoice metadata API should include provider error detail when Resend rejects a send',
-);
-assert.match(emailHelperSource, /notifications@truvlo\.io/, 'shared email helper should default to a Truvlo sender');
-assert.doesNotMatch(emailHelperSource, /onboarding@resend\.dev/, 'shared email helper should not default to Resend test sender');
+assert.doesNotMatch(metaApiSource, /resend_error/, 'invoice metadata API should not return provider error details');
+assert.match(emailHelperSource, /onboarding@resend\.dev/, 'shared email helper should support Resend test sender while no domain is configured');
+assert.match(emailHelperSource, /PUBLIC_EMAIL_DELIVERY_ERROR/, 'shared email helper should provide client-friendly email failure copy');
 for (const [name, source] of [
   ['notify-client', notifyClientSource],
   ['notify-creator', notifyCreatorSource],
   ['send-invoice', sendInvoiceSource],
 ]) {
-  assert.doesNotMatch(source, /onboarding@resend\.dev/, `${name} should not default to Resend test sender`);
-  assert.match(source, /isResendTestSender/, `${name} should guard against @resend.dev sender configuration`);
+  assert.doesNotMatch(source, /verified sender domain/, `${name} should not expose sender-domain setup details`);
+  assert.match(source, /PUBLIC_EMAIL_DELIVERY_ERROR/, `${name} should return friendly email delivery copy`);
 }
-assert.match(
-  formSource,
-  /meta\.resend_error/,
-  'create invoice form should surface the concrete email provider error when available',
-);
-assert.match(
-  formSource,
-  /Email setup needs a verified sender domain/,
-  'create invoice form should show clear setup copy for sender-domain failures',
-);
+assert.doesNotMatch(formSource, /meta\.resend_error/, 'create invoice form should not expose provider errors');
+assert.doesNotMatch(formSource, /verified sender domain/, 'create invoice form should not expose sender-domain setup details');
+assert.match(formSource, /Email was not delivered automatically/, 'create invoice form should use client-friendly fallback copy');
 
 console.log('invoice email config tests passed');

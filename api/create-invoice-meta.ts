@@ -6,7 +6,7 @@ import {
   supabase,
   walletBelongsToUser,
 } from './_shared.js';
-import { DEFAULT_FROM_EMAIL, VERIFIED_SENDER_ERROR, isResendTestSender, readResendError } from './_email.js';
+import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
@@ -111,18 +111,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (clientEmail && RESEND_API_KEY) {
     try {
-      if (isResendTestSender(FROM_EMAIL)) {
-        emailStatus = 'email_error';
-        emailError = VERIFIED_SENDER_ERROR;
-        resendError = 'FROM_EMAIL uses @resend.dev; configure a sender on a verified sender domain.';
-        return res.status(200).json({
-          success: true,
-          email_status: emailStatus,
-          email_error: emailError,
-          resend_error: resendError,
-        });
-      }
-
       const shortCreator = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
       const emailHtml = buildInvoiceEmail({
         invoiceId, senderName, amount, tokenType, description, invoiceUrl, shortCreator,
@@ -152,16 +140,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         resendError = await readResendError(emailRes);
         console.error('Resend error (create-invoice-meta):', resendError);
         emailStatus = 'email_error';
-        emailError = resendError;
+        emailError = PUBLIC_EMAIL_DELIVERY_ERROR;
       }
     } catch (emailErr) {
       console.error('Email send error (create-invoice-meta):', emailErr);
       emailStatus = 'email_error';
-      emailError = emailErr instanceof Error ? emailErr.message : 'Invoice email could not be sent';
+      emailError = PUBLIC_EMAIL_DELIVERY_ERROR;
     }
   }
 
-  return res.status(200).json({ success: true, email_status: emailStatus, email_error: emailError, resend_error: resendError });
+  return res.status(200).json({ success: true, email_status: emailStatus, email_error: emailError });
 }
 
 // ── Email template ─────────────────────────────────────────────────────────────

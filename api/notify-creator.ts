@@ -7,7 +7,7 @@ import {
   supabase,
   walletBelongsToUser,
 } from './_shared.js';
-import { DEFAULT_FROM_EMAIL, VERIFIED_SENDER_ERROR, isResendTestSender, readResendError } from './_email.js';
+import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
@@ -73,12 +73,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .eq('creator_wallet', normalizedCreatorWallet);
 
   if (!RESEND_API_KEY) return res.status(200).json({ success: true, skipped: true });
-  if (isResendTestSender(FROM_EMAIL)) {
-    return res.status(500).json({
-      error: VERIFIED_SENDER_ERROR,
-      resend_error: 'FROM_EMAIL uses @resend.dev; configure a sender on a verified sender domain.',
-    });
-  }
 
   const { data: walletRow } = await supabase
     .from('wallets')
@@ -173,7 +167,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!response.ok) {
       const resendError = await readResendError(response);
       console.error('Resend error (notify-creator):', resendError);
-      return res.status(502).json({ error: resendError, resend_error: resendError });
+      return res.status(502).json({ error: PUBLIC_EMAIL_DELIVERY_ERROR });
     }
 
     return res.status(200).json({ success: true });

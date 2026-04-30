@@ -1,10 +1,5 @@
-export const DEFAULT_FROM_EMAIL = 'notifications@truvlo.io';
-export const VERIFIED_SENDER_ERROR = 'Email setup needs a verified sender domain. Resend test senders can only send to the Resend account email.';
-
-export function isResendTestSender(fromEmail: string): boolean {
-  const match = fromEmail.match(/<([^>]+)>/)?.[1] ?? fromEmail;
-  return match.trim().toLowerCase().endsWith('@resend.dev');
-}
+export const DEFAULT_FROM_EMAIL = 'onboarding@resend.dev';
+export const PUBLIC_EMAIL_DELIVERY_ERROR = 'The invoice was created, but the email could not be delivered automatically. Copy the secure invoice link below and send it to your client.';
 
 export async function readResendError(response: Response): Promise<string> {
   const fallback = `Resend rejected the email request with HTTP ${response.status}`;

@@ -6,6 +6,7 @@ import { CONTRACT_PLATFORM_TREASURY_WALLET, WEB_ADMIN_WALLET_ADDRESS, isAdminWal
 import { Loader2, ShieldAlert, RefreshCw } from 'lucide-react';
 
 type AdminOverview = {
+  warnings?: string[];
   summary: Record<string, unknown>;
   profiles: Array<Record<string, unknown>>;
   wallets: Array<Record<string, unknown>>;
@@ -200,6 +201,12 @@ const AdminPage: React.FC = () => {
             {error}
           </div>
         )}
+
+        {overview?.warnings?.length ? (
+          <div className="p-4" style={{ ...panelStyle, borderColor: 'rgba(252,211,77,0.35)', color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
+            Some admin sections could not be loaded: {overview.warnings.join('; ')}
+          </div>
+        ) : null}
 
         {loading && !overview ? (
           <div className="p-12 flex justify-center" style={panelStyle}>

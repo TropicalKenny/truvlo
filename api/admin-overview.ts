@@ -27,6 +27,19 @@ function countByStatus(rows: Array<{ status?: string | null }> = []) {
   }, {});
 }
 
+async function safeQuery<T>(
+  label: string,
+  query: PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
+  warnings: string[]
+): Promise<T[]> {
+  const result = await query;
+  if (result.error) {
+    warnings.push(`${label}: ${result.error.message || 'could not be loaded'}`);
+    return [];
+  }
+  return result.data ?? [];
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -39,6 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const warnings: string[] = [];
     const [
       profiles,
       wallets,
@@ -48,72 +62,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       referralRewards,
       payoutRequests,
     ] = await Promise.all([
-      supabase
+      safeQuery('profiles', supabase
         .from('profiles')
-        .select('privy_id, email, display_name, notification_email, onboarding_completed_at, referral_code, referred_by_code, created_at')
+        .select('privy_id, display_name, notification_email, onboarding_completed_at, referral_code, referred_by_code, created_at')
         .order('created_at', { ascending: false })
-        .limit(25),
-      supabase
+        .limit(25), warnings),
+      safeQuery('wallets', supabase
         .from('wallets')
         .select('privy_id, wallet_address, created_at')
         .order('created_at', { ascending: false })
-        .limit(50),
-      supabase
+        .limit(50), warnings),
+      safeQuery('invoices', supabase
         .from('invoice_meta')
         .select('invoice_id, creator_wallet, client_wallet, client_email, sender_name, description, token_type, amount, email_sent, created_at, referral_reward_recorded_at, dispute_case_id')
         .order('created_at', { ascending: false })
-        .limit(50),
-      supabase
+        .limit(50), warnings),
+      safeQuery('email issues', supabase
         .from('invoice_meta')
         .select('invoice_id, creator_wallet, client_email, sender_name, token_type, amount, email_sent, created_at')
         .not('client_email', 'is', null)
         .eq('email_sent', false)
         .order('created_at', { ascending: false })
-        .limit(25),
-      supabase
+        .limit(25), warnings),
+      safeQuery('disputes', supabase
         .from('dispute_cases')
         .select('id, invoice_id, creator_wallet, client_wallet, status, opened_by_role, opened_at, evidence_deadline_at, decision, resolved_at')
         .order('opened_at', { ascending: false })
-        .limit(50),
-      supabase
+        .limit(50), warnings),
+      safeQuery('referral rewards', supabase
         .from('referral_rewards')
         .select('id, invoice_id, source_role, referrer_privy_id, referred_privy_id, referral_code, token_type, reward_amount, status, payout_cycle_date, requested_at, paid_at, created_at')
         .order('created_at', { ascending: false })
-        .limit(50),
-      supabase
+        .limit(50), warnings),
+      safeQuery('payout requests', supabase
         .from('payout_requests')
         .select('id, privy_id, token_type, payout_wallet, amount, status, payout_cycle_date, request_deadline, requested_at, processed_at, admin_note')
         .order('requested_at', { ascending: false })
-        .limit(50),
+        .limit(50), warnings),
     ]);
 
-    for (const result of [profiles, wallets, invoices, failedEmails, disputes, referralRewards, payoutRequests]) {
-      if (result.error) throw result.error;
-    }
-
-    const invoiceRows = invoices.data ?? [];
-    const disputeRows = disputes.data ?? [];
-    const rewardRows = referralRewards.data ?? [];
-    const payoutRows = payoutRequests.data ?? [];
+    const invoiceRows = invoices;
+    const disputeRows = disputes;
+    const rewardRows = referralRewards;
+    const payoutRows = payoutRequests;
 
     return res.status(200).json({
       admin_privy_id: adminPrivyId,
+      warnings,
       summary: {
-        profiles: profiles.data?.length ?? 0,
-        wallets: wallets.data?.length ?? 0,
+        profiles: profiles.length,
+        wallets: wallets.length,
         invoices: invoiceRows.length,
         disputes: disputeRows.length,
-        failed_emails: failedEmails.data?.length ?? 0,
+        failed_emails: failedEmails.length,
         referral_rewards: rewardRows.length,
         payout_requests: payoutRows.length,
         dispute_statuses: countByStatus(disputeRows),
         referral_statuses: countByStatus(rewardRows),
         payout_statuses: countByStatus(payoutRows),
       },
-      profiles: profiles.data ?? [],
-      wallets: wallets.data ?? [],
+      profiles,
+      wallets,
       invoices: invoiceRows,
-      failed_emails: failedEmails.data ?? [],
+      failed_emails: failedEmails,
       disputes: disputeRows,
       referral_rewards: rewardRows,
       payout_requests: payoutRows,

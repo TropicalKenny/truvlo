@@ -15,8 +15,8 @@ import {
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
-import IDL from "../idl/workspace.json";
-import { calculatePlatformFeeBreakdown, PLATFORM_FEE_BPS, PLATFORM_FLAT_FEE_USD, PLATFORM_FEE_THRESHOLD_USD } from "./platformFees";
+import IDL from "../idl/workspace.json" with { type: "json" };
+import { calculatePlatformFeeBreakdown, PLATFORM_FEE_BPS, PLATFORM_FLAT_FEE_USD, PLATFORM_FEE_THRESHOLD_USD } from "./platformFees.js";
 
 const PROGRAM_ID = new PublicKey(IDL.address || "12mH9wkUUvyQmhqD9A6gJzLGxEUCTZCCuddK6W9EbG2w");
 

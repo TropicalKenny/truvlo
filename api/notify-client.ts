@@ -7,7 +7,7 @@ import {
   walletBelongsToUser,
 } from './_shared.js';
 import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
-import { resolveAppOrigin } from './notify-client-origin.js';
+import { resolveAppOrigin } from './_notify-client-origin.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;

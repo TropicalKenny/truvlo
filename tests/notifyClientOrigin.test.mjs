@@ -13,7 +13,7 @@ async function importTs(path) {
   return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 }
 
-const { resolveAppOrigin } = await importTs('api/notify-client-origin.ts');
+const { resolveAppOrigin } = await importTs('api/_notify-client-origin.ts');
 
 assert.equal(
   resolveAppOrigin({

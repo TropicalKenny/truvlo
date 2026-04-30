@@ -236,12 +236,20 @@ const CreateInvoiceForm: React.FC = () => {
           const meta = await metaRes.json() as {
             email_status?: 'email_sent' | 'email_skipped' | 'email_error';
             email_error?: string | null;
+            resend_error?: string | null;
           };
 
           if (meta.email_status === 'email_sent') {
             toast({ title: 'Invoice email sent', description: `${formatTokenAmount(amountNum, tokenType)} sent to ${clientEmail.trim()}` });
           } else if (meta.email_status === 'email_error') {
-            toast({ title: 'Invoice created, but email failed', description: meta.email_error || 'Copy the link below to share with your client.', variant: 'destructive' });
+            const emailDescription = meta.email_error || meta.resend_error || 'Copy the link below to share with your client.';
+            toast({
+              title: emailDescription.includes('verified sender domain')
+                ? 'Email setup needs a verified sender domain'
+                : 'Invoice created, but email failed',
+              description: emailDescription,
+              variant: 'destructive',
+            });
           } else {
             toast({ title: 'Invoice created', description: 'Copy the link below to share with your client.' });
           }

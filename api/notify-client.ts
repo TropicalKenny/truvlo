@@ -6,10 +6,11 @@ import {
   supabase,
   walletBelongsToUser,
 } from './_shared.js';
+import { DEFAULT_FROM_EMAIL, VERIFIED_SENDER_ERROR, isResendTestSender, readResendError } from './_email.js';
 import { resolveAppOrigin } from './notify-client-origin.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@truvlo.io';
+const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
 const APP_ORIGIN = process.env.APP_ORIGIN;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -44,6 +45,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (!RESEND_API_KEY) return res.status(500).json({ error: 'Email service not configured' });
+  if (isResendTestSender(FROM_EMAIL)) {
+    return res.status(500).json({
+      error: VERIFIED_SENDER_ERROR,
+      resend_error: 'FROM_EMAIL uses @resend.dev; configure a sender on a verified sender domain.',
+    });
+  }
   if (!isValidSolanaAddress(creatorWallet)) {
     return res.status(400).json({ error: 'Invalid creator wallet' });
   }
@@ -122,8 +129,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (!response.ok) {
-      console.error('Resend error (notify-client):', response.status, await response.text());
-      return res.status(502).json({ error: 'Failed to send email' });
+      const resendError = await readResendError(response);
+      console.error('Resend error (notify-client):', resendError);
+      return res.status(502).json({ error: resendError, resend_error: resendError });
     }
 
     await supabase

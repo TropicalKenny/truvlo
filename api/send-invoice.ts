@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PrivyClient } from '@privy-io/server-auth';
+import { DEFAULT_FROM_EMAIL, VERIFIED_SENDER_ERROR, isResendTestSender, readResendError } from './_email.js';
 
 const privy = new PrivyClient(
   process.env.VITE_PRIVY_APP_ID!,
@@ -7,7 +8,7 @@ const privy = new PrivyClient(
 );
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
 
 async function verifyToken(req: VercelRequest): Promise<string | null> {
   const token = req.headers.authorization?.replace('Bearer ', '');
@@ -39,6 +40,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!RESEND_API_KEY) {
     console.error('RESEND_API_KEY not set');
     return res.status(500).json({ error: 'Email service not configured' });
+  }
+  if (isResendTestSender(FROM_EMAIL)) {
+    return res.status(500).json({
+      error: VERIFIED_SENDER_ERROR,
+      resend_error: 'FROM_EMAIL uses @resend.dev; configure a sender on a verified sender domain.',
+    });
   }
 
   const shortCreator = `${creatorWallet.slice(0, 8)}...${creatorWallet.slice(-8)}`;
@@ -181,9 +188,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error('Resend error:', error);
-      return res.status(502).json({ error: 'Failed to send email' });
+      const resendError = await readResendError(response);
+      console.error('Resend error:', resendError);
+      return res.status(502).json({ error: resendError, resend_error: resendError });
     }
 
     const data = await response.json();

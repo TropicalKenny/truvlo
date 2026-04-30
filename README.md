@@ -1,93 +1,88 @@
 # Truvlo
 
-Enterprise fintech escrow payment platform built on Solana blockchain. Create invoices, accept USDC or SOL payments, and release funds securely with non-custodial smart contract escrow.
+Truvlo is a Solana devnet escrow invoicing app for creators, freelancers, agencies, and clients. Creators send invoices in USDC or SOL, clients pay into on-chain escrow, and funds are released after approval, schedule, timeout, or dispute resolution.
 
-## 🚀 Features
+## Current Product
 
-- **Escrow-Protected Invoicing** - Smart contract-based payment security
-- **Multi-Token Support** - Accept payments in USDC or SOL
-- **Milestone Payments** - Partial payment support for phased projects
-- **Non-Custodial** - Funds secured by smart contracts, not intermediaries
-- **1% Platform Fee** - Transparent, low-cost fee structure
-- **Enterprise Design** - Clean, professional fintech UI (Ramp/Stripe aesthetic)
+- Creator onboarding with display name, notification email, and wallet setup.
+- Privy email login with automatically generated embedded Solana wallets and optional imported wallets.
+- USDC and SOL invoice creation.
+- Public invoice payment links for clients.
+- Client guest flow for payment, release approval, and disputes without creator onboarding.
+- Dashboard tabs for sent, received, and client-side invoices.
+- Creator names on client invoice cards when metadata exists, with wallet fallback.
+- Manual referral payout accounting based on completed transactions.
+- Resend email notifications through Vercel API routes.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-- **Frontend**: React 18 + TypeScript + Vite
-- **Styling**: Tailwind CSS + shadcn/ui
-- **Blockchain**: Solana + Anchor Framework
-- **Wallet**: Solana Wallet Adapter (Phantom support)
-- **Smart Contracts**: Rust (Anchor)
+- Frontend: React 18, TypeScript, Vite, React Router.
+- Styling: Tailwind CSS and shadcn/ui.
+- Auth and wallets: Privy.
+- Blockchain: Solana devnet, Anchor, `@coral-xyz/anchor`.
+- Database: Supabase Postgres.
+- Email: Resend through Vercel serverless API routes.
+- Hosting: Vercel.
 
-## 🔗 Smart Contract
-
-- **Program ID**: `6Xw5T6ffJWiErJ4EQMN6wxno6rBxdhXfFYExnsJy8ia2`
-- **Network**: Localhost/Devnet
-- **Framework**: Anchor 0.30.0
-
-## 📦 Installation
+## Local Development
 
 ```bash
-# Install dependencies
 npm install
-
-# Run development server
 npm run dev
+```
 
-# Build for production
+For Vercel API routes locally:
+
+```bash
+npm run dev:full
+```
+
+Production build:
+
+```bash
 npm run build
 ```
 
-## 🌐 Deployment
+## Environment Variables
 
-### Netlify Deployment
+Required for full app behavior:
 
-1. **Build Command**: `npm run build`
-2. **Publish Directory**: `dist`
-3. **Node Version**: 18.x or higher
+```env
+VITE_PRIVY_APP_ID=
+PRIVY_APP_SECRET=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+RESEND_API_KEY=
+FROM_EMAIL=
+APP_ORIGIN=
+```
 
-### Environment Variables
+While Truvlo does not have a verified sending domain, `FROM_EMAIL` can use Resend's test sender. In that mode, email delivery is limited by Resend, and the app falls back to asking creators to copy and send the secure invoice link manually.
 
-For production deployment, configure:
-- Solana RPC endpoint (devnet/mainnet)
-- Update `src/App.tsx` with production RPC URL
+## Verification
 
-## 🔐 Smart Contract Features
+Run the source tests:
 
-### Invoice Management
-- Create USDC invoices
-- Create SOL invoices
-- View invoice status
+```bash
+Get-ChildItem tests -Filter *.mjs | ForEach-Object { node $_.FullName }
+```
 
-### Payment Processing
-- Full payment support
-- Partial/milestone payments
-- Automatic status tracking (Unpaid → PartiallyPaid → FullyPaid → Released)
+Then run:
 
-### Fund Release
-- Creator-controlled fund release
-- Secure escrow withdrawal
-- Platform fee collection (1%)
+```bash
+npm run build
+```
 
-## 📄 License
+## Operating Notes
 
-All rights reserved.
+- Keep Supabase service role access server-side only.
+- Verify Privy JWTs before any protected database write.
+- Keep invoice metadata, profile data, referrals, email state, and dispute evidence off-chain.
+- Keep fund movement and invoice state on-chain.
+- Do not use memcmp filters for client invoice fetches; use full program fetch plus client-side filtering.
+- Use BigInt/string-safe amount conversion for SOL and USDC precision.
+- Public messaging must not claim decentralized arbitration or instant on-chain referral payouts.
 
-## 🤝 Contributing
+## Next Phase
 
-This is a private project. For questions or collaborations, please contact the repository owner.
-
-## ⚠️ Security
-
-- Never commit private keys or wallet files
-- All sensitive files are listed in `.gitignore`
-- Smart contracts are audited for common vulnerabilities
-- Platform uses PDA-based security and authorization checks
-
-## 📞 Support
-
-For issues or questions, please open an issue on GitHub.
-
----
-
-**Built with ❤️ on Solana**
+The current implementation has passing source tests and a successful production build. The next step is manual QA on devnet/live deployment. After that, Phase 2 is the visual rebrand and polish pass across the landing page and app surfaces, without changing working functionality.

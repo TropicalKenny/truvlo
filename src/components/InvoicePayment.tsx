@@ -44,6 +44,18 @@ const cardStyle: React.CSSProperties = {
   overflow: 'hidden',
 };
 
+function getClientPaymentErrorMessage(error: unknown, tokenType: TokenType): string {
+  const errorStr = error instanceof Error ? error.message : String(error || '');
+  if (errorStr.includes('User rejected') || errorStr.includes('rejected the request')) {
+    return 'Payment cancelled.';
+  }
+  if (errorStr.toLowerCase().includes('insufficient')) {
+    const token = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
+    return `Your wallet does not have enough ${token} to complete this payment. Add funds to this wallet, then try again.`;
+  }
+  return 'We could not complete the payment. Please try again.';
+}
+
 const InvoicePayment: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
   const navigate = useNavigate();
@@ -259,11 +271,11 @@ const InvoicePayment: React.FC = () => {
         }),
       }).catch(() => {});
     } catch (error: unknown) {
-      let msg = 'Transaction failed.';
-      const errorStr = error instanceof Error ? error.message : String(error || '');
-      if (errorStr.includes('User rejected') || errorStr.includes('rejected the request')) msg = 'Transaction cancelled.';
-      else if (errorStr.toLowerCase().includes('insufficient')) msg = 'Insufficient balance.';
-      toast({ title: 'Payment failed', description: msg, variant: 'destructive' });
+      toast({
+        title: 'Payment not completed',
+        description: getClientPaymentErrorMessage(error, invoice.tokenType),
+        variant: 'destructive',
+      });
     } finally {
       setPaying(false);
     }

@@ -6,12 +6,13 @@ import { Lock, ArrowRight } from 'lucide-react';
 const CYCLING_WORDS = ['actually', 'always', 'finally', 'really'];
 
 const Hero: React.FC = () => {
-  const { authenticated, login } = usePrivy();
+  const { ready, authenticated, login } = usePrivy();
   const navigate = useNavigate();
   const [wordIndex, setWordIndex] = useState(0);
   const [visible, setVisible] = useState(true);
 
   const handleCTA = (path: string) => {
+    if (!ready) return;
     if (authenticated) navigate(path);
     else login();
   };
@@ -108,6 +109,7 @@ const Hero: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-3 pt-1">
               <button
                 onClick={() => handleCTA('/create')}
+                disabled={!ready}
                 className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-90"
                 style={{
                   backgroundColor: '#2DD4BF',
@@ -117,7 +119,8 @@ const Hero: React.FC = () => {
                   fontSize: '15px',
                   padding: '13px 28px',
                   border: 'none',
-                  cursor: 'pointer',
+                  cursor: ready ? 'pointer' : 'default',
+                  opacity: ready ? 1 : 0.7,
                 }}
               >
                 Create Invoice
@@ -125,6 +128,7 @@ const Hero: React.FC = () => {
               </button>
               <button
                 onClick={() => handleCTA('/dashboard')}
+                disabled={!ready}
                 className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-80"
                 style={{
                   backgroundColor: 'transparent',
@@ -134,7 +138,8 @@ const Hero: React.FC = () => {
                   fontWeight: 500,
                   fontSize: '15px',
                   padding: '13px 28px',
-                  cursor: 'pointer',
+                  cursor: ready ? 'pointer' : 'default',
+                  opacity: ready ? 1 : 0.7,
                 }}
               >
                 Open Dashboard

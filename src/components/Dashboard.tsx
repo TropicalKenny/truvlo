@@ -4,6 +4,7 @@ import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
+import { useAuthProfile } from '@/contexts/AuthProfileContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
@@ -116,6 +117,7 @@ const DarkBadge = ({
 const Dashboard: React.FC = () => {
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
+  const { profile } = useAuthProfile();
   const { activeWallet: privyWallet, allWallets } = useActiveWallet();
   const privyWalletRef = useRef(privyWallet);
   privyWalletRef.current = privyWallet;
@@ -156,7 +158,7 @@ const Dashboard: React.FC = () => {
   } | null>(null);
   const lastFetchedAt = useRef<number>(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState<string | null>(null);
+  const displayName = profile?.display_name ?? null;
   const [clientInvoiceMeta, setClientInvoiceMeta] = useState<Record<string, ClientInvoiceMeta>>({});
 
   useEffect(() => {
@@ -290,22 +292,6 @@ const Dashboard: React.FC = () => {
     window.addEventListener('focus', h);
     return () => window.removeEventListener('focus', h);
   }, [fetchAll]);
-
-  useEffect(() => {
-    if (!authenticated) return;
-    const fetchProfile = async () => {
-      try {
-        const token = await getAccessToken();
-        const res = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
-        if (res.ok) {
-          const data = await res.json() as { display_name: string | null; notification_email: string | null };
-          setDisplayName(data.display_name);
-          return;
-        }
-      } catch { /* non-blocking */ }
-    };
-    fetchProfile();
-  }, [authenticated, getAccessToken]);
 
   const loadClientInvoiceMeta = useCallback(async (invoices: InvoiceWithKey[]) => {
     const missing = invoices.filter(({ account: inv }) => {

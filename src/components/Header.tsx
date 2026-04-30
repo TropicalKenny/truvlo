@@ -5,13 +5,14 @@ import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { Menu, X, ChevronDown, Copy, Wallet, LogOut, User } from 'lucide-react';
 import TruvloLogo from './TruvloLogo';
 import { useToast } from '@/hooks/use-toast';
+import { preloadRoute } from '@/lib/routePrefetch';
 
 const Header: React.FC = () => {
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authDropdownOpen, setAuthDropdownOpen] = useState(false);
-  const { authenticated, login, logout } = usePrivy();
+  const { ready, authenticated, login, logout } = usePrivy();
   const { activeWallet } = useActiveWallet();
   const { toast } = useToast();
 
@@ -54,7 +55,7 @@ const Header: React.FC = () => {
     ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
     : null;
 
-  const navLinks = authenticated
+  const navLinks = ready && authenticated
     ? [
         { to: '/dashboard', label: 'Dashboard' },
         { to: '/create', label: 'Create Invoice' },
@@ -87,6 +88,8 @@ const Header: React.FC = () => {
             <Link
               key={to}
               to={to}
+              onMouseEnter={() => preloadRoute(to)}
+              onFocus={() => preloadRoute(to)}
               className={`text-sm font-medium transition-colors duration-150 ${
                 isActive(to) ? 'text-[#F8FAFC]' : 'text-[#94A3B8] hover:text-[#F8FAFC]'
               }`}
@@ -99,7 +102,17 @@ const Header: React.FC = () => {
 
         {/* Auth — right (desktop) */}
         <div className="hidden md:flex items-center flex-shrink-0 z-10">
-          {authenticated ? (
+          {!ready ? (
+            <div
+              aria-hidden="true"
+              style={{
+                width: '78px',
+                height: '38px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(255,255,255,0.06)',
+              }}
+            />
+          ) : authenticated ? (
             <div ref={dropdownRef} className="relative">
               <button
                 onClick={() => setAuthDropdownOpen(v => !v)}
@@ -145,6 +158,8 @@ const Header: React.FC = () => {
                 >
                   <Link
                     to="/account"
+                    onMouseEnter={() => preloadRoute('/account')}
+                    onFocus={() => preloadRoute('/account')}
                     onClick={() => setAuthDropdownOpen(false)}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
                     style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}
@@ -155,6 +170,8 @@ const Header: React.FC = () => {
                   <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
                   <Link
                     to="/wallet"
+                    onMouseEnter={() => preloadRoute('/wallet')}
+                    onFocus={() => preloadRoute('/wallet')}
                     onClick={() => setAuthDropdownOpen(false)}
                     className="w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors duration-150 hover:bg-white/[0.05]"
                     style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}
@@ -237,6 +254,8 @@ const Header: React.FC = () => {
               <Link
                 key={to}
                 to={to}
+                onMouseEnter={() => preloadRoute(to)}
+                onFocus={() => preloadRoute(to)}
                 className="py-3 text-sm font-medium transition-colors duration-150 border-b"
                 style={{
                   fontFamily: '"DM Sans", sans-serif',
@@ -250,10 +269,21 @@ const Header: React.FC = () => {
             ))}
 
             <div className="pt-4 pb-2 flex flex-col gap-2">
-              {authenticated ? (
+              {!ready ? (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    height: '40px',
+                    borderRadius: '8px',
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                  }}
+                />
+              ) : authenticated ? (
                 <>
                   <Link
                     to="/settings"
+                    onMouseEnter={() => preloadRoute('/settings')}
+                    onFocus={() => preloadRoute('/settings')}
                     onClick={() => setMobileOpen(false)}
                     className="flex items-center gap-2 text-sm transition-colors duration-150"
                     style={{
@@ -268,6 +298,8 @@ const Header: React.FC = () => {
                   </Link>
                   <Link
                     to="/wallet"
+                    onMouseEnter={() => preloadRoute('/wallet')}
+                    onFocus={() => preloadRoute('/wallet')}
                     onClick={() => setMobileOpen(false)}
                     className="flex items-center gap-2 text-sm transition-colors duration-150"
                     style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none', padding: '10px 0' }}

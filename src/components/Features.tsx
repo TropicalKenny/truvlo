@@ -37,7 +37,7 @@ const features = [
 ];
 
 const Features: React.FC = () => {
-  const { authenticated, login } = usePrivy();
+  const { ready, authenticated, login } = usePrivy();
   const navigate = useNavigate();
 
   return (
@@ -146,7 +146,11 @@ const Features: React.FC = () => {
             Log in and create your first escrow invoice in under a minute.
           </p>
           <button
-            onClick={() => authenticated ? navigate('/create') : login()}
+            onClick={() => {
+              if (!ready) return;
+              authenticated ? navigate('/create') : login();
+            }}
+            disabled={!ready}
             className="inline-flex items-center justify-center rounded-lg font-medium transition-opacity duration-150 hover:opacity-90"
             style={{
               backgroundColor: '#2DD4BF',
@@ -157,7 +161,8 @@ const Features: React.FC = () => {
               padding: '13px 32px',
               border: 'none',
               borderRadius: '8px',
-              cursor: 'pointer',
+              cursor: ready ? 'pointer' : 'default',
+              opacity: ready ? 1 : 0.7,
             }}
           >
             Create Invoice — it's free

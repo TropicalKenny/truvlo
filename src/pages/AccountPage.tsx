@@ -2,22 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
+import { AuthProfile, useAuthProfile } from '@/contexts/AuthProfileContext';
 import Header from '@/components/Header';
 import { useToast } from '@/hooks/use-toast';
 import { formatTokenAmountValue } from '@/lib/amountFormat';
 import { Check, Copy, ExternalLink, Loader2, Wallet, ArrowRight } from 'lucide-react';
 
 type TokenType = 'USDC' | 'SOL';
-
-interface ProfileData {
-  display_name: string | null;
-  default_token: TokenType;
-  profile_slug: string | null;
-  notification_email: string | null;
-  referral_code: string | null;
-  referred_by_code: string | null;
-  referral_linked_at: string | null;
-}
 
 type RewardStatus = 'pending' | 'matured' | 'requestable' | 'requested' | 'scheduled' | 'paid' | 'rejected';
 
@@ -44,7 +35,7 @@ interface ReferralRewardSummary {
 }
 
 interface ReferralPanelData {
-  profile: ProfileData | null;
+  profile: AuthProfile | null;
   summary: Record<TokenType, ReferralRewardSummary>;
   payout_requests: PayoutRequestSummary[];
 }
@@ -72,11 +63,11 @@ const valueStyle: React.CSSProperties = {
 
 const AccountPage: React.FC = () => {
   const { authenticated, ready, getAccessToken } = usePrivy();
+  const { profile } = useAuthProfile();
   const { allWallets, activeWallet } = useActiveWallet();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [referrals, setReferrals] = useState<ReferralPanelData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,21 +105,9 @@ const AccountPage: React.FC = () => {
         const token = await getAccessToken();
         if (!token || cancelled) return;
 
-        const [profileRes, referralsRes] = await Promise.all([
-          fetch('/api/profile', {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch('/api/referrals', {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
-
-        if (profileRes.ok) {
-          const data = await profileRes.json() as ProfileData;
-          if (!cancelled) setProfile(data);
-        } else if (!cancelled) {
-          setError(await responseError(profileRes, 'Profile load failed'));
-        }
+        const referralsRes = await fetch('/api/referrals', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
         if (referralsRes.ok) {
           const data = await referralsRes.json() as ReferralPanelData;

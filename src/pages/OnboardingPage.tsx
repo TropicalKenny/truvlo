@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
 import { useImportWallet } from '@privy-io/react-auth/solana';
@@ -9,6 +9,7 @@ import bs58 from 'bs58';
 import { ArrowLeft, Check, Loader2, Wallet } from 'lucide-react';
 import Header from '@/components/Header';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
+import { useAuthProfile } from '@/contexts/AuthProfileContext';
 import { useToast } from '@/hooks/use-toast';
 
 type Step = 'profile' | 'wallet' | 'guide';
@@ -50,6 +51,7 @@ async function registerOnboardingWallet(address: string, getAccessToken: () => P
 const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
   const { ready, authenticated, login, getAccessToken } = usePrivy();
+  const { profile, refreshProfile } = useAuthProfile();
   const { activeWallet, allWallets } = useActiveWallet();
   const { importWallet } = useImportWallet();
   const { toast } = useToast();
@@ -64,6 +66,12 @@ const OnboardingPage: React.FC = () => {
   const [importError, setImportError] = useState('');
 
   const truvloWallet = useMemo(() => activeWallet ?? allWallets[0] ?? null, [activeWallet, allWallets]);
+
+  useEffect(() => {
+    if (!profile) return;
+    setDisplayName(current => current || profile.display_name || '');
+    setNotificationEmail(current => current || profile.notification_email || '');
+  }, [profile]);
 
   const saveProfile = async (completed = false) => {
     const name = displayName.trim();
@@ -97,6 +105,7 @@ const OnboardingPage: React.FC = () => {
       }
       setDisplayName(name);
       setNotificationEmail(email);
+      await refreshProfile();
       return true;
     } catch (error) {
       toast({ title: 'Could not save profile', description: error instanceof Error ? error.message : 'Network error', variant: 'destructive' });

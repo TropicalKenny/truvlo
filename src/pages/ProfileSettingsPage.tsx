@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
+import { useAuthProfile } from '@/contexts/AuthProfileContext';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/Header';
 
@@ -55,6 +56,7 @@ const DarkInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
 
 const ProfileSettingsPage: React.FC = () => {
   const { authenticated, ready, getAccessToken } = usePrivy();
+  const { profile, profileLoading, profileReady, refreshProfile } = useAuthProfile();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -76,42 +78,34 @@ const ProfileSettingsPage: React.FC = () => {
   useEffect(() => {
     if (ready && !authenticated) {
       navigate('/', { replace: true });
+    }
+  }, [authenticated, navigate, ready]);
+
+  useEffect(() => {
+    if (!ready || !authenticated) return;
+    if (!profileReady && profileLoading) {
+      setLoading(true);
       return;
     }
-    if (!ready || !authenticated) return;
-    const safetyTimer = setTimeout(() => setLoading(false), 8000);
-    (async () => {
-      try {
-        const token = await getAccessToken();
-        const res = await fetch('/api/profile', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json() as {
-            display_name: string | null;
-            default_token: string;
-            notification_email: string | null;
-            referral_code: string | null;
-            referred_by_code: string | null;
-          };
-          setDisplayName(data.display_name ?? '');
-          setDefaultToken(data.default_token === 'SOL' ? 'SOL' : 'USDC');
-          setNotificationEmail(data.notification_email ?? '');
-          setReferralCode(data.referral_code ?? '');
-          setReferredByCode(data.referred_by_code ?? '');
-          setSavedValues({
-            displayName: data.display_name ?? '',
-            defaultToken: data.default_token === 'SOL' ? 'SOL' : 'USDC',
-            notificationEmail: data.notification_email ?? '',
-            referredByCode: data.referred_by_code ?? '',
-          });
-        }
-      } catch { /* non-blocking */ } finally {
-        clearTimeout(safetyTimer);
-        setLoading(false);
-      }
-    })();
-  }, [authenticated, getAccessToken, navigate, ready]);
+    if (!profile) {
+      setLoading(false);
+      return;
+    }
+
+    const nextDefaultToken = profile.default_token === 'SOL' ? 'SOL' : 'USDC';
+    setDisplayName(profile.display_name ?? '');
+    setDefaultToken(nextDefaultToken);
+    setNotificationEmail(profile.notification_email ?? '');
+    setReferralCode(profile.referral_code ?? '');
+    setReferredByCode(profile.referred_by_code ?? '');
+    setSavedValues({
+      displayName: profile.display_name ?? '',
+      defaultToken: nextDefaultToken,
+      notificationEmail: profile.notification_email ?? '',
+      referredByCode: profile.referred_by_code ?? '',
+    });
+    setLoading(false);
+  }, [authenticated, profile, profileLoading, profileReady, ready]);
 
   const isDirty =
     displayName !== savedValues.displayName ||
@@ -165,6 +159,7 @@ const ProfileSettingsPage: React.FC = () => {
         setDisplayName(displayName.trim());
         setNotificationEmail(notificationEmail.trim());
         setReferredByCode(referredByCode.trim());
+        await refreshProfile();
         toast({ title: 'Profile saved' });
       } else {
         const body = await res.json().catch(() => ({})) as { error?: string };

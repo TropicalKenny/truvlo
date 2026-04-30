@@ -22,6 +22,7 @@ const ProfileSettingsPage    = lazy(() => import('./pages/ProfileSettingsPage'))
 const WalletPage             = lazy(() => import('./pages/WalletPage'));
 const CombinedProfilePage    = lazy(() => import('./pages/CombinedProfilePage'));
 const OnboardingPage         = lazy(() => import('./pages/OnboardingPage'));
+const AdminPage              = lazy(() => import('./pages/AdminPage'));
 
 const App = () => {
   const endpoint = useMemo(() => getSolanaRpcUrl(), []);
@@ -49,6 +50,7 @@ const App = () => {
                 <Route path="/settings" element={<OnboardingGate><ProfileSettingsPage /></OnboardingGate>} />
                 <Route path="/wallet" element={<OnboardingGate><WalletPage /></OnboardingGate>} />
                 <Route path="/create" element={<OnboardingGate><CreateInvoicePage /></OnboardingGate>} />
+                <Route path="/admin" element={<OnboardingGate><AdminPage /></OnboardingGate>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

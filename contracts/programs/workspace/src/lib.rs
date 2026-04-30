@@ -13,7 +13,7 @@ declare_id!("12mH9wkUUvyQmhqD9A6gJzLGxEUCTZCCuddK6W9EbG2w");
 // ============================================================
 
 /// Platform treasury wallet
-pub const PLATFORM_TREASURY: Pubkey = pubkey!("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
+pub const PLATFORM_TREASURY: Pubkey = pubkey!("A42JPkaVHZC7NkucsX8L2v7vg82xLZ2nkLqA8w6XH6cn");
 
 /// Tiered fee: flat $2 in USDC micro-units (6 decimals) for invoices below $200
 pub const FLAT_FEE_USDC: u64 = 2_000_000; // $2.00

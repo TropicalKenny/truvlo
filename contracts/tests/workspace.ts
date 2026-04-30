@@ -26,7 +26,7 @@ describe("EscrowPay Invoice Payment Program", () => {
   const program = anchor.workspace.Workspace as Program<Workspace>;
 
   // Platform treasury (must match the constant in the program)
-  const PLATFORM_TREASURY = new PublicKey("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin");
+  const PLATFORM_TREASURY = new PublicKey("A42JPkaVHZC7NkucsX8L2v7vg82xLZ2nkLqA8w6XH6cn");
   const PLATFORM_FEE_BPS = 100; // 1%
 
   let creator: Keypair;

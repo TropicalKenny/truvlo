@@ -34,6 +34,10 @@ interface ClientInvoiceMeta {
 interface AgentVerificationMeta {
   verification_status: 'pending' | 'passed' | 'failed' | 'needs_human_review';
   confidence: 'low' | 'medium' | 'high';
+  summary?: string | null;
+  risks?: string | null;
+  recommended_action?: 'approve' | 'dispute' | 'manual_review';
+  verifier_type?: 'rule' | 'ai' | 'manual';
 }
 
 type AmountLike =
@@ -165,6 +169,13 @@ const Dashboard: React.FC = () => {
   const displayName = profile?.display_name ?? null;
   const [clientInvoiceMeta, setClientInvoiceMeta] = useState<Record<string, ClientInvoiceMeta>>({});
   const [agentVerificationMeta, setAgentVerificationMeta] = useState<Record<string, AgentVerificationMeta | null>>({});
+  const [proofModal, setProofModal] = useState<{
+    invoiceId: string;
+    creatorWallet: string;
+    deliverableUrl: string;
+    proofText: string;
+  } | null>(null);
+  const [submittingProof, setSubmittingProof] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -542,6 +553,72 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const openProofModal = (invoiceId: string, creatorWallet: string) => {
+    setProofModal({
+      invoiceId,
+      creatorWallet,
+      deliverableUrl: '',
+      proofText: '',
+    });
+  };
+
+  const handleSubmitProof = async () => {
+    if (!proofModal || !publicKey) return;
+    const deliverableUrl = proofModal.deliverableUrl.trim();
+    const proofText = proofModal.proofText.trim();
+    if (!deliverableUrl && !proofText) {
+      toast({
+        title: 'Add proof first',
+        description: 'Add a deliverable link or a short proof summary.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSubmittingProof(proofModal.invoiceId);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch('/api/agent-verifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          invoiceId: proofModal.invoiceId,
+          creatorWallet: proofModal.creatorWallet,
+          submittedByWallet: publicKey.toBase58(),
+          deliverableUrl: deliverableUrl || undefined,
+          proofText: proofText || undefined,
+        }),
+      });
+      const data = await response.json().catch(() => ({})) as {
+        error?: string;
+        agent_verification?: AgentVerificationMeta | null;
+      };
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+
+      const key = `${proofModal.invoiceId}:${proofModal.creatorWallet}`;
+      setAgentVerificationMeta(prev => ({
+        ...prev,
+        [key]: data.agent_verification ?? prev[key] ?? null,
+      }));
+      toast({
+        title: 'Proof submitted',
+        description: 'The agent recommendation has been updated.',
+      });
+      setProofModal(null);
+    } catch (error) {
+      toast({
+        title: 'Proof submission failed',
+        description: error instanceof Error ? error.message : 'Try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingProof(null);
+    }
+  };
+
   // ============================================================
   // CLIENT ACTIONS
   // ============================================================
@@ -868,6 +945,25 @@ const Dashboard: React.FC = () => {
             >
               <Copy className="h-3.5 w-3.5" />Copy Link
             </button>
+
+            {agentReview && (
+              <button
+                onClick={() => openProofModal(inv.invoiceId, creatorWallet)}
+                disabled={submittingProof === inv.invoiceId}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150 disabled:opacity-50"
+                style={{
+                  backgroundColor: 'rgba(45,212,191,0.1)',
+                  border: '1px solid rgba(45,212,191,0.28)',
+                  color: '#5EEAD4',
+                  fontFamily: '"DM Sans", sans-serif',
+                  cursor: submittingProof === inv.invoiceId ? 'default' : 'pointer',
+                }}
+              >
+                {submittingProof === inv.invoiceId
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Submitting...</>
+                  : <><FileText className="h-3.5 w-3.5" />Submit proof</>}
+              </button>
+            )}
 
             {canRequest && (
               <button
@@ -1615,6 +1711,127 @@ const Dashboard: React.FC = () => {
         )}
       </aside>
       </div>
+
+      {/* Proof Modal */}
+      {proofModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.72)' }}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg p-5"
+            style={{
+              backgroundColor: '#111820',
+              border: '1px solid rgba(45,212,191,0.24)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
+            }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p
+                  className="text-lg font-semibold"
+                  style={{ color: '#F8FAFC', fontFamily: '"Space Grotesk", sans-serif' }}
+                >
+                  Submit proof
+                </p>
+                <p
+                  className="mt-2 text-sm leading-6"
+                  style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}
+                >
+                  Add the deliverable and evidence. Truvlo updates the agent recommendation, while release still requires approval.
+                </p>
+              </div>
+              <button
+                onClick={() => setProofModal(null)}
+                className="rounded-lg px-3 py-1.5 text-xs"
+                style={{
+                  backgroundColor: 'transparent',
+                  border: '1px solid rgba(148,163,184,0.16)',
+                  color: '#94A3B8',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span
+                  className="block text-xs uppercase tracking-widest mb-2"
+                  style={{ color: '#93C5FD', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}
+                >
+                  Deliverable URL
+                </span>
+                <input
+                  value={proofModal.deliverableUrl}
+                  onChange={event => setProofModal(prev => prev ? { ...prev, deliverableUrl: event.target.value } : prev)}
+                  placeholder="https://..."
+                  className="w-full rounded-lg px-4 py-3 text-sm outline-none"
+                  style={{
+                    backgroundColor: 'rgba(15,23,32,0.92)',
+                    border: '1px solid rgba(148,163,184,0.16)',
+                    color: '#F8FAFC',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                />
+              </label>
+
+              <label className="block">
+                <span
+                  className="block text-xs uppercase tracking-widest mb-2"
+                  style={{ color: '#93C5FD', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}
+                >
+                  Proof text
+                </span>
+                <textarea
+                  value={proofModal.proofText}
+                  onChange={event => setProofModal(prev => prev ? { ...prev, proofText: event.target.value } : prev)}
+                  placeholder="Summarize what was delivered, tests passed, files included, or acceptance notes..."
+                  rows={5}
+                  className="w-full rounded-lg px-4 py-3 text-sm outline-none resize-none"
+                  style={{
+                    backgroundColor: 'rgba(15,23,32,0.92)',
+                    border: '1px solid rgba(148,163,184,0.16)',
+                    color: '#F8FAFC',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+              <button
+                onClick={() => setProofModal(null)}
+                className="rounded-lg px-4 py-2 text-sm"
+                style={{
+                  backgroundColor: 'transparent',
+                  border: '1px solid rgba(148,163,184,0.16)',
+                  color: '#CBD5E1',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitProof}
+                disabled={submittingProof === proofModal.invoiceId}
+                className="flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                style={{
+                  backgroundColor: '#2DD4BF',
+                  color: '#0D1117',
+                  border: 'none',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >
+                {submittingProof === proofModal.invoiceId
+                  ? <><Loader2 className="h-4 w-4 animate-spin" />Submitting...</>
+                  : <><FileText className="h-4 w-4" />Submit proof</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Withdrawal Modal */}
       {releaseModal && (

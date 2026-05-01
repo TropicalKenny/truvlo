@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
-import { useImportWallet } from '@privy-io/react-auth/solana';
+import { useCreateWallet, useImportWallet } from '@privy-io/react-auth/solana';
 import { Keypair } from '@solana/web3.js';
 import * as bip39 from 'bip39';
 import { derivePath } from 'ed25519-hd-key';
@@ -53,6 +53,7 @@ const OnboardingPage: React.FC = () => {
   const { ready, authenticated, login, getAccessToken } = usePrivy();
   const { profile, refreshProfile } = useAuthProfile();
   const { activeWallet, allWallets } = useActiveWallet();
+  const { createWallet } = useCreateWallet();
   const { importWallet } = useImportWallet();
   const { toast } = useToast();
 
@@ -116,13 +117,18 @@ const OnboardingPage: React.FC = () => {
   };
 
   const continueWithTruvloWallet = async () => {
-    if (!truvloWallet) return;
     setSaving(true);
     try {
-      await registerOnboardingWallet(truvloWallet.address, getAccessToken);
+      const wallet = truvloWallet ?? await createWallet();
+      if (!wallet?.address) throw new Error('Wallet was not created');
+      await registerOnboardingWallet(wallet.address, getAccessToken);
       setStep('guide');
-    } catch {
-      toast({ title: 'Wallet setup failed', description: 'Please try again in a moment.', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Wallet setup failed',
+        description: error instanceof Error ? error.message : 'Please try again in a moment.',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -231,15 +237,15 @@ const OnboardingPage: React.FC = () => {
 
               <button
                 type="button"
-                disabled={saving || !truvloWallet}
+                disabled={saving}
                 onClick={continueWithTruvloWallet}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: '10px', padding: '16px', color: '#F8FAFC', cursor: saving || !truvloWallet ? 'not-allowed' : 'pointer', opacity: saving || !truvloWallet ? 0.65 : 1, textAlign: 'left' }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: '10px', padding: '16px', color: '#F8FAFC', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.65 : 1, textAlign: 'left' }}
               >
                 <Wallet size={20} style={{ color: '#2DD4BF', flexShrink: 0 }} />
                 <span>
                   <span style={{ display: 'block', fontFamily: '"DM Sans", sans-serif', fontWeight: 700 }}>Use your Truvlo wallet</span>
                   <span style={{ display: 'block', fontFamily: '"JetBrains Mono", monospace', color: '#64748B', fontSize: '12px', marginTop: '3px' }}>
-                    {truvloWallet ? `${truvloWallet.address.slice(0, 6)}...${truvloWallet.address.slice(-6)}` : 'Preparing your wallet...'}
+                    {truvloWallet ? `${truvloWallet.address.slice(0, 6)}...${truvloWallet.address.slice(-6)}` : 'Create a new embedded Solana wallet'}
                   </span>
                 </span>
               </button>

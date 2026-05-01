@@ -60,6 +60,7 @@ function toTokenType(value: unknown): TokenType | null {
 
 function createWallet(keypair: Keypair): Wallet {
   return {
+    payer: keypair,
     publicKey: keypair.publicKey,
     signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T) => {
       if (tx instanceof VersionedTransaction) {

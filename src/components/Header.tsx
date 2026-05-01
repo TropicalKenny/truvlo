@@ -6,6 +6,7 @@ import { Menu, X, ChevronDown, Copy, Wallet, LogOut, User, FileText } from 'luci
 import TruvloLogo from './TruvloLogo';
 import { useToast } from '@/hooks/use-toast';
 import { preloadRoute } from '@/lib/routePrefetch';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 const Header: React.FC = () => {
   const location = useLocation();
@@ -19,8 +20,11 @@ const Header: React.FC = () => {
   const handleCopyAddress = async () => {
     const address = activeWallet?.address;
     if (!address) return;
-    await navigator.clipboard.writeText(address);
-    toast({ title: 'Address copied' });
+    const copied = await copyTextToClipboard(address);
+    toast(copied
+      ? { title: 'Address copied' }
+      : { title: 'Could not copy address', description: 'Press and hold the wallet address to copy it manually.', variant: 'destructive' }
+    );
     setAuthDropdownOpen(false);
   };
   const dropdownRef = useRef<HTMLDivElement>(null);

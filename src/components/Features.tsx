@@ -1,172 +1,114 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
-import { Shield, Users, AlertTriangle, Coins, Clock, Star } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Coins, FileCheck2, Shield, Timer, Users } from 'lucide-react';
 
 const features = [
   {
     icon: Shield,
     title: 'Escrow protection',
-    body: "Funds leave your client's wallet when they pay. They sit in a smart contract — not our bank account — until both sides are satisfied. No intermediaries.",
+    body: "Funds are held by the smart contract after payment, not by Truvlo's bank account.",
+    tone: 'teal',
   },
   {
     icon: Users,
-    title: 'Dual approval',
-    body: 'You request withdrawal. Client approves. Neither side can move funds unilaterally. A 7-day timeout lets you withdraw if the client goes dark.',
+    title: 'Client approval',
+    body: 'Creators request withdrawal. Clients approve, dispute, or the release window runs its course.',
+    tone: 'blue',
   },
   {
     icon: Coins,
-    title: 'Tiered fees',
-    body: 'Flat $2 below $200. 1% above. No hidden charges. You receive exactly what the invoice says — no surprises at payout.',
+    title: 'USDC and SOL',
+    body: 'Create invoices in the tokens your client can actually pay with on Solana devnet.',
+    tone: 'green',
   },
   {
     icon: AlertTriangle,
-    title: 'Dispute resolution',
-    body: 'Something wrong? Raise a dispute. Funds freeze instantly. A platform reviewer checks the evidence and applies the final split on-chain.',
+    title: 'Managed disputes',
+    body: 'If a client disputes, funds freeze while the platform reviews evidence and applies the final split on-chain.',
+    tone: 'amber',
   },
   {
-    icon: Clock,
-    title: 'Withdrawal schedule',
-    body: 'Break projects into milestones. Each milestone has its own escrow. Withdraw funds incrementally as deliverables are approved.',
+    icon: Timer,
+    title: 'Release window',
+    body: 'A 7-day approval window protects creators when a client stops responding after work is delivered.',
+    tone: 'blue',
   },
   {
-    icon: Star,
-    title: 'Reputation',
-    body: 'Every completed invoice builds your account reputation, visible to new clients before the first invoice. The score pools activity across your linked wallets.',
+    icon: FileCheck2,
+    title: 'Account record',
+    body: 'Completed invoices build a readable account history across the wallets linked to one profile.',
+    tone: 'teal',
   },
 ];
+
+const toneColor: Record<string, string> = {
+  teal: 'var(--tl-teal)',
+  blue: '#93c5fd',
+  green: '#4ade80',
+  amber: '#fcd34d',
+};
+
+const toneBg: Record<string, string> = {
+  teal: 'var(--tl-teal-soft)',
+  blue: 'rgba(59, 130, 246, 0.14)',
+  green: 'rgba(34, 197, 94, 0.12)',
+  amber: 'rgba(245, 158, 11, 0.14)',
+};
 
 const Features: React.FC = () => {
   const { ready, authenticated, login } = usePrivy();
   const navigate = useNavigate();
 
   return (
-    <section
-      className="py-24"
-      style={{ backgroundColor: '#0D1117' }}
-    >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        {/* Heading */}
-        <div className="mb-16">
-          <h2
-            className="text-3xl md:text-4xl"
-            style={{
-              fontFamily: '"Space Grotesk", sans-serif',
-              fontWeight: 700,
-              color: '#F8FAFC',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Built for freelancers who've been burned.
-          </h2>
-          <p
-            className="text-base mt-3 max-w-lg"
-            style={{
-              color: '#64748B',
-              fontFamily: '"DM Sans", sans-serif',
-            }}
-          >
-            Every feature exists because a freelancer lost money without it.
-          </p>
-        </div>
-
-        {/* 3-column feature grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {features.map((feature) => {
-            const Icon = feature.icon;
-            return (
-              <div
-                key={feature.title}
-                className="rounded-xl p-6 flex flex-col gap-4 transition-transform duration-150 hover:-translate-y-0.5"
-                style={{
-                  backgroundColor: '#161B22',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: '12px',
-                }}
-              >
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}
-                >
-                  <Icon size={18} style={{ color: '#2DD4BF' }} />
-                </div>
-
-                <h3
-                  style={{
-                    fontFamily: '"Space Grotesk", sans-serif',
-                    fontWeight: 500,
-                    fontSize: '1.0625rem',
-                    color: '#F8FAFC',
-                  }}
-                >
-                  {feature.title}
-                </h3>
-
-                <p
-                  className="text-sm leading-relaxed"
-                  style={{
-                    color: '#94A3B8',
-                    fontFamily: '"DM Sans", sans-serif',
-                  }}
-                >
-                  {feature.body}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Bottom CTA */}
-        <div
-          className="mt-16 rounded-xl p-10 text-center"
-          style={{
-            backgroundColor: '#161B22',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '12px',
-          }}
-        >
-          <h3
-            className="text-2xl md:text-3xl mb-3"
-            style={{
-              fontFamily: '"Space Grotesk", sans-serif',
-              fontWeight: 700,
-              color: '#F8FAFC',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Your next invoice should be the last one you worry about.
-          </h3>
-          <p
-            className="text-base mb-8"
-            style={{
-              color: '#94A3B8',
-              fontFamily: '"DM Sans", sans-serif',
-            }}
-          >
-            Log in and create your first escrow invoice in under a minute.
-          </p>
+    <section className="trust-section py-20" style={{ backgroundColor: 'var(--tl-bg)' }}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-10">
+          <div>
+            <h2
+              className="text-3xl md:text-4xl"
+              style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 800, color: 'var(--tl-text)', letterSpacing: '-0.03em' }}
+            >
+              Built around payment confidence
+            </h2>
+            <p className="mt-3 max-w-2xl text-base leading-7" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+              The product should read like an operating ledger: what was created, what was paid,
+              what needs approval, and what is ready to withdraw.
+            </p>
+          </div>
           <button
             onClick={() => {
               if (!ready) return;
               authenticated ? navigate('/create') : login();
             }}
             disabled={!ready}
-            className="inline-flex items-center justify-center rounded-lg font-medium transition-opacity duration-150 hover:opacity-90"
-            style={{
-              backgroundColor: '#2DD4BF',
-              color: '#0D1117',
-              fontFamily: '"DM Sans", sans-serif',
-              fontWeight: 500,
-              fontSize: '15px',
-              padding: '13px 32px',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: ready ? 'pointer' : 'default',
-              opacity: ready ? 1 : 0.7,
-            }}
+            className="trust-button-primary inline-flex items-center justify-center gap-2 px-5 py-3 text-sm w-full sm:w-fit"
           >
-            Create Invoice — it's free
+            Create invoice
+            <ArrowRight className="h-4 w-4" />
           </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-px overflow-hidden trust-panel">
+          {features.map((feature) => {
+            const Icon = feature.icon;
+            return (
+              <div key={feature.title} className="p-6" style={{ backgroundColor: 'rgba(17, 24, 32, 0.72)' }}>
+                <div
+                  className="mb-5 flex h-10 w-10 items-center justify-center rounded-md"
+                  style={{ backgroundColor: toneBg[feature.tone], color: toneColor[feature.tone] }}
+                >
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h3 className="text-base font-bold" style={{ color: 'var(--tl-text)', fontFamily: '"DM Sans", sans-serif' }}>
+                  {feature.title}
+                </h3>
+                <p className="mt-2 text-sm leading-6" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                  {feature.body}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

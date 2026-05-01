@@ -64,16 +64,16 @@ const StatCard = ({
   accentLeft?: string;
 }) => (
   <div
-    className="rounded-xl p-4 flex flex-col gap-2"
+    className="trust-dashboard-stat rounded-lg p-4 flex flex-col gap-2"
     style={{
-      backgroundColor: '#161B22',
-      border: '1px solid rgba(255,255,255,0.08)',
-      borderLeft: accentLeft ? `4px solid ${accentLeft}` : '1px solid rgba(255,255,255,0.08)',
+      backgroundColor: 'rgba(17,24,32,0.86)',
+      border: '1px solid var(--tl-border)',
+      borderLeft: accentLeft ? `3px solid ${accentLeft}` : '1px solid var(--tl-border)',
     }}
   >
     <p
       className="text-xs uppercase tracking-widest"
-      style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.07em' }}
+      style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}
     >
       {label}
     </p>
@@ -98,11 +98,10 @@ const DarkBadge = ({
   const s = styles[variant] ?? styles.default;
   return (
     <span
-      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium"
+      className="trust-status"
       style={{
         backgroundColor: s.bg,
         color: s.color,
-        fontFamily: '"DM Sans", sans-serif',
       }}
     >
       {children}
@@ -271,7 +270,7 @@ const Dashboard: React.FC = () => {
     } catch (e) {
       const isTimeout = e instanceof Error && e.message === 'timeout';
       setFetchError(isTimeout
-        ? 'Could not reach Solana — check your connection and try refreshing.'
+        ? 'Could not reach Solana - check your connection and try refreshing.'
         : 'Failed to load invoices. Try refreshing.'
       );
       setSentInvoices([]); setReceivedInvoices([]); setClientInvoices([]);
@@ -580,7 +579,7 @@ const Dashboard: React.FC = () => {
             }),
           });
         } catch { /* non-blocking */ }
-        toast({ title: 'Dispute raised', description: 'Funds frozen. Mediator will review.' });
+        toast({ title: 'Dispute raised', description: 'Funds frozen. Truvlo will review the case.' });
         addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();
       } else {
@@ -629,6 +628,9 @@ const Dashboard: React.FC = () => {
     getSecondsRemaining(i.account) > 0
   );
   const paymentHistory = clientInvoices;
+  const disputeCount = sentInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length
+    + clientInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length;
+  const activeDisputeSample = [...sentInvoices, ...clientInvoices].find(i => i.account.status === InvoiceStatus.Disputed)?.account.invoiceId;
 
   const clientStats = {
     total: clientInvoices.length,
@@ -655,6 +657,12 @@ const Dashboard: React.FC = () => {
     if (receivedFilter === 'disputed') return i.account.status === InvoiceStatus.Disputed;
     return true;
   });
+  const activeDashboardInvoice = roleTab === 'client'
+    ? (clientSection === 'action' ? awaitingAction[0] : paymentHistory[0])
+    : roleTab === 'received'
+      ? filteredReceived[0]
+      : filteredSent[0];
+  const activeDashboardAccount = activeDashboardInvoice?.account;
 
   // ============================================================
   // NOT CONNECTED
@@ -663,11 +671,10 @@ const Dashboard: React.FC = () => {
   if (!connected) {
     return (
       <div
-        className="max-w-md mx-auto rounded-xl p-12 text-center"
-        style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+        className="trust-panel max-w-md mx-auto p-12 text-center"
       >
-        <FileText className="h-10 w-10 mx-auto mb-4" style={{ color: '#64748B' }} />
-        <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
+        <FileText className="h-10 w-10 mx-auto mb-4" style={{ color: 'var(--tl-dim)' }} />
+        <p style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
           Connect to continue — your invoices will appear here.
         </p>
       </div>
@@ -718,14 +725,14 @@ const Dashboard: React.FC = () => {
     return (
       <div
         key={inv.invoiceId}
-        className="rounded-xl p-4 transition-colors duration-150"
+        className="trust-invoice-row rounded-lg p-4 transition-colors duration-150"
         style={{
-          backgroundColor: '#161B22',
-          border: '1px solid rgba(255,255,255,0.08)',
+          backgroundColor: 'rgba(17,24,32,0.86)',
+          border: '1px solid var(--tl-border)',
           borderLeft: borderLeft(leftBorderColor),
         }}
-        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#1C2128')}
-        onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#161B22')}
+        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(22,29,38,0.96)')}
+        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(17,24,32,0.86)')}
       >
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
@@ -761,10 +768,10 @@ const Dashboard: React.FC = () => {
 
             {hasSchedule && !isDisputed && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
               <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>
-                Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) — installment {scheduleIdx + 1} of {schedule.length}
+                Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) - installment {scheduleIdx + 1} of {schedule.length}
               </p>
             )}
-            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen — dispute under review</p>}
+            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen - dispute under review</p>}
             {releaseRequested && !isDisputed && !releaseReady && (
               <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Withdrawal requested - {formatCountdown(secondsLeft)}</p>
             )}
@@ -910,14 +917,14 @@ const Dashboard: React.FC = () => {
     return (
       <div
         key={inv.invoiceId}
-        className="rounded-xl p-4 transition-colors duration-150"
+        className="trust-invoice-row rounded-lg p-4 transition-colors duration-150"
         style={{
-          backgroundColor: '#161B22',
-          border: '1px solid rgba(255,255,255,0.08)',
+          backgroundColor: 'rgba(17,24,32,0.86)',
+          border: '1px solid var(--tl-border)',
           borderLeft: borderLeft(leftBorderColor),
         }}
-        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#1C2128')}
-        onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#161B22')}
+        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(22,29,38,0.96)')}
+        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(17,24,32,0.86)')}
       >
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
@@ -948,7 +955,7 @@ const Dashboard: React.FC = () => {
               {formatAmount(inv.amount, inv.tokenType)}
             </p>
             <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-              From: <span style={{ fontFamily: creatorName ? '"DM Sans", sans-serif' : '"JetBrains Mono", monospace' }}>{creatorName || truncateWallet(creatorWallet)}</span> · {formatDate(inv.createdAt)}
+              From: <span style={{ fontFamily: creatorName ? '"DM Sans", sans-serif' : '"JetBrains Mono", monospace' }}>{creatorName || truncateWallet(creatorWallet)}</span> / {formatDate(inv.createdAt)}
             </p>
 
             {schedule.length > 1 && (
@@ -956,7 +963,7 @@ const Dashboard: React.FC = () => {
                 Installment {scheduleIdx + 1} of {schedule.length} - {formatAmount(released, inv.tokenType)} withdrawn of {formatAmount(paid, inv.tokenType)}
               </p>
             )}
-            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen — dispute under review</p>}
+            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen - dispute under review</p>}
             {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested withdrawal - {formatCountdown(secondsLeft)}</p>}
             {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this withdrawal</p>}
 
@@ -1059,8 +1066,8 @@ const Dashboard: React.FC = () => {
   // ============================================================
 
   const tabListStyle: React.CSSProperties = {
-    backgroundColor: '#1C2128',
-    border: '1px solid rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(17,24,32,0.88)',
+    border: '1px solid var(--tl-border)',
     borderRadius: '8px',
     padding: '4px',
     overflowX: 'auto',
@@ -1077,11 +1084,11 @@ const Dashboard: React.FC = () => {
   const tabTriggerStyle = (active: boolean): React.CSSProperties => ({
     fontFamily: '"DM Sans", sans-serif',
     fontSize: '13px',
-    color: active ? '#F8FAFC' : '#94A3B8',
-    backgroundColor: active ? '#161B22' : 'transparent',
+    color: active ? 'var(--tl-text)' : 'var(--tl-muted)',
+    backgroundColor: active ? 'var(--tl-surface-2)' : 'transparent',
     borderRadius: '6px',
     padding: '6px 12px',
-    border: active ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
+    border: active ? '1px solid var(--tl-border-strong)' : '1px solid transparent',
     cursor: 'pointer',
     transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease',
     flexShrink: 0,
@@ -1094,7 +1101,7 @@ const Dashboard: React.FC = () => {
   // ============================================================
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-5 max-w-7xl mx-auto">
       {/* Page header — MOBILE FIX: stacks vertically on mobile */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -1102,9 +1109,9 @@ const Dashboard: React.FC = () => {
             style={{
               fontFamily: '"Space Grotesk", sans-serif',
               fontWeight: 700,
-              fontSize: '1.75rem',
-              color: '#F8FAFC',
-              letterSpacing: '-0.02em',
+              fontSize: '2rem',
+              color: 'var(--tl-text)',
+              letterSpacing: '-0.03em',
               lineHeight: 1.2,
             }}
           >
@@ -1121,7 +1128,7 @@ const Dashboard: React.FC = () => {
                 style={{
                   fontFamily: '"DM Sans", sans-serif',
                   fontSize: '12px',
-                  color: '#64748B',
+                  color: 'var(--tl-dim)',
                   marginTop: '4px',
                 }}
               >
@@ -1129,7 +1136,7 @@ const Dashboard: React.FC = () => {
               </p>
               <ExternalLink
                 className="h-3 w-3"
-                style={{ color: '#64748B', marginTop: '4px' }}
+                style={{ color: 'var(--tl-dim)', marginTop: '4px' }}
               />
             </Link>
           )}
@@ -1140,8 +1147,8 @@ const Dashboard: React.FC = () => {
           <div
             className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3"
             style={{
-              backgroundColor: 'rgba(45,212,191,0.08)',
-              border: '1px solid rgba(45,212,191,0.18)',
+                  backgroundColor: 'var(--tl-teal-soft)',
+                  border: '1px solid rgba(20,200,186,0.22)',
             }}
           >
             <div>
@@ -1155,7 +1162,7 @@ const Dashboard: React.FC = () => {
             <Link
               to="/wallet"
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
-              style={{ backgroundColor: '#2DD4BF', color: '#0D1117', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
+                style={{ backgroundColor: 'var(--tl-teal)', color: '#061110', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
             >
               <WalletIcon className="h-4 w-4" />
               Set up wallet
@@ -1171,10 +1178,10 @@ const Dashboard: React.FC = () => {
               <button
                 className="relative w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
                 style={{
-                  backgroundColor: 'transparent',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  backgroundColor: 'rgba(148,163,184,0.04)',
+                  border: '1px solid var(--tl-border)',
                   cursor: 'pointer',
-                  color: '#94A3B8',
+                  color: 'var(--tl-muted)',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
                 onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
@@ -1201,10 +1208,10 @@ const Dashboard: React.FC = () => {
             disabled={loading || refreshing}
             className="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 disabled:opacity-50"
             style={{
-              backgroundColor: 'transparent',
-              border: '1px solid rgba(255,255,255,0.1)',
+              backgroundColor: 'rgba(148,163,184,0.04)',
+              border: '1px solid var(--tl-border)',
               cursor: loading || refreshing ? 'default' : 'pointer',
-              color: '#94A3B8',
+              color: 'var(--tl-muted)',
             }}
             onMouseEnter={e => !(loading || refreshing) && (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
             onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
@@ -1217,8 +1224,8 @@ const Dashboard: React.FC = () => {
             to="/create"
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-opacity duration-150 hover:opacity-90"
             style={{
-              backgroundColor: '#2DD4BF',
-              color: '#0D1117',
+              backgroundColor: 'var(--tl-teal)',
+              color: '#061110',
               fontFamily: '"DM Sans", sans-serif',
               textDecoration: 'none',
             }}
@@ -1251,9 +1258,37 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {disputeCount > 0 && (
+        <div
+          className="trust-panel-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3"
+          style={{ borderColor: 'rgba(245,158,11,0.35)', backgroundColor: 'rgba(245,158,11,0.08)' }}
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: '#FCD34D' }} />
+            <div>
+              <p className="text-sm font-bold" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
+                {disputeCount} dispute{disputeCount === 1 ? '' : 's'} need attention
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                Funds stay frozen while Truvlo reviews the case record{activeDisputeSample ? ` for ${activeDisputeSample}` : ''}.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSentFilter('disputed')}
+            className="trust-button-secondary px-3 py-2 text-xs"
+            style={{ color: '#FCD34D', borderColor: 'rgba(245,158,11,0.35)' }}
+          >
+            View disputes
+          </button>
+        </div>
+      )}
+
       {/* Role tabs */}
+      <div className="trust-dashboard-grid">
       <Tabs value={roleTab} onValueChange={(v) => setRoleTab(v as 'sent' | 'received' | 'client')}>
-        <TabsList style={tabListStyle}>
+        <TabsList className="trust-tabs" style={tabListStyle}>
           <TabsTrigger value="sent" style={tabTriggerStyle(roleTab === 'sent')} className="flex items-center gap-1.5">
             <ArrowUpRight className="h-3.5 w-3.5" />
             Sent ({sentStats.total})
@@ -1278,7 +1313,7 @@ const Dashboard: React.FC = () => {
 
         {/* ======= SENT TAB ======= */}
         <TabsContent value="sent" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard label="Pending Withdrawal" accentLeft={sentStats.pendingReleaseUSDC > 0 || sentStats.pendingReleaseSOL > 0 ? '#F59E0B' : undefined}>
               {formatStat(sentStats.pendingReleaseUSDC, sentStats.pendingReleaseSOL).map((l, i) => (
                 <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '-' ? '#64748B' : '#FCD34D', lineHeight: 1.3 }}>{l}</p>
@@ -1301,7 +1336,7 @@ const Dashboard: React.FC = () => {
 
           {/* Sub-filter tabs */}
           <Tabs value={sentFilter} onValueChange={setSentFilter}>
-            <TabsList style={tabListStyle}>
+            <TabsList className="trust-tabs" style={tabListStyle}>
               <TabsTrigger value="all" style={tabTriggerStyle(sentFilter === 'all')}>All ({sentStats.total})</TabsTrigger>
               <TabsTrigger value="unpaid" style={tabTriggerStyle(sentFilter === 'unpaid')}>Pending ({sentStats.unpaid})</TabsTrigger>
               <TabsTrigger value="escrow" style={tabTriggerStyle(sentFilter === 'escrow')}>In Escrow ({sentStats.inEscrow})</TabsTrigger>
@@ -1314,7 +1349,7 @@ const Dashboard: React.FC = () => {
               ) : filteredSent.length === 0 ? (
                 <EmptyState message="No invoices yet." showCreate />
               ) : (
-                <div className="space-y-3">{filteredSent.map(renderCreatorCard)}</div>
+                <div className="space-y-2">{filteredSent.map(renderCreatorCard)}</div>
               )}
             </TabsContent>
           </Tabs>
@@ -1322,7 +1357,7 @@ const Dashboard: React.FC = () => {
 
         {/* ======= RECEIVED TAB ======= */}
         <TabsContent value="received" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard label="Total Received">
               {formatStat(receivedStats.totalReceivedUSDC, receivedStats.totalReceivedSOL).map((l, i) => (
                 <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '-' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
@@ -1343,7 +1378,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           <Tabs value={receivedFilter} onValueChange={setReceivedFilter}>
-            <TabsList style={tabListStyle}>
+            <TabsList className="trust-tabs" style={tabListStyle}>
               <TabsTrigger value="all" style={tabTriggerStyle(receivedFilter === 'all')}>All ({receivedStats.total})</TabsTrigger>
               <TabsTrigger value="escrow" style={tabTriggerStyle(receivedFilter === 'escrow')}>In Escrow ({receivedStats.inEscrow})</TabsTrigger>
               <TabsTrigger value="released" style={tabTriggerStyle(receivedFilter === 'released')}>Withdrawn ({receivedStats.released})</TabsTrigger>
@@ -1355,7 +1390,7 @@ const Dashboard: React.FC = () => {
               ) : filteredReceived.length === 0 ? (
                 <EmptyState message="No paid invoices yet. Once a client pays, it appears here." />
               ) : (
-                <div className="space-y-3">{filteredReceived.map(renderCreatorCard)}</div>
+                <div className="space-y-2">{filteredReceived.map(renderCreatorCard)}</div>
               )}
             </TabsContent>
           </Tabs>
@@ -1363,7 +1398,7 @@ const Dashboard: React.FC = () => {
 
         {/* ======= CLIENT TAB ======= */}
         <TabsContent value="client" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard label="Total Paid Out">
               {formatStat(clientStats.totalPaidUSDC, clientStats.totalPaidSOL).map((l, i) => (
                 <p key={i} style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1rem', color: l === '-' ? '#64748B' : '#F8FAFC', lineHeight: 1.3 }}>{l}</p>
@@ -1425,17 +1460,70 @@ const Dashboard: React.FC = () => {
             awaitingAction.length === 0 ? (
               <EmptyState message="No invoices awaiting your approval right now." />
             ) : (
-              <div className="space-y-3">{awaitingAction.map(i => renderClientCard(i, true))}</div>
+              <div className="space-y-2">{awaitingAction.map(i => renderClientCard(i, true))}</div>
             )
           ) : (
             paymentHistory.length === 0 ? (
               <EmptyState message="No payment history yet. Invoices you pay will appear here." />
             ) : (
-              <div className="space-y-3">{paymentHistory.map(i => renderClientCard(i, false))}</div>
+              <div className="space-y-2">{paymentHistory.map(i => renderClientCard(i, false))}</div>
             )
           )}
         </TabsContent>
       </Tabs>
+
+      <aside className="trust-panel hidden lg:block p-4 sticky top-24">
+        <p className="trust-label">Selected record</p>
+        {activeDashboardAccount ? (
+          <div className="mt-4 space-y-4">
+            <div>
+              <p className="trust-mono text-xs" style={{ color: 'var(--tl-dim)' }}>{activeDashboardAccount.invoiceId}</p>
+              <p className="mt-2 text-xl font-bold" style={{ fontFamily: '"Space Grotesk", sans-serif', color: 'var(--tl-text)' }}>
+                {formatAmount(activeDashboardAccount.amount, activeDashboardAccount.tokenType)}
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="trust-status trust-status-blue">
+                  {activeDashboardAccount.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
+                </span>
+                {activeDashboardAccount.status === InvoiceStatus.Disputed && <span className="trust-status trust-status-amber">Disputed</span>}
+                {activeDashboardAccount.status === InvoiceStatus.Released && <span className="trust-status trust-status-green">Withdrawn</span>}
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t pt-4" style={{ borderColor: 'rgba(148,163,184,0.12)' }}>
+              <div className="flex justify-between gap-3 text-xs">
+                <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Creator</span>
+                <span className="trust-mono" style={{ color: 'var(--tl-muted)' }}>{truncateWallet(activeDashboardAccount.creator.toBase58())}</span>
+              </div>
+              <div className="flex justify-between gap-3 text-xs">
+                <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Client</span>
+                <span className="trust-mono" style={{ color: 'var(--tl-muted)' }}>
+                  {activeDashboardAccount.client ? truncateWallet(activeDashboardAccount.client.toBase58()) : 'Not paid'}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3 text-xs">
+                <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Created</span>
+                <span style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>{formatDate(activeDashboardAccount.createdAt)}</span>
+              </div>
+              <div className="flex justify-between gap-3 text-xs">
+                <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Paid</span>
+                <span style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>{formatAmount(activeDashboardAccount.amountPaid, activeDashboardAccount.tokenType)}</span>
+              </div>
+            </div>
+
+            <div className="border-t pt-4" style={{ borderColor: 'rgba(148,163,184,0.12)' }}>
+              <p className="text-xs leading-5" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                This panel mirrors the current invoice state. Actions still happen from the invoice row so the existing workflow stays unchanged.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm leading-6" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+            Select a tab with invoice activity to see the current ledger state.
+          </p>
+        )}
+      </aside>
+      </div>
 
       {/* Withdrawal Modal */}
       {releaseModal && (

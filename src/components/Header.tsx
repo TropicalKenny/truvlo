@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
-import { Menu, X, ChevronDown, Copy, Wallet, LogOut, User } from 'lucide-react';
+import { Menu, X, ChevronDown, Copy, Wallet, LogOut, User, FileText } from 'lucide-react';
 import TruvloLogo from './TruvloLogo';
 import { useToast } from '@/hooks/use-toast';
 import { preloadRoute } from '@/lib/routePrefetch';
@@ -72,11 +72,11 @@ const Header: React.FC = () => {
       }`}
       style={{
         backgroundColor:
-          isLanding && !scrolled ? 'transparent' : 'rgba(22, 27, 34, 0.9)',
-        backdropFilter: isLanding && !scrolled ? 'none' : 'blur(12px)',
+          isLanding && !scrolled ? 'rgba(8, 12, 15, 0.18)' : 'rgba(8, 12, 15, 0.88)',
+        backdropFilter: 'blur(14px)',
       }}
     >
-      <div className="w-full px-6 h-16 flex items-center justify-between relative">
+      <div className="w-full px-4 sm:px-6 h-16 flex items-center justify-between relative">
         {/* Logo — left */}
         <Link to="/" className="flex items-center flex-shrink-0 z-10">
           <TruvloLogo size="md" />
@@ -121,20 +121,20 @@ const Header: React.FC = () => {
                   fontFamily: '"DM Sans", sans-serif',
                   fontSize: '13px',
                   fontWeight: 500,
-                  color: '#94A3B8',
-                  backgroundColor: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'var(--tl-muted)',
+                  backgroundColor: 'rgba(148,163,184,0.06)',
+                  border: '1px solid var(--tl-border)',
                   borderRadius: '8px',
                   padding: '8px 14px',
                   cursor: 'pointer',
                 }}
                 onMouseEnter={e => {
-                  (e.currentTarget as HTMLButtonElement).style.color = '#F8FAFC';
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.1)';
+                  (e.currentTarget as HTMLButtonElement).style.color = 'var(--tl-text)';
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(148,163,184,0.1)';
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLButtonElement).style.color = '#94A3B8';
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.06)';
+                  (e.currentTarget as HTMLButtonElement).style.color = 'var(--tl-muted)';
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(148,163,184,0.06)';
                 }}
               >
                 {shortAddress ?? 'Account'}
@@ -151,8 +151,8 @@ const Header: React.FC = () => {
                 <div
                   className="absolute right-0 top-full mt-2 w-44 rounded-xl overflow-hidden"
                   style={{
-                    backgroundColor: '#1C2128',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    backgroundColor: 'var(--tl-surface)',
+                    border: '1px solid var(--tl-border)',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
                   }}
                 >
@@ -207,8 +207,8 @@ const Header: React.FC = () => {
                 fontFamily: '"DM Sans", sans-serif',
                 fontSize: '14px',
                 fontWeight: 600,
-                color: '#0D1117',
-                backgroundColor: '#2DD4BF',
+                color: '#061110',
+                backgroundColor: 'var(--tl-teal)',
                 border: 'none',
                 borderRadius: '8px',
                 padding: '10px 22px',
@@ -228,7 +228,7 @@ const Header: React.FC = () => {
           className="md:hidden flex items-center justify-center z-10"
           onClick={() => setMobileOpen(v => !v)}
           style={{
-            color: '#94A3B8',
+            color: 'var(--tl-muted)',
             background: 'none',
             border: 'none',
             cursor: 'pointer',
@@ -245,8 +245,8 @@ const Header: React.FC = () => {
         <div
           className="md:hidden border-t"
           style={{
-            backgroundColor: 'rgba(22, 27, 34, 0.98)',
-            borderColor: 'rgba(255,255,255,0.08)',
+            backgroundColor: 'rgba(8, 12, 15, 0.98)',
+            borderColor: 'rgba(148,163,184,0.12)',
           }}
         >
           <nav className="flex flex-col px-6 py-4 gap-1">
@@ -294,7 +294,7 @@ const Header: React.FC = () => {
                     }}
                   >
                     <User size={15} />
-                    Profile Settings
+                    Profile settings
                   </Link>
                   <Link
                     to="/wallet"
@@ -306,6 +306,17 @@ const Header: React.FC = () => {
                   >
                     <Wallet size={15} />
                     Wallet
+                  </Link>
+                  <Link
+                    to="/create"
+                    onMouseEnter={() => preloadRoute('/create')}
+                    onFocus={() => preloadRoute('/create')}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-2 text-sm transition-colors duration-150"
+                    style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none', padding: '10px 0' }}
+                  >
+                    <FileText size={15} />
+                    Create invoice
                   </Link>
                   <button
                     onClick={async () => { await handleCopyAddress(); setMobileOpen(false); }}
@@ -337,8 +348,8 @@ const Header: React.FC = () => {
                   onClick={() => { login(); setMobileOpen(false); }}
                   className="w-full rounded-lg py-3 text-sm font-medium"
                   style={{
-                    backgroundColor: '#2DD4BF',
-                    color: '#0D1117',
+                    backgroundColor: 'var(--tl-teal)',
+                    color: '#061110',
                     fontFamily: '"DM Sans", sans-serif',
                     border: 'none',
                     cursor: 'pointer',

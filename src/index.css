@@ -32,7 +32,24 @@
     --input: 215 25% 14%;
     --ring: 174 69% 51%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
+
+    --tl-bg: #080c0f;
+    --tl-bg-soft: #0d1117;
+    --tl-surface: #111820;
+    --tl-surface-2: #161d26;
+    --tl-surface-3: #1b2430;
+    --tl-border: rgba(148, 163, 184, 0.16);
+    --tl-border-strong: rgba(148, 163, 184, 0.26);
+    --tl-text: #f8fafc;
+    --tl-muted: #94a3b8;
+    --tl-dim: #64748b;
+    --tl-teal: #14c8ba;
+    --tl-teal-soft: rgba(20, 200, 186, 0.12);
+    --tl-blue: #3b82f6;
+    --tl-amber: #f59e0b;
+    --tl-green: #22c55e;
+    --tl-red: #ef4444;
   }
 }
 
@@ -43,12 +60,14 @@
   }
 
   html {
-    background-color: #0D1117;
+    background-color: var(--tl-bg);
   }
 
   body {
-    background-color: #0D1117;
-    color: #F8FAFC;
+    background:
+      radial-gradient(circle at 50% -20%, rgba(20, 200, 186, 0.08), transparent 34rem),
+      var(--tl-bg);
+    color: var(--tl-text);
     font-family: 'DM Sans', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -209,14 +228,14 @@
    =========================== */
 
 .truvlo-card {
-  background: #161B22;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--tl-surface);
+  border: 1px solid var(--tl-border);
+  border-radius: 8px;
   padding: 24px;
 }
 
 .truvlo-nested {
-  background: #1C2128;
+  background: var(--tl-surface-2);
   border-radius: 8px;
   padding: 16px;
 }
@@ -245,8 +264,8 @@
 }
 
 .truvlo-btn-primary {
-  background: #2DD4BF;
-  color: #0D1117;
+  background: var(--tl-teal);
+  color: #07100f;
   font-family: 'DM Sans', sans-serif;
   font-weight: 500;
   font-size: 15px;
@@ -299,4 +318,189 @@
 
 .truvlo-input::placeholder {
   color: #64748B;
+}
+
+/* ===========================
+   TRUST LEDGER PHASE 2
+   =========================== */
+
+.trust-page {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(20, 200, 186, 0.04), transparent 22rem),
+    var(--tl-bg);
+  color: var(--tl-text);
+}
+
+.trust-section {
+  position: relative;
+  overflow: hidden;
+}
+
+.trust-grid-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 72%);
+}
+
+.trust-shell {
+  background: rgba(17, 24, 32, 0.82);
+  border: 1px solid var(--tl-border);
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+}
+
+.trust-panel {
+  background: linear-gradient(180deg, rgba(22, 29, 38, 0.96), rgba(12, 17, 23, 0.96));
+  border: 1px solid var(--tl-border);
+  border-radius: 8px;
+}
+
+.trust-panel-subtle {
+  background: rgba(15, 21, 28, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 8px;
+}
+
+.trust-button-primary,
+.trust-button-secondary,
+.trust-icon-button {
+  border-radius: 8px;
+  font-family: "DM Sans", sans-serif;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+
+.trust-button-primary {
+  background: var(--tl-teal);
+  color: #061110;
+  border: 1px solid rgba(20, 200, 186, 0.65);
+  font-weight: 700;
+}
+
+.trust-button-primary:hover {
+  opacity: 0.9;
+}
+
+.trust-button-secondary {
+  background: rgba(148, 163, 184, 0.04);
+  color: var(--tl-text);
+  border: 1px solid var(--tl-border);
+  font-weight: 600;
+}
+
+.trust-button-secondary:hover {
+  border-color: var(--tl-border-strong);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.trust-icon-button {
+  background: rgba(148, 163, 184, 0.04);
+  border: 1px solid var(--tl-border);
+  color: var(--tl-muted);
+}
+
+.trust-icon-button:hover {
+  color: var(--tl-text);
+  border-color: var(--tl-border-strong);
+}
+
+.trust-label {
+  font-family: "DM Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tl-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.trust-mono {
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: 0;
+}
+
+.trust-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 6px;
+  padding: 0.18rem 0.5rem;
+  font-family: "DM Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.trust-status-green {
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+}
+
+.trust-status-blue {
+  background: rgba(59, 130, 246, 0.14);
+  color: #93c5fd;
+}
+
+.trust-status-amber {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+}
+
+.trust-status-red {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+.trust-tabs {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  overscroll-behavior-y: none;
+  scrollbar-width: thin;
+}
+
+.trust-tabs [role="tab"] {
+  transform: translateZ(0);
+}
+
+.trust-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.trust-dashboard-stat,
+.trust-invoice-row {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.trust-invoice-row button {
+  border-radius: 8px !important;
+}
+
+@media (max-width: 640px) {
+  .trust-invoice-row {
+    padding: 14px !important;
+  }
+
+  .trust-invoice-row > div {
+    gap: 12px;
+  }
+
+  .trust-invoice-row button {
+    min-height: 36px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .trust-dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    align-items: start;
+  }
 }

@@ -1,15 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
-import { Lock, ArrowRight } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, ExternalLink, LockKeyhole, Play, ShieldCheck } from 'lucide-react';
 
-const CYCLING_WORDS = ['actually', 'always', 'finally', 'really'];
+const lifecycle = [
+  { title: 'Created', meta: 'Apr 24, 2026 - by you', status: 'Completed', tone: 'green' },
+  { title: 'Paid into escrow', meta: 'Apr 25, 2026 - client payment confirmed', status: 'Completed', tone: 'green' },
+  { title: 'Release requested', meta: 'Apr 28, 2026 - you requested release', status: 'Completed', tone: 'green' },
+  { title: 'Approved by client', meta: 'Apr 29, 2026 - client approved release', status: 'Completed', tone: 'green' },
+  { title: 'Withdrawn', meta: 'Apr 29, 2026 - funds sent to your wallet', status: 'Completed', tone: 'green' },
+];
+
+const proofPoints = [
+  { label: 'USDC & SOL', detail: 'Stable payments', icon: LockKeyhole },
+  { label: 'On-chain escrow', detail: 'Transparent state', icon: ShieldCheck },
+  { label: 'Client approval', detail: 'Release with confidence', icon: CheckCircle2 },
+  { label: 'Managed disputes', detail: 'Clear review process', icon: Clock3 },
+];
 
 const Hero: React.FC = () => {
   const { ready, authenticated, login } = usePrivy();
   const navigate = useNavigate();
-  const [wordIndex, setWordIndex] = useState(0);
-  const [visible, setVisible] = useState(true);
 
   const handleCTA = (path: string) => {
     if (!ready) return;
@@ -17,319 +28,129 @@ const Hero: React.FC = () => {
     else login();
   };
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setVisible(false);
-      setTimeout(() => {
-        setWordIndex((i) => (i + 1) % CYCLING_WORDS.length);
-        setVisible(true);
-      }, 200);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
-    <section
-      className="relative overflow-hidden min-h-screen flex items-center"
-      style={{ backgroundColor: '#0D1117' }}
-    >
-      {/* Subtle grid texture */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
-          backgroundSize: '64px 64px',
-        }}
-      />
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 w-full">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-12 md:gap-8 items-center">
-
-          {/* Left — text (7/12) */}
-          <div className="md:col-span-7 flex flex-col gap-7">
-            {/* Eyebrow */}
-            <div className="inline-flex items-center gap-2 w-fit">
-              <span
-                className="text-xs font-medium uppercase tracking-widest"
-                style={{
-                  color: '#2DD4BF',
-                  fontFamily: '"DM Sans", sans-serif',
-                  letterSpacing: '0.1em',
-                }}
-              >
-                Built on Solana
-              </span>
-              <div
-                className="h-px w-8"
-                style={{ backgroundColor: 'rgba(45,212,191,0.4)' }}
-              />
-            </div>
-
-            {/* Headline — cycling italic word */}
+    <section className="trust-section trust-grid-bg min-h-[calc(100vh-4rem)] flex items-center">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-12 md:py-16 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.86fr)_minmax(430px,0.74fr)] gap-10 lg:gap-14 items-center">
+          <div className="max-w-2xl">
             <h1
-              className="text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.05] tracking-tight"
+              className="text-[3rem] sm:text-[4rem] lg:text-[5.3rem] leading-[0.96]"
               style={{
                 fontFamily: '"Space Grotesk", sans-serif',
-                fontWeight: 700,
-                color: '#F8FAFC',
-                letterSpacing: '-0.025em',
+                fontWeight: 800,
+                color: 'var(--tl-text)',
+                letterSpacing: '-0.035em',
               }}
             >
-              Invoices your clients{' '}
-              <em
-                style={{
-                  fontStyle: 'italic',
-                  color: '#F8FAFC',
-                  display: 'inline-block',
-                  opacity: visible ? 1 : 0,
-                  transform: visible ? 'translateY(0)' : 'translateY(4px)',
-                  transition: 'opacity 200ms ease, transform 200ms ease',
-                }}
-              >
-                {CYCLING_WORDS[wordIndex]}
-              </em>{' '}
-              pay.
+              Escrow invoices clients can trust
             </h1>
-
-            {/* Sub-headline */}
             <p
-              className="text-lg leading-relaxed max-w-xl"
-              style={{
-                color: '#94A3B8',
-                fontFamily: '"DM Sans", sans-serif',
-                fontWeight: 400,
-              }}
+              className="mt-6 max-w-xl text-base sm:text-lg leading-8"
+              style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}
             >
-              Escrow-protected invoicing on Solana. Lock funds on-chain when your
-              client pays. Release to your wallet when the work is done.
+              On-chain escrow for USDC and SOL invoices. Client approval, managed disputes,
+              and a clear payment record for global freelancers and teams.
             </p>
 
-            {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-1">
+            <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => handleCTA('/create')}
                 disabled={!ready}
-                className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-90"
-                style={{
-                  backgroundColor: '#2DD4BF',
-                  color: '#0D1117',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontWeight: 500,
-                  fontSize: '15px',
-                  padding: '13px 28px',
-                  border: 'none',
-                  cursor: ready ? 'pointer' : 'default',
-                  opacity: ready ? 1 : 0.7,
-                }}
+                className="trust-button-primary inline-flex items-center justify-center gap-2 px-6 py-3 text-sm"
               >
-                Create Invoice
-                <ArrowRight size={16} />
+                Create invoice
+                <ArrowRight className="h-4 w-4" />
               </button>
               <button
                 onClick={() => handleCTA('/dashboard')}
                 disabled={!ready}
-                className="inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-150 hover:opacity-80"
-                style={{
-                  backgroundColor: 'transparent',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: '#F8FAFC',
-                  fontFamily: '"DM Sans", sans-serif',
-                  fontWeight: 500,
-                  fontSize: '15px',
-                  padding: '13px 28px',
-                  cursor: ready ? 'pointer' : 'default',
-                  opacity: ready ? 1 : 0.7,
-                }}
+                className="trust-button-secondary inline-flex items-center justify-center gap-2 px-6 py-3 text-sm"
               >
-                Open Dashboard
+                View demo
+                <Play className="h-4 w-4" />
               </button>
             </div>
+          </div>
 
-            {/* Trust signals */}
-            <div className="flex items-center gap-6 pt-2">
-              {[
-                { label: 'On-chain escrow', icon: '🔒' },
-                { label: 'USDC + SOL', icon: '⚡' },
-                { label: 'Dual approval', icon: '✓' },
-              ].map(({ label, icon }) => (
-                <div key={label} className="flex items-center gap-1.5">
-                  <span className="text-xs">{icon}</span>
+          <div className="trust-shell p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-5 border-b pb-4" style={{ borderColor: 'var(--tl-border)' }}>
+              <div>
+                <p className="trust-label">Invoice #INV-4V6DTZ7H</p>
+                <p className="mt-2 text-sm" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                  Web design project
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="trust-status trust-status-green">Withdrawn</span>
+                <p className="mt-3 text-lg font-bold" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
+                  USDC 1,250.00
+                </p>
+                <p className="text-xs trust-mono" style={{ color: 'var(--tl-dim)' }}>on Solana</p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-0">
+              {lifecycle.map((item, index) => (
+                <div key={item.title} className="relative grid grid-cols-[28px_minmax(0,1fr)_auto] gap-3 pb-5 last:pb-0">
+                  {index < lifecycle.length - 1 && (
+                    <span
+                      className="absolute left-[13px] top-7 bottom-0 w-px"
+                      style={{ backgroundColor: 'rgba(20, 200, 186, 0.45)' }}
+                    />
+                  )}
                   <span
-                    className="text-xs"
-                    style={{
-                      color: '#64748B',
-                      fontFamily: '"DM Sans", sans-serif',
-                    }}
+                    className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full"
+                    style={{ backgroundColor: 'var(--tl-teal)', color: '#061110' }}
                   >
-                    {label}
+                    <CheckCircle2 className="h-4 w-4" />
                   </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold" style={{ color: 'var(--tl-text)', fontFamily: '"DM Sans", sans-serif' }}>
+                      {item.title}
+                    </p>
+                    <p className="mt-1 text-xs" style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>
+                      {item.meta}
+                    </p>
+                  </div>
+                  <span className="trust-status trust-status-green self-start">{item.status}</span>
                 </div>
               ))}
             </div>
-          </div>
 
-          {/* Right — invoice card mockup (5/12) */}
-          <div className="md:col-span-5 flex items-center justify-center md:justify-end">
-            <div
-              className="relative w-full max-w-sm rounded-xl p-7"
-              style={{
-                backgroundColor: '#161B22',
-                border: '1px solid rgba(255,255,255,0.08)',
-                marginTop: '-24px',
-              }}
+            <a
+              href="https://explorer.solana.com/?cluster=devnet"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-5 inline-flex items-center gap-1.5 text-xs"
+              style={{ color: 'var(--tl-teal)', fontFamily: '"DM Sans", sans-serif' }}
             >
-              {/* Card header */}
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <p
-                    className="text-xs uppercase tracking-widest mb-1"
-                    style={{
-                      color: '#64748B',
-                      fontFamily: '"DM Sans", sans-serif',
-                      letterSpacing: '0.08em',
-                    }}
-                  >
-                    Invoice Amount
-                  </p>
-                  <p
-                    style={{
-                      fontFamily: '"Space Grotesk", sans-serif',
-                      fontWeight: 700,
-                      fontSize: '3.5rem',
-                      color: '#F8FAFC',
-                      letterSpacing: '-0.02em',
-                      lineHeight: 1,
-                    }}
-                  >
-                    $2,847
-                    <span style={{ fontSize: '2rem', color: '#94A3B8' }}>
-                      .50
-                    </span>
-                  </p>
-                </div>
-                <div
-                  className="w-11 h-11 rounded-lg flex items-center justify-center"
-                  style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}
-                >
-                  <Lock size={20} style={{ color: '#2DD4BF' }} />
-                </div>
-              </div>
-
-              {/* Status */}
-              <div className="flex items-center justify-between mb-5">
-                <span
-                  className="text-xs font-medium px-2.5 py-1 rounded-full"
-                  style={{
-                    backgroundColor: 'rgba(59,130,246,0.12)',
-                    color: '#93C5FD',
-                    fontFamily: '"DM Sans", sans-serif',
-                  }}
-                >
-                  In Escrow
-                </span>
-              </div>
-
-              {/* Divider */}
-              <div
-                className="mb-5"
-                style={{
-                  height: '1px',
-                  backgroundColor: 'rgba(255,255,255,0.06)',
-                }}
-              />
-
-              {/* Invoice details */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span
-                    className="text-xs uppercase tracking-wider"
-                    style={{
-                      color: '#64748B',
-                      fontFamily: '"DM Sans", sans-serif',
-                    }}
-                  >
-                    From
-                  </span>
-                  <span
-                    className="text-sm font-medium"
-                    style={{
-                      color: '#F8FAFC',
-                      fontFamily: '"DM Sans", sans-serif',
-                    }}
-                  >
-                    Sarah K.
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span
-                    className="text-xs uppercase tracking-wider"
-                    style={{
-                      color: '#64748B',
-                      fontFamily: '"DM Sans", sans-serif',
-                    }}
-                  >
-                    Client
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: '"JetBrains Mono", monospace',
-                      fontSize: '13px',
-                      color: '#94A3B8',
-                    }}
-                  >
-                    7iLf...vx1p
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span
-                    className="text-xs uppercase tracking-wider"
-                    style={{
-                      color: '#64748B',
-                      fontFamily: '"DM Sans", sans-serif',
-                    }}
-                  >
-                    Description
-                  </span>
-                  <span
-                    className="text-sm"
-                    style={{
-                      color: '#94A3B8',
-                      fontFamily: '"DM Sans", sans-serif',
-                    }}
-                  >
-                    Brand identity + web
-                  </span>
-                </div>
-              </div>
-
-              {/* Release bar */}
-              <div
-                className="mt-6 rounded-lg p-3 flex items-center justify-between"
-                style={{ backgroundColor: '#1C2128' }}
-              >
-                <span
-                  className="text-xs"
-                  style={{
-                    color: '#94A3B8',
-                    fontFamily: '"DM Sans", sans-serif',
-                  }}
-                >
-                  Awaiting client approval
-                </span>
-                <div
-                  className="w-2 h-2 rounded-full animate-pulse"
-                  style={{ backgroundColor: '#38BDF8' }}
-                />
-              </div>
-
-              {/* Teal top accent line */}
-              <div
-                className="absolute top-0 left-6 right-6 h-[2px] rounded-b"
-                style={{ backgroundColor: '#2DD4BF', opacity: 0.6 }}
-              />
-            </div>
+              View on Solana Explorer
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
           </div>
+        </div>
+
+        <div className="mt-12 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {proofPoints.map(({ label, detail, icon: Icon }) => (
+            <div key={label} className="trust-panel-subtle px-4 py-4 flex items-center gap-3">
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md"
+                style={{ backgroundColor: 'var(--tl-teal-soft)', color: 'var(--tl-teal)' }}
+              >
+                <Icon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold" style={{ fontFamily: '"DM Sans", sans-serif' }}>{label}</p>
+                <p className="text-xs" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>{detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-10 border-t pt-8" style={{ borderColor: 'rgba(148, 163, 184, 0.1)' }}>
+          <p className="text-center text-sm" style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>
+            Simple, transparent, secure
+          </p>
         </div>
       </div>
     </section>

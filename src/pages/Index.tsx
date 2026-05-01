@@ -16,7 +16,7 @@ const Index: React.FC = () => {
   }, [ready, authenticated, navigate]);
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+    <div className="trust-page min-h-screen flex flex-col">
       <Header />
       <main className="flex-1">
         <Hero />

@@ -1,135 +1,91 @@
 import React from 'react';
+import { CheckCircle2, FileText, LockKeyhole, SendHorizonal } from 'lucide-react';
 
 const steps = [
   {
     number: '01',
     title: 'Create invoice',
-    description: 'Connect your wallet, set the amount, and add your client email. The invoice goes on-chain in seconds.',
+    description: 'Add scope, amount, token, and client email. Truvlo creates the on-chain escrow record and a shareable payment link.',
+    icon: FileText,
   },
   {
     number: '02',
     title: 'Client pays',
-    description: "Your client receives a payment link and locks funds in escrow. You are protected once payment lands.",
+    description: 'The client pays with USDC or SOL. Funds move into escrow and both sides can see the payment state.',
+    icon: LockKeyhole,
   },
   {
     number: '03',
-    title: 'Work is done',
-    description: 'Deliver your work. Request withdrawal when you are ready. Both sides can review the same payment state.',
+    title: 'Review and approve',
+    description: 'When work is ready, request release. The client approves, raises a dispute, or the timeout path applies.',
+    icon: CheckCircle2,
   },
   {
     number: '04',
-    title: 'Funds withdrawn',
-    description: 'Client approves, or the platform resolves a dispute, then funds go straight to your wallet.',
+    title: 'Withdraw funds',
+    description: 'Approved funds are released to the selected wallet. Disputed funds stay frozen until the managed review is resolved.',
+    icon: SendHorizonal,
   },
 ];
 
 const HowItWorks: React.FC = () => {
   return (
-    <section className="py-24" style={{ backgroundColor: '#161B22' }}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="text-center mb-16">
-          <h2
-            className="text-3xl md:text-4xl mb-4"
-            style={{
-              fontFamily: '"Space Grotesk", sans-serif',
-              fontWeight: 700,
-              color: '#F8FAFC',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            How{' '}
-            <em
+    <section className="trust-section py-20" style={{ backgroundColor: 'var(--tl-bg-soft)' }}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[0.55fr_1fr] gap-10 lg:gap-16 items-start">
+          <div>
+            <h2
+              className="text-3xl md:text-4xl"
               style={{
-                fontStyle: 'italic',
-                color: '#2DD4BF',
                 fontFamily: '"Space Grotesk", sans-serif',
+                fontWeight: 800,
+                color: 'var(--tl-text)',
+                letterSpacing: '-0.03em',
               }}
             >
-              Truvlo
-            </em>{' '}
-            works
-          </h2>
-          <p
-            className="text-base max-w-md mx-auto"
-            style={{
-              color: '#64748B',
-              fontFamily: '"DM Sans", sans-serif',
-            }}
-          >
-            Four steps. On-chain settlement with managed review when a deal goes sideways.
-          </p>
-        </div>
+              A clear ledger from invoice to withdrawal
+            </h2>
+            <p
+              className="mt-4 text-base leading-7"
+              style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}
+            >
+              Truvlo keeps fund movement on-chain while invoice context, emails, approvals,
+              referrals, and disputes stay in the product workflow where both sides can understand them.
+            </p>
+          </div>
 
-        <div className="relative grid grid-cols-1 md:grid-cols-4 gap-0">
-          {steps.map((step, i) => (
-            <div key={step.number} className="relative flex flex-col">
-              {i < steps.length - 1 && (
+          <div className="trust-panel overflow-hidden">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              return (
                 <div
-                  className="hidden md:block absolute top-10 left-1/2 w-full h-px"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.06)',
-                    transform: 'translateX(50%)',
-                    zIndex: 0,
-                  }}
-                />
-              )}
-
-              {i < steps.length - 1 && (
-                <div
-                  className="md:hidden absolute left-10 top-full w-px h-4"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.06)',
-                    zIndex: 0,
-                  }}
-                />
-              )}
-
-              <div
-                className="relative rounded-xl p-6 mx-2 md:mx-2 flex flex-col gap-4 mb-4 md:mb-0"
-                style={{
-                  backgroundColor: '#0D1117',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: '12px',
-                  zIndex: 1,
-                }}
-              >
-                <div
-                  style={{
-                    fontFamily: '"Space Grotesk", sans-serif',
-                    fontWeight: 700,
-                    fontSize: '2.5rem',
-                    color: 'rgba(45,212,191,0.15)',
-                    lineHeight: 1,
-                    letterSpacing: '-0.02em',
-                  }}
+                  key={step.number}
+                  className="grid grid-cols-[56px_minmax(0,1fr)] gap-4 px-5 py-5 border-b last:border-b-0"
+                  style={{ borderColor: 'rgba(148, 163, 184, 0.12)' }}
                 >
-                  {step.number}
+                  <div className="flex flex-col items-center">
+                    <span
+                      className="flex h-10 w-10 items-center justify-center rounded-md"
+                      style={{ backgroundColor: index === 1 ? 'rgba(59, 130, 246, 0.14)' : 'var(--tl-teal-soft)', color: index === 1 ? '#93c5fd' : 'var(--tl-teal)' }}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3">
+                      <span className="trust-label">{step.number}</span>
+                      <h3 className="text-base font-bold" style={{ fontFamily: '"DM Sans", sans-serif', color: 'var(--tl-text)' }}>
+                        {step.title}
+                      </h3>
+                    </div>
+                    <p className="mt-2 text-sm leading-6" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                      {step.description}
+                    </p>
+                  </div>
                 </div>
-
-                <h3
-                  style={{
-                    fontFamily: '"Space Grotesk", sans-serif',
-                    fontWeight: 500,
-                    fontSize: '1.0625rem',
-                    color: '#F8FAFC',
-                    marginTop: '-8px',
-                  }}
-                >
-                  {step.title}
-                </h3>
-
-                <p
-                  className="text-sm leading-relaxed"
-                  style={{
-                    color: '#94A3B8',
-                    fontFamily: '"DM Sans", sans-serif',
-                  }}
-                >
-                  {step.description}
-                </p>
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
       </div>
     </section>

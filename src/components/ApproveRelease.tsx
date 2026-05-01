@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
@@ -6,7 +6,7 @@ import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
-import { Loader2, AlertCircle, Check, AlertTriangle, Clock } from 'lucide-react';
+import { Loader2, AlertCircle, Check, AlertTriangle, Clock, Bot } from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
@@ -19,6 +19,15 @@ type PageState =
   | { type: 'loaded'; invoice: InvoiceData }
   | { type: 'approved' }
   | { type: 'disputed' };
+
+type AgentVerification = {
+  verification_status: 'pending' | 'passed' | 'failed' | 'needs_human_review';
+  confidence: 'low' | 'medium' | 'high';
+  summary: string | null;
+  risks: string | null;
+  recommended_action: 'approve' | 'dispute' | 'manual_review';
+  verifier_type: 'rule' | 'ai' | 'manual';
+};
 
 function formatCountdown(seconds: number): string {
   if (seconds <= 0) return 'Auto-releasing soon';
@@ -60,6 +69,7 @@ const ApproveRelease: React.FC = () => {
   const [disputing, setDisputing] = useState(false);
   const [sdkInitError, setSdkInitError] = useState<string | null>(null);
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
+  const [agentVerification, setAgentVerification] = useState<AgentVerification | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -83,7 +93,7 @@ const ApproveRelease: React.FC = () => {
     } catch { return null; }
   }, [connection, publicKey, privyWallet, signAndSendTransaction]);
 
-  const createReadOnlySdk = (conn: Connection): EscrowPaySDK | null => {
+  const createReadOnlySdk = useCallback((conn: Connection): EscrowPaySDK | null => {
     try {
       const mock: Wallet = {
         publicKey: new PublicKey('11111111111111111111111111111111'),
@@ -95,9 +105,9 @@ const ApproveRelease: React.FC = () => {
       if (!instance.isInitialized()) { setSdkInitError(instance.getInitError()); return null; }
       return instance;
     } catch { return null; }
-  };
+  }, []);
 
-  const fetchInvoice = async () => {
+  const fetchInvoice = useCallback(async () => {
     if (!urlValid) { setPageState({ type: 'error', message: 'Invalid link — missing invoice ID or creator address.' }); return; }
     const readOnly = createReadOnlySdk(connection);
     if (!readOnly) { setPageState({ type: 'error', message: sdkInitError || 'Failed to initialize. Please refresh.' }); return; }
@@ -111,9 +121,20 @@ const ApproveRelease: React.FC = () => {
     } catch (e) {
       setPageState({ type: 'error', message: e instanceof Error ? e.message : 'Failed to load invoice.' });
     }
-  };
+  }, [connection, createReadOnlySdk, creator, invoiceId, sdkInitError, urlValid]);
 
-  useEffect(() => { fetchInvoice(); }, [connection, urlValid]);
+  useEffect(() => { fetchInvoice(); }, [fetchInvoice]);
+
+  useEffect(() => {
+    if (!urlValid || !invoiceId || !creator) return;
+    const params = new URLSearchParams({ invoiceId, creatorWallet: creator });
+    fetch(`/api/agent-verifications?${params.toString()}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: { agent_verification?: AgentVerification | null } | null) => {
+        setAgentVerification(data?.agent_verification ?? null);
+      })
+      .catch(() => setAgentVerification(null));
+  }, [urlValid, invoiceId, creator]);
 
   const fromSmallestUnit = (amount: unknown, tokenType: TokenType) => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
@@ -362,6 +383,13 @@ const ApproveRelease: React.FC = () => {
   const symbol = inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
   const connectedWalletMatchesClient = isConnectedWalletInvoiceClient(inv);
   const connectedWrongWallet = connected && !connectedWalletMatchesClient;
+  const agentReviewColor = agentVerification?.verification_status === 'passed' ? '#4ADE80'
+    : agentVerification?.verification_status === 'failed' ? '#F87171'
+    : '#FCD34D';
+  const agentReviewLabel = agentVerification?.verification_status === 'passed' ? 'Looks complete'
+    : agentVerification?.verification_status === 'failed' ? 'Risk flagged'
+    : agentVerification?.verification_status === 'pending' ? 'Agent review pending'
+    : 'Needs review';
 
   return (
     <div style={cardStyle}>
@@ -410,6 +438,38 @@ const ApproveRelease: React.FC = () => {
           <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#94A3B8' }}>{invoiceId}</p>
         </div>
       </div>
+
+      {agentVerification && (
+        <div
+          className="rounded-lg p-3.5 mb-5"
+          style={{ backgroundColor: 'rgba(17,24,32,0.9)', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4" style={{ color: agentReviewColor }} />
+              <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: 600 }}>
+                Agent-assisted review
+              </p>
+            </div>
+            <span className="trust-status" style={{ color: agentReviewColor, backgroundColor: 'rgba(255,255,255,0.06)' }}>
+              {agentReviewLabel}
+            </span>
+          </div>
+          {agentVerification.summary && (
+            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.55 }}>
+              {agentVerification.summary}
+            </p>
+          )}
+          {agentVerification.risks && (
+            <p className="mt-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', lineHeight: 1.5 }}>
+              Risk note: {agentVerification.risks}
+            </p>
+          )}
+          <p className="mt-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', lineHeight: 1.5 }}>
+            This is a recommendation, not an automatic release. Approving or disputing still requires your wallet.
+          </p>
+        </div>
+      )}
 
       {/* Countdown timer */}
       {secondsLeft > 0 && !isDisputed && !alreadyApproved && (

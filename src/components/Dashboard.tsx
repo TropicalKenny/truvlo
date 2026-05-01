@@ -9,7 +9,7 @@ import { AnchorProvider } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
   RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp,
-  ArrowDownLeft, ExternalLink, Wallet as WalletIcon
+  ArrowDownLeft, ExternalLink, Wallet as WalletIcon, Bot
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -29,6 +29,11 @@ interface InvoiceWithKey {
 
 interface ClientInvoiceMeta {
   sender_name: string | null;
+}
+
+interface AgentVerificationMeta {
+  verification_status: 'pending' | 'passed' | 'failed' | 'needs_human_review';
+  confidence: 'low' | 'medium' | 'high';
 }
 
 type AmountLike =
@@ -159,6 +164,7 @@ const Dashboard: React.FC = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const displayName = profile?.display_name ?? null;
   const [clientInvoiceMeta, setClientInvoiceMeta] = useState<Record<string, ClientInvoiceMeta>>({});
+  const [agentVerificationMeta, setAgentVerificationMeta] = useState<Record<string, AgentVerificationMeta | null>>({});
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -320,6 +326,36 @@ const Dashboard: React.FC = () => {
     if (clientInvoices.length === 0) return;
     void loadClientInvoiceMeta(clientInvoices);
   }, [clientInvoices, loadClientInvoiceMeta]);
+
+  const loadAgentVerificationMeta = useCallback(async (invoices: InvoiceWithKey[]) => {
+    const missing = invoices.filter(({ account: inv }) => {
+      const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+      return !(key in agentVerificationMeta);
+    });
+    if (missing.length === 0) return;
+
+    const loadedEntries = await Promise.all(missing.map(async ({ account: inv }) => {
+      const creatorWallet = inv.creator.toBase58();
+      const key = `${inv.invoiceId}:${creatorWallet}`;
+      try {
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet });
+        const res = await fetch(`/api/agent-verifications?${params.toString()}`);
+        if (!res.ok) return [key, null] as const;
+        const data = await res.json() as { agent_verification?: AgentVerificationMeta | null };
+        return [key, data.agent_verification ?? null] as const;
+      } catch {
+        return [key, null] as const;
+      }
+    }));
+
+    setAgentVerificationMeta(prev => ({ ...prev, ...Object.fromEntries(loadedEntries) }));
+  }, [agentVerificationMeta]);
+
+  useEffect(() => {
+    const invoices = [...sentInvoices, ...clientInvoices];
+    if (invoices.length === 0) return;
+    void loadAgentVerificationMeta(invoices);
+  }, [sentInvoices, clientInvoices, loadAgentVerificationMeta]);
 
   // ============================================================
   // HELPERS
@@ -696,9 +732,19 @@ const Dashboard: React.FC = () => {
   const statusColors: Record<string, string> = {
     amber: '#F59E0B', orange: '#F97316', blue: '#3B82F6', green: '#22C55E', default: 'rgba(255,255,255,0.12)',
   };
+  const getAgentReviewStatus = (invoiceId: string, creatorWallet: string) => {
+    const review = agentVerificationMeta[`${invoiceId}:${creatorWallet}`];
+    if (!review) return null;
+    if (review.verification_status === 'passed') return { label: 'Looks complete', color: '#4ADE80' };
+    if (review.verification_status === 'failed') return { label: 'Risk flagged', color: '#F87171' };
+    if (review.verification_status === 'pending') return { label: 'Agent review pending', color: '#FCD34D' };
+    return { label: 'Needs review', color: '#FCD34D' };
+  };
 
   const renderCreatorCard = (invoice: InvoiceWithKey) => {
     const inv = invoice.account;
+    const creatorWallet = inv.creator.toBase58();
+    const agentReview = getAgentReviewStatus(inv.invoiceId, creatorWallet);
     const total = fromSmallestUnit(inv.amount, inv.tokenType);
     const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
     const progressPercent = total > 0 ? (paid / total) * 100 : 0;
@@ -759,6 +805,11 @@ const Dashboard: React.FC = () => {
             {releaseRequested && !isDisputed && releaseReady && (
               <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>
                 {inv.clientApproved ? 'Client approved - ready to withdraw' : 'Timeout passed - ready to withdraw'}
+              </p>
+            )}
+            {agentReview && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentReview.color, fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />{agentReview.label}
               </p>
             )}
           </div>
@@ -904,6 +955,7 @@ const Dashboard: React.FC = () => {
     const needsAction = releaseRequested && !clientApproved && !isDisputed && secondsLeft > 0;
     const creatorWallet = inv.creator.toBase58();
     const creatorName = clientInvoiceMeta[`${inv.invoiceId}:${creatorWallet}`]?.sender_name;
+    const agentReview = getAgentReviewStatus(inv.invoiceId, creatorWallet);
 
     const leftBorderColor = isDisputed ? statusColors.amber
       : needsAction ? statusColors.blue
@@ -941,6 +993,11 @@ const Dashboard: React.FC = () => {
             {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen - dispute under review</p>}
             {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested withdrawal - {formatCountdown(secondsLeft)}</p>}
             {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this withdrawal</p>}
+            {agentReview && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentReview.color, fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />{agentReview.label}
+              </p>
+            )}
           </div>
 
           <div>

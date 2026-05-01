@@ -54,6 +54,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const {
     invoiceId, creatorWallet, clientWallet, clientEmail, senderName,
     description, tokenType, amount, invoiceUrl,
+    jobType = 'human_service',
+    verificationMode = 'manual',
+    successCriteria,
+    deliverableUrl,
+    proofText,
   } = req.body;
 
   if (!invoiceId || !creatorWallet || !tokenType || amount == null || !invoiceUrl) {
@@ -65,6 +70,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (clientWallet && !isValidSolanaAddress(clientWallet)) {
     return res.status(400).json({ error: 'Invalid client wallet' });
+  }
+  if (!['human_service', 'research_task', 'code_task', 'api_task', 'file_delivery'].includes(jobType)) {
+    return res.status(400).json({ error: 'Invalid job type' });
+  }
+  if (!['manual', 'agent_assisted', 'deterministic'].includes(verificationMode)) {
+    return res.status(400).json({ error: 'Invalid verification mode' });
   }
 
   const normalizedCreatorWallet = normalizeSolanaAddress(creatorWallet);
@@ -95,6 +106,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     token_type: tokenType,
     amount,
     invoice_url: invoiceUrl,
+    job_type: jobType,
+    verification_mode: verificationMode,
+    success_criteria: successCriteria || null,
+    deliverable_url: deliverableUrl || null,
+    proof_text: proofText || null,
     email_sent: false,
     creator_email: creatorEmail,
   });
@@ -102,6 +118,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (dbError) {
     console.error('Supabase insert error:', dbError);
     return res.status(500).json({ error: 'Failed to save invoice metadata' });
+  }
+
+  if (verificationMode !== 'manual') {
+    const hasCriteria = typeof successCriteria === 'string' && successCriteria.trim().length > 0;
+    const hasProof = (typeof deliverableUrl === 'string' && deliverableUrl.trim().length > 0)
+      || (typeof proofText === 'string' && proofText.trim().length > 0);
+    await supabase.from('agent_verifications').upsert({
+      invoice_id: invoiceId,
+      creator_wallet: normalizedCreatorWallet,
+      client_wallet: clientWallet ? normalizeSolanaAddress(clientWallet) : null,
+      verification_status: hasCriteria && hasProof ? 'pending' : 'needs_human_review',
+      confidence: 'low',
+      summary: hasCriteria && hasProof
+        ? 'Agent-assisted review is ready to run when the client reviews the deliverable.'
+        : 'Agent-assisted review needs success criteria and proof before it can recommend an action.',
+      risks: 'This is a recommendation only. Client approval or dispute still requires a wallet signature.',
+      recommended_action: 'manual_review',
+      verifier_type: 'rule',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'invoice_id,creator_wallet' });
   }
 
   // 4. Send invoice email — non-fatal if it fails

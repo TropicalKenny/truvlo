@@ -29,6 +29,24 @@ type RecommendedAction = typeof VALID_RECOMMENDED_ACTIONS[number];
 type VerifierType = typeof VALID_VERIFIER_TYPES[number];
 type DevnetAgentAction = 'pay_invoice' | 'request_release' | 'approve_release' | 'raise_dispute';
 type X402TokenType = 'USDC' | 'SOL';
+type AgentPolicyRow = {
+  id: string;
+  invoice_id: string;
+  creator_wallet: string;
+  client_wallet: string;
+  client_privy_id: string;
+  agent_wallet: string;
+  max_amount: number | string;
+  token_type: 'USDC' | 'SOL';
+  can_pay: boolean;
+  can_approve_release: boolean;
+  can_raise_dispute: boolean;
+  approval_rule: 'verification_passed_and_recommended_approve';
+  status: 'active' | 'disabled' | 'expired';
+  expires_at: string;
+  created_at?: string;
+  updated_at?: string;
+};
 
 function isOneOf<T extends readonly string[]>(allowed: T, value: unknown): value is T[number] {
   return typeof value === 'string' && allowed.includes(value);
@@ -240,6 +258,117 @@ function createWallet(keypair: Keypair): Wallet {
   };
 }
 
+async function loadActiveAgentPolicy(input: {
+  invoiceId: string;
+  creatorWallet: string;
+  agentWallet: string;
+  action: DevnetAgentAction;
+  amount: number;
+  tokenType?: string | null;
+}): Promise<{ policy?: AgentPolicyRow; error?: { status: number; message: string } }> {
+  const { data, error } = await supabase
+    .from('agent_policies')
+    .select('id, invoice_id, creator_wallet, client_wallet, client_privy_id, agent_wallet, max_amount, token_type, can_pay, can_approve_release, can_raise_dispute, approval_rule, status, expires_at, created_at, updated_at')
+    .eq('invoice_id', input.invoiceId)
+    .eq('creator_wallet', input.creatorWallet)
+    .eq('agent_wallet', input.agentWallet)
+    .maybeSingle();
+
+  if (error) return { error: { status: 500, message: error.message } };
+  if (!data) return { error: { status: 403, message: 'No active Truvlo Agent policy exists for this invoice' } };
+
+  const policy = data as AgentPolicyRow;
+  if (policy.status !== 'active') return { error: { status: 403, message: 'Truvlo Agent policy is not active' } };
+  if (new Date(policy.expires_at).getTime() <= Date.now()) return { error: { status: 403, message: 'Truvlo Agent policy has expired' } };
+  if (input.amount > Number(policy.max_amount)) return { error: { status: 403, message: 'Truvlo Agent policy amount limit exceeded' } };
+  if (input.tokenType && policy.token_type !== input.tokenType) return { error: { status: 403, message: 'Truvlo Agent policy token mismatch' } };
+  if (input.action === 'pay_invoice' && !policy.can_pay) return { error: { status: 403, message: 'Truvlo Agent policy does not allow payment' } };
+  if (input.action === 'approve_release' && !policy.can_approve_release) return { error: { status: 403, message: 'Truvlo Agent policy does not allow approval' } };
+  if (input.action === 'raise_dispute' && !policy.can_raise_dispute) return { error: { status: 403, message: 'Truvlo Agent policy does not allow dispute actions' } };
+
+  return { policy };
+}
+
+export async function handleAgentPolicies(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const invoiceId = typeof req.query.invoiceId === 'string' ? req.query.invoiceId.trim() : '';
+    const creatorWallet = typeof req.query.creatorWallet === 'string' ? req.query.creatorWallet.trim() : '';
+    if (!invoiceId || !creatorWallet) return res.status(400).json({ error: 'Missing required fields' });
+    if (!isValidSolanaAddress(creatorWallet)) return res.status(400).json({ error: 'Invalid creator wallet' });
+
+    const { data, error } = await supabase
+      .from('agent_policies')
+      .select('invoice_id, creator_wallet, client_wallet, agent_wallet, max_amount, token_type, can_pay, can_approve_release, can_raise_dispute, approval_rule, status, expires_at, updated_at')
+      .eq('invoice_id', invoiceId)
+      .eq('creator_wallet', normalizeSolanaAddress(creatorWallet))
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: 'Failed to load Truvlo Agent policy' });
+    return res.status(200).json({ agent_policy: data ?? null });
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const clientPrivyId = await requireUserId(req);
+  if (!clientPrivyId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { invoiceId, creatorWallet, clientWallet, maxAmount, tokenType } = req.body as {
+    invoiceId?: string; creatorWallet?: string; clientWallet?: string; maxAmount?: number; tokenType?: 'USDC' | 'SOL';
+  };
+  if (!invoiceId || !creatorWallet || !clientWallet) return res.status(400).json({ error: 'Missing required fields' });
+  if (!isValidSolanaAddress(creatorWallet) || !isValidSolanaAddress(clientWallet)) return res.status(400).json({ error: 'Invalid wallet address' });
+
+  const normalizedCreatorWallet = normalizeSolanaAddress(creatorWallet);
+  const normalizedClientWallet = normalizeSolanaAddress(clientWallet);
+  if (!(await walletBelongsToUser(supabase, clientPrivyId, normalizedClientWallet))) {
+    return res.status(403).json({ error: 'Client wallet does not belong to the authenticated user' });
+  }
+
+  const agentKeypair = getAgentKeypair();
+  if (!agentKeypair) return res.status(500).json({ error: 'DEVNET_AGENT_SECRET_KEY is missing or invalid' });
+  const agentWallet = agentKeypair.publicKey.toBase58();
+  if (!isAllowedAgentWallet(agentWallet)) return res.status(403).json({ error: 'Devnet agent wallet is not allowlisted' });
+
+  const { data: invoiceMeta, error: metaError } = await supabase
+    .from('invoice_meta')
+    .select('invoice_id, creator_wallet, token_type, amount')
+    .eq('invoice_id', invoiceId)
+    .eq('creator_wallet', normalizedCreatorWallet)
+    .maybeSingle();
+  if (metaError) return res.status(500).json({ error: metaError.message });
+  if (!invoiceMeta) return res.status(404).json({ error: 'Invoice metadata not found' });
+
+  const policyTokenType = tokenType ?? invoiceMeta.token_type;
+  if (policyTokenType !== 'USDC' && policyTokenType !== 'SOL') return res.status(400).json({ error: 'Invalid token type' });
+  const policyMaxAmount = Number(maxAmount ?? invoiceMeta.amount);
+  if (!Number.isFinite(policyMaxAmount) || policyMaxAmount <= 0) return res.status(400).json({ error: 'Invalid max amount' });
+  if (policyMaxAmount > getMaxAmountUsd()) return res.status(403).json({ error: 'Truvlo Agent policy amount limit exceeded' });
+
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('agent_policies')
+    .upsert({
+      invoice_id: invoiceId,
+      creator_wallet: normalizedCreatorWallet,
+      client_wallet: normalizedClientWallet,
+      client_privy_id: clientPrivyId,
+      agent_wallet: agentWallet,
+      max_amount: policyMaxAmount,
+      token_type: policyTokenType,
+      can_pay: true,
+      can_approve_release: true,
+      can_raise_dispute: false,
+      approval_rule: 'verification_passed_and_recommended_approve',
+      status: 'active',
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'invoice_id,creator_wallet' })
+    .select('invoice_id, creator_wallet, client_wallet, agent_wallet, max_amount, token_type, can_pay, can_approve_release, can_raise_dispute, approval_rule, status, expires_at, updated_at')
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+
+  return res.status(200).json({ success: true, agent_policy: data });
+}
+
 export async function handleDevnetAgentActions(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   const gateError = assertDevnetAutomationEnabled();
@@ -281,8 +410,21 @@ export async function handleDevnetAgentActions(req: VercelRequest, res: VercelRe
     .limit(1)
     .maybeSingle();
   if (verificationError) return res.status(500).json({ error: verificationError.message });
+
+  if (action === 'pay_invoice' || action === 'approve_release' || action === 'raise_dispute') {
+    const { error: policyError } = await loadActiveAgentPolicy({
+      invoiceId,
+      creatorWallet: normalizedCreatorWallet,
+      agentWallet,
+      action,
+      amount: requestedAmount,
+      tokenType: tokenType ?? invoiceMeta.token_type,
+    });
+    if (policyError) return res.status(policyError.status).json({ error: policyError.message });
+  }
+
   if (action === 'request_release' && verification?.verification_status !== 'passed') return res.status(409).json({ error: 'Agent release request requires passed verification' });
-  if (action === 'approve_release' && verification?.recommended_action !== 'approve') return res.status(409).json({ error: 'Agent approval requires recommended_action approve' });
+  if (action === 'approve_release' && (verification?.verification_status !== 'passed' || verification?.recommended_action !== 'approve')) return res.status(409).json({ error: 'Agent approval requires passed verification and recommended_action approve' });
   if (action === 'raise_dispute' && verification?.recommended_action !== 'dispute') return res.status(409).json({ error: 'Agent dispute requires recommended_action dispute' });
   if (action === 'request_release' && agentWallet !== invoiceMeta.creator_wallet) return res.status(403).json({ error: 'Agent wallet must be the invoice creator to request release' });
   if ((action === 'approve_release' || action === 'raise_dispute') && agentWallet !== invoiceMeta.client_wallet) return res.status(403).json({ error: 'Agent wallet must be the paying client to approve or dispute' });

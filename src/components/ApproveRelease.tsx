@@ -29,6 +29,16 @@ type AgentVerification = {
   verifier_type: 'rule' | 'ai' | 'manual';
 };
 
+type AgentPolicy = {
+  status: 'active' | 'disabled' | 'expired';
+  agent_wallet: string;
+  max_amount: number | string;
+  token_type: 'USDC' | 'SOL';
+  can_approve_release: boolean;
+  approval_rule: 'verification_passed_and_recommended_approve';
+  expires_at: string;
+};
+
 function formatCountdown(seconds: number): string {
   if (seconds <= 0) return 'Auto-releasing soon';
   const days = Math.floor(seconds / 86400);
@@ -70,6 +80,7 @@ const ApproveRelease: React.FC = () => {
   const [sdkInitError, setSdkInitError] = useState<string | null>(null);
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
   const [agentVerification, setAgentVerification] = useState<AgentVerification | null>(null);
+  const [agentPolicy, setAgentPolicy] = useState<AgentPolicy | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -128,12 +139,19 @@ const ApproveRelease: React.FC = () => {
   useEffect(() => {
     if (!urlValid || !invoiceId || !creator) return;
     const params = new URLSearchParams({ invoiceId, creatorWallet: creator });
-    fetch(`/api/agent-verifications?${params.toString()}`)
-      .then(res => (res.ok ? res.json() : null))
-      .then((data: { agent_verification?: AgentVerification | null } | null) => {
-        setAgentVerification(data?.agent_verification ?? null);
-      })
-      .catch(() => setAgentVerification(null));
+    Promise.all([
+      fetch(`/api/agent-verifications?${params.toString()}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
+      fetch(`/api/agent-policies?${params.toString()}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
+    ]).then(([verificationData, policyData]: [
+      { agent_verification?: AgentVerification | null } | null,
+      { agent_policy?: AgentPolicy | null } | null,
+    ]) => {
+      setAgentVerification(verificationData?.agent_verification ?? null);
+      setAgentPolicy(policyData?.agent_policy ?? null);
+    }).catch(() => {
+      setAgentVerification(null);
+      setAgentPolicy(null);
+    });
   }, [urlValid, invoiceId, creator]);
 
   const fromSmallestUnit = (amount: unknown, tokenType: TokenType) => {
@@ -467,6 +485,26 @@ const ApproveRelease: React.FC = () => {
           )}
           <p className="mt-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', lineHeight: 1.5 }}>
             This is a recommendation, not an automatic release. Approving or disputing still requires your wallet.
+          </p>
+        </div>
+      )}
+
+      {agentPolicy?.status === 'active' && (
+        <div
+          className="rounded-lg p-3.5 mb-5"
+          style={{ backgroundColor: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)' }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Bot className="h-4 w-4" style={{ color: '#5EEAD4' }} />
+            <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: 600 }}>
+              Truvlo Agent is acting for the client
+            </p>
+          </div>
+          <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.55 }}>
+            This policy can approve release only if verification is passed and recommends approve. Disputes still require human review.
+          </p>
+          <p className="mt-2 trust-mono" style={{ color: '#64748B', fontSize: '11px' }}>
+            Agent {shortWallet(agentPolicy.agent_wallet)}
           </p>
         </div>
       )}

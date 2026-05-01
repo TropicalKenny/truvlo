@@ -40,6 +40,11 @@ interface AgentVerificationMeta {
   verifier_type?: 'rule' | 'ai' | 'manual';
 }
 
+interface AgentPolicyMeta {
+  status: 'active' | 'disabled' | 'expired';
+  agent_wallet: string;
+}
+
 type AmountLike =
 
   | number
@@ -169,6 +174,7 @@ const Dashboard: React.FC = () => {
   const displayName = profile?.display_name ?? null;
   const [clientInvoiceMeta, setClientInvoiceMeta] = useState<Record<string, ClientInvoiceMeta>>({});
   const [agentVerificationMeta, setAgentVerificationMeta] = useState<Record<string, AgentVerificationMeta | null>>({});
+  const [agentPolicyMeta, setAgentPolicyMeta] = useState<Record<string, AgentPolicyMeta | null>>({});
   const [proofModal, setProofModal] = useState<{
     invoiceId: string;
     creatorWallet: string;
@@ -362,11 +368,36 @@ const Dashboard: React.FC = () => {
     setAgentVerificationMeta(prev => ({ ...prev, ...Object.fromEntries(loadedEntries) }));
   }, [agentVerificationMeta]);
 
+  const loadAgentPolicyMeta = useCallback(async (invoices: InvoiceWithKey[]) => {
+    const missing = invoices.filter(({ account: inv }) => {
+      const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+      return !(key in agentPolicyMeta);
+    });
+    if (missing.length === 0) return;
+
+    const loadedEntries = await Promise.all(missing.map(async ({ account: inv }) => {
+      const creatorWallet = inv.creator.toBase58();
+      const key = `${inv.invoiceId}:${creatorWallet}`;
+      try {
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet });
+        const res = await fetch(`/api/agent-policies?${params.toString()}`);
+        if (!res.ok) return [key, null] as const;
+        const data = await res.json() as { agent_policy?: AgentPolicyMeta | null };
+        return [key, data.agent_policy ?? null] as const;
+      } catch {
+        return [key, null] as const;
+      }
+    }));
+
+    setAgentPolicyMeta(prev => ({ ...prev, ...Object.fromEntries(loadedEntries) }));
+  }, [agentPolicyMeta]);
+
   useEffect(() => {
     const invoices = [...sentInvoices, ...clientInvoices];
     if (invoices.length === 0) return;
     void loadAgentVerificationMeta(invoices);
-  }, [sentInvoices, clientInvoices, loadAgentVerificationMeta]);
+    void loadAgentPolicyMeta(invoices);
+  }, [sentInvoices, clientInvoices, loadAgentVerificationMeta, loadAgentPolicyMeta]);
 
   // ============================================================
   // HELPERS
@@ -817,11 +848,19 @@ const Dashboard: React.FC = () => {
     if (review.verification_status === 'pending') return { label: 'Agent review pending', color: '#FCD34D' };
     return { label: 'Needs review', color: '#FCD34D' };
   };
+  const getAgentPolicyStatus = (invoiceId: string, creatorWallet: string) => {
+    const policy = agentPolicyMeta[`${invoiceId}:${creatorWallet}`];
+    if (!policy) return null;
+    if (policy.status === 'active') return { label: 'Truvlo Agent enabled', color: '#5EEAD4' };
+    if (policy.status === 'expired') return { label: 'Agent policy expired', color: '#FCD34D' };
+    return { label: 'Agent policy disabled', color: '#94A3B8' };
+  };
 
   const renderCreatorCard = (invoice: InvoiceWithKey) => {
     const inv = invoice.account;
     const creatorWallet = inv.creator.toBase58();
     const agentReview = getAgentReviewStatus(inv.invoiceId, creatorWallet);
+    const agentPolicy = getAgentPolicyStatus(inv.invoiceId, creatorWallet);
     const total = fromSmallestUnit(inv.amount, inv.tokenType);
     const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
     const progressPercent = total > 0 ? (paid / total) * 100 : 0;
@@ -887,6 +926,11 @@ const Dashboard: React.FC = () => {
             {agentReview && (
               <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentReview.color, fontFamily: '"DM Sans", sans-serif' }}>
                 <Bot className="h-3 w-3" />{agentReview.label}
+              </p>
+            )}
+            {agentPolicy && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentPolicy.color, fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />{agentPolicy.label}
               </p>
             )}
           </div>
@@ -1052,6 +1096,7 @@ const Dashboard: React.FC = () => {
     const creatorWallet = inv.creator.toBase58();
     const creatorName = clientInvoiceMeta[`${inv.invoiceId}:${creatorWallet}`]?.sender_name;
     const agentReview = getAgentReviewStatus(inv.invoiceId, creatorWallet);
+    const agentPolicy = getAgentPolicyStatus(inv.invoiceId, creatorWallet);
 
     const leftBorderColor = isDisputed ? statusColors.amber
       : needsAction ? statusColors.blue
@@ -1092,6 +1137,11 @@ const Dashboard: React.FC = () => {
             {agentReview && (
               <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentReview.color, fontFamily: '"DM Sans", sans-serif' }}>
                 <Bot className="h-3 w-3" />{agentReview.label}
+              </p>
+            )}
+            {agentPolicy && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentPolicy.color, fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />{agentPolicy.label}
               </p>
             )}
           </div>

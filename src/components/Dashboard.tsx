@@ -553,6 +553,18 @@ const Dashboard: React.FC = () => {
       if (result.success) {
         try {
           const token = await getAccessToken();
+          await fetch('/api/disputes', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              action: 'open',
+              invoiceId: inv.invoiceId,
+              openedByWallet: publicKey?.toBase58() ?? '',
+            }),
+          });
           await fetch('/api/notify-creator', {
             method: 'POST',
             headers: {

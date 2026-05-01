@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import Header from '@/components/Header';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
-import { CONTRACT_PLATFORM_TREASURY_WALLET, WEB_ADMIN_WALLET_ADDRESS, isAdminWallet } from '@/lib/admin';
+import { CONTRACT_PLATFORM_TREASURY_WALLET } from '@/lib/admin';
 import {
   Banknote,
   FileText,
@@ -18,6 +18,12 @@ import {
 } from 'lucide-react';
 
 type AdminOverview = {
+  admin?: {
+    privy_id: string;
+    wallet_address: string;
+    role: 'owner' | 'dispute_admin' | 'payout_admin' | 'support_admin';
+  };
+  allowed_sections?: AdminSectionId[];
   warnings?: string[];
   summary: Record<string, unknown>;
   profiles: Array<Record<string, unknown>>;
@@ -27,6 +33,19 @@ type AdminOverview = {
   disputes: Array<Record<string, unknown>>;
   referral_rewards: Array<Record<string, unknown>>;
   payout_requests: Array<Record<string, unknown>>;
+};
+
+type AdminSectionId = 'invoices' | 'profiles' | 'wallets' | 'disputes' | 'failed_emails' | 'referral_rewards' | 'payout_requests';
+
+type AdminSection = {
+  id: AdminSectionId;
+  label: string;
+  title: string;
+  summaryKey: string;
+  dataKey: AdminSectionId;
+  icon: LucideIcon;
+  accent: string;
+  columns: Array<{ key: string; label: string; date?: boolean }>;
 };
 
 const colors = {
@@ -42,6 +61,129 @@ const colors = {
   amber: '#FCD34D',
   red: '#FCA5A5',
 };
+
+const adminSections: AdminSection[] = [
+  {
+    id: 'invoices',
+    label: 'Invoices',
+    title: 'Recent Invoices',
+    summaryKey: 'invoices',
+    dataKey: 'invoices',
+    icon: FileText,
+    accent: colors.teal,
+    columns: [
+      { key: 'invoice_id', label: 'Invoice' },
+      { key: 'sender_name', label: 'Creator name' },
+      { key: 'creator_wallet', label: 'Creator wallet' },
+      { key: 'client_wallet', label: 'Client wallet' },
+      { key: 'amount', label: 'Amount' },
+      { key: 'token_type', label: 'Token' },
+      { key: 'created_at', label: 'Created', date: true },
+    ],
+  },
+  {
+    id: 'profiles',
+    label: 'Profiles',
+    title: 'Recent Profiles',
+    summaryKey: 'profiles',
+    dataKey: 'profiles',
+    icon: Users,
+    accent: '#A8C7ED',
+    columns: [
+      { key: 'display_name', label: 'Name' },
+      { key: 'notification_email', label: 'Email' },
+      { key: 'privy_id', label: 'Privy ID' },
+      { key: 'referral_code', label: 'Code' },
+      { key: 'onboarding_completed_at', label: 'Onboarded', date: true },
+      { key: 'created_at', label: 'Created', date: true },
+    ],
+  },
+  {
+    id: 'wallets',
+    label: 'Wallets',
+    title: 'Wallets',
+    summaryKey: 'wallets',
+    dataKey: 'wallets',
+    icon: Wallet,
+    accent: '#60A5FA',
+    columns: [
+      { key: 'wallet_address', label: 'Wallet' },
+      { key: 'privy_id', label: 'Privy ID' },
+      { key: 'created_at', label: 'Created', date: true },
+    ],
+  },
+  {
+    id: 'disputes',
+    label: 'Disputes',
+    title: 'Disputes',
+    summaryKey: 'disputes',
+    dataKey: 'disputes',
+    icon: Gavel,
+    accent: colors.amber,
+    columns: [
+      { key: 'invoice_id', label: 'Invoice' },
+      { key: 'status', label: 'Status' },
+      { key: 'opened_by_role', label: 'Opened by' },
+      { key: 'creator_wallet', label: 'Creator' },
+      { key: 'client_wallet', label: 'Client' },
+      { key: 'opened_at', label: 'Opened', date: true },
+      { key: 'evidence_deadline_at', label: 'Deadline', date: true },
+    ],
+  },
+  {
+    id: 'failed_emails',
+    label: 'Email issues',
+    title: 'Email Delivery Issues',
+    summaryKey: 'failed_emails',
+    dataKey: 'failed_emails',
+    icon: MailWarning,
+    accent: colors.red,
+    columns: [
+      { key: 'invoice_id', label: 'Invoice' },
+      { key: 'sender_name', label: 'Creator name' },
+      { key: 'client_email', label: 'Client email' },
+      { key: 'amount', label: 'Amount' },
+      { key: 'token_type', label: 'Token' },
+      { key: 'created_at', label: 'Created', date: true },
+    ],
+  },
+  {
+    id: 'referral_rewards',
+    label: 'Rewards',
+    title: 'Referral Rewards',
+    summaryKey: 'referral_rewards',
+    dataKey: 'referral_rewards',
+    icon: Gift,
+    accent: '#34D399',
+    columns: [
+      { key: 'invoice_id', label: 'Invoice' },
+      { key: 'source_role', label: 'Source' },
+      { key: 'referral_code', label: 'Code' },
+      { key: 'reward_amount', label: 'Reward' },
+      { key: 'token_type', label: 'Token' },
+      { key: 'status', label: 'Status' },
+      { key: 'created_at', label: 'Created', date: true },
+    ],
+  },
+  {
+    id: 'payout_requests',
+    label: 'Payouts',
+    title: 'Payout Requests',
+    summaryKey: 'payout_requests',
+    dataKey: 'payout_requests',
+    icon: Banknote,
+    accent: '#C084FC',
+    columns: [
+      { key: 'privy_id', label: 'Privy ID' },
+      { key: 'amount', label: 'Amount' },
+      { key: 'token_type', label: 'Token' },
+      { key: 'status', label: 'Status' },
+      { key: 'payout_wallet', label: 'Wallet' },
+      { key: 'payout_cycle_date', label: 'Cycle' },
+      { key: 'requested_at', label: 'Requested', date: true },
+    ],
+  },
+];
 
 const panelStyle: React.CSSProperties = {
   backgroundColor: colors.surface,
@@ -71,18 +213,33 @@ function formatDate(value: unknown): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function getSectionFromHash(): AdminSectionId {
+  if (typeof window === 'undefined') return 'invoices';
+  const hash = window.location.hash.replace('#', '') as AdminSectionId;
+  return adminSections.some(section => section.id === hash) ? hash : 'invoices';
+}
+
 const StatCard = ({
   label,
   value,
   icon: Icon,
   accent,
+  active,
+  onClick,
 }: {
   label: string;
   value: unknown;
   icon: LucideIcon;
   accent: string;
+  active: boolean;
+  onClick: () => void;
 }) => (
-  <div className="admin-stat-card">
+  <button
+    type="button"
+    className={`admin-stat-card ${active ? 'admin-stat-card-active' : ''}`}
+    onClick={onClick}
+    aria-pressed={active}
+  >
     <div className="admin-stat-icon" style={{ color: accent, backgroundColor: `${accent}18`, borderColor: `${accent}35` }}>
       <Icon className="h-4 w-4" />
     </div>
@@ -90,7 +247,7 @@ const StatCard = ({
       <p style={labelStyle}>{label}</p>
       <p className="admin-stat-value">{String(value ?? 0)}</p>
     </div>
-  </div>
+  </button>
 );
 
 const DataPanel = ({
@@ -142,12 +299,14 @@ const AdminPage: React.FC = () => {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState<AdminSectionId>(() => getSectionFromHash());
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
 
   const activeAddress = activeWallet?.address ?? null;
-  const adminAllowed = useMemo(() => isAdminWallet(activeAddress), [activeAddress]);
 
-  const loadAdminData = async () => {
-    if (!adminAllowed || !activeAddress) return;
+  const loadAdminData = useCallback(async () => {
+    if (!activeAddress) return;
     setLoading(true);
     setError(null);
     try {
@@ -164,13 +323,19 @@ const AdminPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeAddress, getAccessToken]);
 
   useEffect(() => {
-    if (ready && authenticated && adminAllowed) {
+    if (ready && authenticated && activeAddress) {
       void loadAdminData();
     }
-  }, [ready, authenticated, adminAllowed, activeAddress]);
+  }, [ready, authenticated, activeAddress, loadAdminData]);
+
+  useEffect(() => {
+    const handleHashChange = () => setActiveSectionId(getSectionFromHash());
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   if (!ready) {
     return <div style={{ minHeight: '100vh', backgroundColor: colors.background }} />;
@@ -190,7 +355,7 @@ const AdminPage: React.FC = () => {
     );
   }
 
-  if (!adminAllowed) {
+  if (!activeAddress) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: colors.background }}>
         <Header />
@@ -198,10 +363,7 @@ const AdminPage: React.FC = () => {
           <ShieldAlert className="h-10 w-10 mx-auto mb-4" style={{ color: colors.red }} />
           <h1 style={{ color: colors.text, fontFamily: '"Space Grotesk", sans-serif', fontSize: '1.75rem', fontWeight: 700 }}>Unauthorized</h1>
           <p className="mt-3" style={{ color: colors.muted, fontFamily: '"DM Sans", sans-serif' }}>
-            Switch to the admin wallet to view this page.
-          </p>
-          <p className="mt-4" style={{ color: colors.dim, fontFamily: '"JetBrains Mono", monospace', fontSize: '11px' }}>
-            Web admin wallet: {WEB_ADMIN_WALLET_ADDRESS.slice(0, 8)}...{WEB_ADMIN_WALLET_ADDRESS.slice(-8)}
+            Connect an admin wallet to view this page.
           </p>
         </main>
       </div>
@@ -209,6 +371,44 @@ const AdminPage: React.FC = () => {
   }
 
   const summary = overview?.summary ?? {};
+  const visibleSections = overview?.allowed_sections
+    ? adminSections.filter(section => overview.allowed_sections?.includes(section.id))
+    : adminSections;
+  const activeSection = visibleSections.find(section => section.id === activeSectionId) ?? visibleSections[0] ?? adminSections[0];
+  const activeRows = overview?.[activeSection.dataKey] ?? [];
+  const adminRole = overview?.admin?.role ?? null;
+
+  const selectSection = (sectionId: AdminSectionId) => {
+    setActiveSectionId(sectionId);
+    if (window.location.hash !== `#${sectionId}`) {
+      window.history.replaceState(null, '', `#${sectionId}`);
+    }
+  };
+
+  const reconcileDisputes = async () => {
+    if (!activeAddress) return;
+    setReconciling(true);
+    setReconcileMessage(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/admin-overview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action: 'reconcile_disputes', adminWallet: activeAddress }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Reconciliation failed');
+      setReconcileMessage(`Checked ${data.checked ?? 0}, backfilled ${data.created ?? 0}.`);
+      await loadAdminData();
+    } catch (err) {
+      setReconcileMessage(err instanceof Error ? err.message : 'Reconciliation failed');
+    } finally {
+      setReconciling(false);
+    }
+  };
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: colors.background }}>
@@ -250,6 +450,22 @@ const AdminPage: React.FC = () => {
           font-family: "JetBrains Mono", monospace;
           font-size: 11px;
           margin-top: 12px;
+        }
+
+        .admin-role-badge {
+          display: inline-flex;
+          align-items: center;
+          min-height: 26px;
+          padding: 0 10px;
+          margin-top: 14px;
+          border-radius: 999px;
+          border: 1px solid rgba(45, 212, 191, 0.32);
+          background: rgba(45, 212, 191, 0.08);
+          color: ${colors.teal};
+          font-family: "DM Sans", sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: capitalize;
         }
 
         .admin-primary-button {
@@ -296,6 +512,20 @@ const AdminPage: React.FC = () => {
           font-family: "DM Sans", sans-serif;
         }
 
+        .admin-section-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .admin-muted-note {
+          color: ${colors.dim};
+          font-family: "DM Sans", sans-serif;
+          font-size: 13px;
+        }
+
         .admin-stat-grid {
           display: grid;
           grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -309,10 +539,70 @@ const AdminPage: React.FC = () => {
           border-radius: 10px;
           background: ${colors.surface};
           border: 1px solid ${colors.border};
+          text-align: left;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
           gap: 12px;
+          transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+        }
+
+        .admin-stat-card:hover {
+          border-color: rgba(45, 212, 191, 0.34);
+          background: #17202A;
+        }
+
+        .admin-stat-card:active {
+          transform: translateY(1px);
+        }
+
+        .admin-stat-card-active {
+          border-color: rgba(45, 212, 191, 0.62);
+          background: rgba(45, 212, 191, 0.07);
+          box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.18);
+        }
+
+        .admin-section-tabs {
+          display: flex;
+          gap: 8px;
+          padding: 8px;
+          margin: -12px 0 18px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          touch-action: pan-x;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
+          border: 1px solid ${colors.border};
+          border-radius: 10px;
+          background: ${colors.surfaceSoft};
+        }
+
+        .admin-section-tab {
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 36px;
+          padding: 0 12px;
+          border-radius: 8px;
+          color: ${colors.muted};
+          font-family: "DM Sans", sans-serif;
+          font-size: 13px;
+          font-weight: 700;
+          border: 1px solid transparent;
+          transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+        }
+
+        .admin-section-tab:hover {
+          color: ${colors.text};
+          background: rgba(148, 163, 184, 0.07);
+        }
+
+        .admin-section-tab-active {
+          color: ${colors.text};
+          background: ${colors.surface};
+          border-color: rgba(45, 212, 191, 0.42);
         }
 
         .admin-stat-icon {
@@ -455,8 +745,9 @@ const AdminPage: React.FC = () => {
             <h1 className="admin-title">Admin Dashboard</h1>
             <p className="admin-subtitle">Visibility across invoices, users, referrals, disputes, payouts, and email delivery.</p>
             <p className="admin-wallet-line">
-              Web admin: {WEB_ADMIN_WALLET_ADDRESS.slice(0, 8)}...{WEB_ADMIN_WALLET_ADDRESS.slice(-8)} - On-chain treasury: {CONTRACT_PLATFORM_TREASURY_WALLET.slice(0, 8)}...{CONTRACT_PLATFORM_TREASURY_WALLET.slice(-8)}
+              Connected wallet: {activeAddress.slice(0, 8)}...{activeAddress.slice(-8)} - On-chain treasury: {CONTRACT_PLATFORM_TREASURY_WALLET.slice(0, 8)}...{CONTRACT_PLATFORM_TREASURY_WALLET.slice(-8)}
             </p>
+            {adminRole && <span className="admin-role-badge">{adminRole.replace('_', ' ')}</span>}
           </div>
           <button
             onClick={loadAdminData}
@@ -491,96 +782,59 @@ const AdminPage: React.FC = () => {
         ) : (
           <>
             <div className="admin-stat-grid">
-              <StatCard label="Invoices" value={summary.invoices} icon={FileText} accent={colors.teal} />
-              <StatCard label="Profiles" value={summary.profiles} icon={Users} accent="#A8C7ED" />
-              <StatCard label="Wallets" value={summary.wallets} icon={Wallet} accent="#60A5FA" />
-              <StatCard label="Disputes" value={summary.disputes} icon={Gavel} accent={colors.amber} />
-              <StatCard label="Email issues" value={summary.failed_emails} icon={MailWarning} accent={colors.red} />
-              <StatCard label="Rewards" value={summary.referral_rewards} icon={Gift} accent="#34D399" />
-              <StatCard label="Payouts" value={summary.payout_requests} icon={Banknote} accent="#C084FC" />
+              {visibleSections.map(section => (
+                <StatCard
+                  key={section.id}
+                  label={section.label}
+                  value={summary[section.summaryKey]}
+                  icon={section.icon}
+                  accent={section.accent}
+                  active={activeSection.id === section.id}
+                  onClick={() => selectSection(section.id)}
+                />
+              ))}
             </div>
+
+            <div className="admin-section-tabs" role="tablist" aria-label="Admin sections">
+              {visibleSections.map(section => {
+                const Icon = section.icon;
+                const active = activeSection.id === section.id;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={`admin-section-tab ${active ? 'admin-section-tab-active' : ''}`}
+                    onClick={() => selectSection(section.id)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {section.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeSection.id === 'disputes' && adminRole === 'owner' && (
+              <div className="admin-section-toolbar">
+                <p className="admin-muted-note">{reconcileMessage || 'Backfill on-chain disputes that are missing from admin records.'}</p>
+                <button
+                  type="button"
+                  className="admin-primary-button"
+                  onClick={reconcileDisputes}
+                  disabled={reconciling}
+                >
+                  {reconciling ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Reconcile disputes
+                </button>
+              </div>
+            )}
 
             <div className="admin-data-stack">
               <DataPanel
-                title="Recent Invoices"
-                rows={overview?.invoices ?? []}
-                columns={[
-                  { key: 'invoice_id', label: 'Invoice' },
-                  { key: 'sender_name', label: 'Creator name' },
-                  { key: 'creator_wallet', label: 'Creator wallet' },
-                  { key: 'client_wallet', label: 'Client wallet' },
-                  { key: 'amount', label: 'Amount' },
-                  { key: 'token_type', label: 'Token' },
-                  { key: 'created_at', label: 'Created', date: true },
-                ]}
-              />
-
-              <DataPanel
-                title="Disputes"
-                rows={overview?.disputes ?? []}
-                columns={[
-                  { key: 'invoice_id', label: 'Invoice' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'opened_by_role', label: 'Opened by' },
-                  { key: 'creator_wallet', label: 'Creator' },
-                  { key: 'client_wallet', label: 'Client' },
-                  { key: 'opened_at', label: 'Opened', date: true },
-                  { key: 'evidence_deadline_at', label: 'Deadline', date: true },
-                ]}
-              />
-
-              <DataPanel
-                title="Referral Rewards"
-                rows={overview?.referral_rewards ?? []}
-                columns={[
-                  { key: 'invoice_id', label: 'Invoice' },
-                  { key: 'source_role', label: 'Source' },
-                  { key: 'referral_code', label: 'Code' },
-                  { key: 'reward_amount', label: 'Reward' },
-                  { key: 'token_type', label: 'Token' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'created_at', label: 'Created', date: true },
-                ]}
-              />
-
-              <DataPanel
-                title="Payout Requests"
-                rows={overview?.payout_requests ?? []}
-                columns={[
-                  { key: 'privy_id', label: 'Privy ID' },
-                  { key: 'amount', label: 'Amount' },
-                  { key: 'token_type', label: 'Token' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'payout_wallet', label: 'Wallet' },
-                  { key: 'payout_cycle_date', label: 'Cycle' },
-                  { key: 'requested_at', label: 'Requested', date: true },
-                ]}
-              />
-
-              <DataPanel
-                title="Email Delivery Issues"
-                rows={overview?.failed_emails ?? []}
-                columns={[
-                  { key: 'invoice_id', label: 'Invoice' },
-                  { key: 'sender_name', label: 'Creator name' },
-                  { key: 'client_email', label: 'Client email' },
-                  { key: 'amount', label: 'Amount' },
-                  { key: 'token_type', label: 'Token' },
-                  { key: 'created_at', label: 'Created', date: true },
-                ]}
-              />
-
-              <DataPanel
-                title="Recent Profiles"
-                rows={overview?.profiles ?? []}
-                columns={[
-                  { key: 'display_name', label: 'Name' },
-                  { key: 'notification_email', label: 'Email' },
-                  { key: 'privy_id', label: 'Privy ID' },
-                  { key: 'referral_code', label: 'Code' },
-                  { key: 'onboarding_completed_at', label: 'Onboarded', date: true },
-                  { key: 'created_at', label: 'Created', date: true },
-                ]}
+                title={activeSection.title}
+                rows={activeRows}
+                columns={activeSection.columns}
               />
             </div>
           </>

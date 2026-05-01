@@ -6,6 +6,8 @@ import {
   supabase,
   walletBelongsToUser,
 } from './_shared.js';
+import { logAdminAction, requireAdmin } from './_admin.js';
+import { sendDisputeAdminAlerts } from './_admin-alerts.js';
 
 type DisputeDecision = 'creator' | 'client' | 'split';
 type DisputeSide = 'creator' | 'client' | 'admin';
@@ -22,12 +24,22 @@ function getAdminPrivyIds(): string[] {
     .filter(Boolean);
 }
 
+async function loadAdminFromRequest(req: VercelRequest, permission: 'disputes' | 'dispute_resolve') {
+  const wallet = typeof req.query.adminWallet === 'string'
+    ? req.query.adminWallet
+    : typeof req.body?.adminWallet === 'string'
+      ? req.body.adminWallet
+      : undefined;
+  return requireAdmin(req, wallet, permission);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = await requireUserId(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
   const adminIds = getAdminPrivyIds();
-  const isAdmin = adminIds.includes(userId);
+  const requestAdmin = await loadAdminFromRequest(req, 'disputes');
+  const isAdmin = Boolean(requestAdmin) || adminIds.includes(userId);
 
   // ─────────────────────────────────────────────────────────────────
   // GET /api/disputes?invoiceId=...
@@ -146,7 +158,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (error) {
         // Postgres unique_violation — a case already exists for this invoice.
         if (error.code === '23505') {
-          return res.status(409).json({ error: 'A dispute already exists for this invoice' });
+          const { data: existing } = await supabase
+            .from('dispute_cases')
+            .select('*')
+            .eq('invoice_id', invoiceId)
+            .maybeSingle();
+          return res.status(200).json({ success: true, already_exists: true, dispute_case: existing });
         }
         return res.status(500).json({ error: error.message });
       }
@@ -156,6 +173,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .update({ dispute_case_id: disputeCase.id })
         .eq('invoice_id', invoiceId)
         .eq('creator_wallet', invoiceMeta.creator_wallet);
+
+      await sendDisputeAdminAlerts({
+        invoiceId,
+        creatorWallet: invoiceMeta.creator_wallet,
+        clientWallet: invoiceMeta.client_wallet ?? null,
+        openedByRole: derivedRole,
+        status: 'open',
+        openedAt: disputeCase.opened_at ?? new Date().toISOString(),
+      });
 
       return res.status(200).json({ success: true, dispute_case: disputeCase });
     }
@@ -242,10 +268,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // POST action=resolve  (unchanged — already admin-gated)
     // ─────────────────────────────────────────────────────────────────
     if (action === 'resolve') {
-      if (adminIds.length === 0) {
+      const admin = await loadAdminFromRequest(req, 'dispute_resolve');
+      if (!admin && adminIds.length === 0) {
         return res.status(503).json({ error: 'Dispute admin is not configured' });
       }
-      if (!isAdmin) {
+      if (!admin && !isAdmin) {
         return res.status(403).json({ error: 'Admin access required' });
       }
 
@@ -297,6 +324,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (error) return res.status(500).json({ error: error.message });
+      if (admin) {
+        await logAdminAction(admin, 'dispute.resolve', 'dispute_case', caseId, {
+          decision: parsedDecision,
+          creator_share_bps: shares.creator,
+          client_share_bps: shares.client,
+        }).catch(logError => console.error('Admin audit log error:', logError));
+      }
       return res.status(200).json({ success: true, dispute_case: data });
     }
 

@@ -181,6 +181,18 @@ const ApproveRelease: React.FC = () => {
       if (result.success) {
         setPageState({ type: 'disputed' });
         const token = await getAccessToken();
+        await fetch('/api/disputes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            action: 'open',
+            invoiceId,
+            openedByWallet: publicKey?.toBase58() ?? '',
+          }),
+        }).catch(error => console.error('Dispute case recording failed:', error));
         fetch('/api/notify-creator', {
           method: 'POST',
           headers: {

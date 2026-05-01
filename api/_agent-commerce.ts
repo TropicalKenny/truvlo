@@ -305,6 +305,20 @@ export async function handleDevnetAgentActions(req: VercelRequest, res: VercelRe
   }
   if (!result.success) return res.status(500).json({ error: result.error || 'Devnet agent action failed' });
 
+  if (action === 'pay_invoice') {
+    await supabase
+      .from('invoice_meta')
+      .update({ client_wallet: agentWallet })
+      .eq('invoice_id', invoiceId)
+      .eq('creator_wallet', normalizedCreatorWallet);
+
+    await supabase
+      .from('agent_verifications')
+      .update({ client_wallet: agentWallet })
+      .eq('invoice_id', invoiceId)
+      .eq('creator_wallet', normalizedCreatorWallet);
+  }
+
   await supabase.from('devnet_agent_actions').insert({
     invoice_id: invoiceId,
     creator_wallet: normalizedCreatorWallet,

@@ -17,6 +17,7 @@ assert.match(agentActionsSource, /pay_invoice.*request_release.*approve_release.
 assert.doesNotMatch(agentActionsSource, /resolveDispute|storeVerdictHash/, 'agent actions must not resolve disputes autonomously');
 assert.match(agentActionsSource, /recommended_action.*approve/s, 'agent approval should require an approve recommendation');
 assert.match(agentActionsSource, /recommended_action.*dispute/s, 'agent dispute should require a dispute recommendation');
+assert.match(agentActionsSource, /action === 'pay_invoice'[\s\S]*client_wallet: agentWallet/, 'agent payment should mark the configured agent wallet as the invoice client');
 assert.match(agentActionsSource, /Truvlo devnet demo automation/, 'agent response should label automation as devnet demo behavior');
 
 assert.match(x402IntentSource, /402/, 'x402 intent route should emit Payment Required responses');

@@ -7,11 +7,21 @@ import {
   walletBelongsToUser,
 } from './_shared.js';
 import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
+import {
+  handleAgentVerifications,
+  handleDevnetAgentActions,
+  handleX402EscrowIntent,
+} from './_agent-commerce.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const agentEndpoint = typeof req.query.agentEndpoint === 'string' ? req.query.agentEndpoint : '';
+  if (agentEndpoint === 'agent-verifications') return handleAgentVerifications(req, res);
+  if (agentEndpoint === 'devnet-agent-actions') return handleDevnetAgentActions(req, res);
+  if (agentEndpoint === 'x402-escrow-intent') return handleX402EscrowIntent(req, res);
+
   if (req.method === 'GET') {
     const invoiceId = typeof req.query.invoiceId === 'string' ? req.query.invoiceId : '';
     const creatorWallet = typeof req.query.creatorWallet === 'string' ? req.query.creatorWallet : '';

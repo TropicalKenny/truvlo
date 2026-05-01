@@ -5,8 +5,13 @@ const createInvoiceSource = await readFile('src/components/CreateInvoiceForm.tsx
 const approveReleaseSource = await readFile('src/components/ApproveRelease.tsx', 'utf8');
 const dashboardSource = await readFile('src/components/Dashboard.tsx', 'utf8');
 const createInvoiceMetaSource = await readFile('api/create-invoice-meta.ts', 'utf8');
-const verificationApiSource = await readFile('api/agent-verifications.ts', 'utf8');
+const verificationApiSource = await readFile('api/_agent-commerce.ts', 'utf8');
 const migrationSource = await readFile('supabase/migrations/20260501_agent_assisted_escrow.sql', 'utf8');
+
+const verificationHandlerSource = verificationApiSource.slice(
+  verificationApiSource.indexOf('export async function handleAgentVerifications'),
+  verificationApiSource.indexOf('function assertDevnetAutomationEnabled'),
+);
 
 assert.match(createInvoiceSource, /Agent-assisted escrow/, 'invoice form should expose agent-assisted escrow mode');
 assert.match(createInvoiceSource, /jobType/, 'invoice form should track agent job type');
@@ -22,14 +27,15 @@ assert.match(createInvoiceMetaSource, /verificationMode/, 'create-invoice metada
 assert.match(createInvoiceMetaSource, /successCriteria/, 'create-invoice metadata API should persist success criteria');
 assert.match(createInvoiceMetaSource, /deliverableUrl/, 'create-invoice metadata API should persist deliverable URL');
 assert.match(createInvoiceMetaSource, /proofText/, 'create-invoice metadata API should persist proof text');
+assert.match(createInvoiceMetaSource, /handleAgentVerifications/, 'create-invoice metadata API should dispatch agent verification rewrites');
 
 assert.match(verificationApiSource, /VALID_VERIFICATION_STATUSES/, 'verification API should whitelist verification statuses');
 assert.match(verificationApiSource, /pending.*passed.*failed.*needs_human_review/s, 'verification API should include all allowed statuses');
 assert.match(verificationApiSource, /VALID_RECOMMENDED_ACTIONS/, 'verification API should whitelist recommended actions');
 assert.match(verificationApiSource, /approve.*dispute.*manual_review/s, 'verification API should keep recommendations advisory');
-assert.doesNotMatch(verificationApiSource, /approveRelease|raiseDispute|releaseFunds|resolveDispute/, 'verification API must not move escrow funds');
-assert.match(verificationApiSource, /from\('agent_verifications'\)/, 'verification API should use the agent_verifications table');
-assert.match(verificationApiSource, /from\('invoice_meta'\)/, 'verification API should authorize against invoice metadata');
+assert.doesNotMatch(verificationHandlerSource, /approveRelease|raiseDispute|releaseFunds|resolveDispute/, 'verification API must not move escrow funds');
+assert.match(verificationHandlerSource, /from\('agent_verifications'\)/, 'verification API should use the agent_verifications table');
+assert.match(verificationHandlerSource, /from\('invoice_meta'\)/, 'verification API should authorize against invoice metadata');
 
 assert.match(approveReleaseSource, /agentVerification/, 'approval page should load agent verification data');
 assert.match(approveReleaseSource, /Agent-assisted review/, 'approval page should show agent review copy');

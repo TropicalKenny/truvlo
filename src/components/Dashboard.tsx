@@ -628,9 +628,16 @@ const Dashboard: React.FC = () => {
     getSecondsRemaining(i.account) > 0
   );
   const paymentHistory = clientInvoices;
-  const disputeCount = sentInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length
-    + clientInvoices.filter(i => i.account.status === InvoiceStatus.Disputed).length;
-  const activeDisputeSample = [...sentInvoices, ...clientInvoices].find(i => i.account.status === InvoiceStatus.Disputed)?.account.invoiceId;
+  const disputedInvoices = useMemo(() => {
+    const byInvoice = new Map<string, InvoiceWithKey>();
+    for (const invoice of [...sentInvoices, ...clientInvoices]) {
+      if (invoice.account.status !== InvoiceStatus.Disputed) continue;
+      byInvoice.set(`${invoice.account.invoiceId}:${invoice.account.creator.toBase58()}`, invoice);
+    }
+    return Array.from(byInvoice.values());
+  }, [sentInvoices, clientInvoices]);
+  const disputeCount = disputedInvoices.length;
+  const activeDisputeSample = disputedInvoices[0]?.account.invoiceId;
 
   const clientStats = {
     total: clientInvoices.length,

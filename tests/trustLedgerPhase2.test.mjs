@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 const hero = await readFile('src/components/Hero.tsx', 'utf8');
 const features = await readFile('src/components/Features.tsx', 'utf8');
 const dashboard = await readFile('src/components/Dashboard.tsx', 'utf8');
+const footer = await readFile('src/components/Footer.tsx', 'utf8');
 const css = await readFile('src/index.css', 'utf8');
 const touchedSources = [
   'src/components/Hero.tsx',
@@ -31,6 +32,8 @@ assert.match(
   /Real invoice states, client approvals, and managed dispute records in one ledger/,
   'hero should state the Trust Ledger framing',
 );
+assert.doesNotMatch(hero, /View demo|Play/, 'hero should not imply a demo video exists');
+assert.match(hero, /View dashboard/, 'hero secondary CTA should use truthful product wording');
 
 assert.match(features, /ledgerRules/, 'features should be a ledger rules surface, not a generic card grid');
 assert.match(features, /grid-cols-\[1\.15fr_0\.7fr_1\.35fr_1\.35fr\]/, 'features should use table-like ledger columns on desktop');
@@ -42,6 +45,14 @@ assert.match(dashboard, /trust-ledger-heading/, 'dashboard should include deskto
 assert.match(dashboard, /trust-panel-subtle/, 'dashboard should use shared subtle panels');
 assert.match(dashboard, /Client approved - ready to withdraw/, 'creator release copy should explicitly tie readiness to client approval');
 assert.match(dashboard, /You approved this withdrawal/, 'client history should show approval state');
+assert.match(dashboard, /new Map<string, InvoiceWithKey>\(\)/, 'dashboard should dedupe disputed invoices before counting them');
+assert.match(dashboard, /disputeCount = disputedInvoices\.length/, 'dashboard dispute alert should use the deduped dispute count');
+
+assert.doesNotMatch(
+  footer,
+  /VITE_SOLANA_NETWORK|USDC \/ SOL|\['Network'|\['Tokens'|\['Escrow'|\['Disputes'/,
+  'footer should not render the removed network/token/dispute grid',
+);
 
 assert.match(css, /\.trust-tabs\s*\{[\s\S]*overflow-x:\s*auto/, 'trust tabs should scroll horizontally');
 assert.match(css, /\.trust-tabs\s*\{[\s\S]*overflow-y:\s*hidden/, 'trust tabs should block vertical overflow');

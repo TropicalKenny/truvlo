@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
-import { ArrowRight, CheckCircle2, Clock3, ExternalLink, LockKeyhole, Play, ShieldCheck } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, ExternalLink, LockKeyhole, ShieldCheck } from 'lucide-react';
 
 const lifecycle = [
   { title: 'Created', meta: 'Apr 24, 2026 - invoice shared', status: 'Created', statusClass: 'trust-status-blue' },
@@ -66,8 +66,8 @@ const Hero: React.FC = () => {
                 disabled={!ready}
                 className="trust-button-secondary inline-flex items-center justify-center gap-2 px-6 py-3 text-sm"
               >
-                View demo
-                <Play className="h-4 w-4" />
+                View dashboard
+                <ArrowRight className="h-4 w-4" />
               </button>
             </div>
           </div>

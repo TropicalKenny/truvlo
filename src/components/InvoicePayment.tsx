@@ -38,9 +38,9 @@ interface InvoiceMeta {
 const cardStyle: React.CSSProperties = {
   maxWidth: '440px',
   margin: '0 auto',
-  backgroundColor: '#161B22',
-  border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: '16px',
+  backgroundColor: 'var(--tl-surface)',
+  border: '1px solid var(--tl-border)',
+  borderRadius: '8px',
   overflow: 'hidden',
 };
 
@@ -51,7 +51,7 @@ function getClientPaymentErrorMessage(error: unknown, tokenType: TokenType): str
   }
   if (errorStr.toLowerCase().includes('insufficient')) {
     const token = tokenType === TokenType.USDC ? 'USDC' : 'SOL';
-    return `Your wallet does not have enough ${token} to complete this payment. Add funds to this wallet, then try again.`;
+    return `Your wallet needs more ${token} for this payment and network fees. Add funds to the wallet connected here, then try again.`;
   }
   return 'We could not complete the payment. Please try again.';
 }
@@ -677,7 +677,7 @@ const InvoicePayment: React.FC = () => {
                   >
                     <Wallet className="h-4 w-4" style={{ color: '#64748B' }} />
                     <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
-                      No Truvlo profile setup needed
+                      No Truvlo profile setup needed. Use a wallet you can access later to approve release or raise a dispute.
                     </span>
                   </div>
                   <button

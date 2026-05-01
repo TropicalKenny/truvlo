@@ -10,12 +10,12 @@ assert.match(
 );
 assert.match(
   source,
-  /Your wallet does not have enough \$\{token\} to complete this payment/,
-  'insufficient funds copy should clearly tell the client what is missing',
+  /Your wallet needs more \$\{token\} for this payment and network fees/,
+  'insufficient funds copy should clearly tell the client what is missing and mention fees',
 );
 assert.match(
   source,
-  /Add funds to this wallet, then try again/,
+  /Add funds to the wallet connected here, then try again/,
   'insufficient funds copy should give the client a clear next step',
 );
 assert.doesNotMatch(

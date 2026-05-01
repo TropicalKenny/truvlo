@@ -1,60 +1,58 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePrivy } from '@privy-io/react-auth';
-import { AlertTriangle, ArrowRight, Coins, FileCheck2, Shield, Timer, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Coins, FileCheck2, Shield, Timer, Users } from 'lucide-react';
 
-const features = [
+const ledgerRules = [
   {
     icon: Shield,
-    title: 'Escrow protection',
-    body: "Funds are held by the smart contract after payment, not by Truvlo's bank account.",
-    tone: 'teal',
+    control: 'Escrow custody',
+    state: 'On-chain',
+    stateClass: 'trust-status-blue',
+    userImpact: 'Funds sit in the smart contract after payment.',
+    riskControl: "Truvlo does not hold client funds in a bank account.",
   },
   {
     icon: Users,
-    title: 'Client approval',
-    body: 'Creators request withdrawal. Clients approve, dispute, or the release window runs its course.',
-    tone: 'blue',
+    control: 'Client approval',
+    state: 'Required',
+    stateClass: 'trust-status-blue',
+    userImpact: 'Creators request release when work is ready.',
+    riskControl: 'Clients can approve or dispute before funds move.',
   },
   {
     icon: Coins,
-    title: 'USDC and SOL',
-    body: 'Create invoices in the tokens your client can actually pay with on Solana devnet.',
-    tone: 'green',
+    control: 'USDC and SOL',
+    state: 'Supported',
+    stateClass: 'trust-status-green',
+    userImpact: 'Invoices can be paid with the tokens Truvlo supports today.',
+    riskControl: 'Amount and token stay visible through the invoice record.',
   },
   {
     icon: AlertTriangle,
-    title: 'Managed disputes',
-    body: 'If a client disputes, funds freeze while the platform reviews evidence and applies the final split on-chain.',
-    tone: 'amber',
+    control: 'Managed disputes',
+    state: 'Frozen',
+    stateClass: 'trust-status-amber',
+    userImpact: 'Disputed funds stop moving while evidence is reviewed.',
+    riskControl: 'Admin-operated resolution records the final outcome.',
   },
   {
     icon: Timer,
-    title: 'Release window',
-    body: 'A 7-day approval window protects creators when a client stops responding after work is delivered.',
-    tone: 'blue',
+    control: 'Release window',
+    state: '7 days',
+    stateClass: 'trust-status-blue',
+    userImpact: 'Creators are not stuck forever after requesting release.',
+    riskControl: 'The client still has time to respond before timeout.',
   },
   {
     icon: FileCheck2,
-    title: 'Account record',
-    body: 'Completed invoices build a readable account history across the wallets linked to one profile.',
-    tone: 'teal',
+    control: 'Account record',
+    state: 'Tracked',
+    stateClass: 'trust-status-green',
+    userImpact: 'Completed invoices build readable payment history.',
+    riskControl: 'Wallet-linked history helps both sides understand context.',
   },
 ];
-
-const toneColor: Record<string, string> = {
-  teal: 'var(--tl-teal)',
-  blue: '#93c5fd',
-  green: '#4ade80',
-  amber: '#fcd34d',
-};
-
-const toneBg: Record<string, string> = {
-  teal: 'var(--tl-teal-soft)',
-  blue: 'rgba(59, 130, 246, 0.14)',
-  green: 'rgba(34, 197, 94, 0.12)',
-  amber: 'rgba(245, 158, 11, 0.14)',
-};
 
 const Features: React.FC = () => {
   const { ready, authenticated, login } = usePrivy();
@@ -69,11 +67,10 @@ const Features: React.FC = () => {
               className="text-3xl md:text-4xl"
               style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 800, color: 'var(--tl-text)', letterSpacing: '-0.03em' }}
             >
-              Built around payment confidence
+              Controls that make the payment record clear
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-7" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
-              The product should read like an operating ledger: what was created, what was paid,
-              what needs approval, and what is ready to withdraw.
+              Truvlo is built to show what happened, what is waiting, and who needs to act next.
             </p>
           </div>
           <button
@@ -89,26 +86,54 @@ const Features: React.FC = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-px overflow-hidden trust-panel">
-          {features.map((feature) => {
-            const Icon = feature.icon;
+        <div className="trust-panel overflow-hidden">
+          <div className="hidden lg:grid grid-cols-[1.15fr_0.7fr_1.35fr_1.35fr] gap-4 px-5 py-3 border-b" style={{ borderColor: 'rgba(148, 163, 184, 0.12)' }}>
+            <span className="trust-label">Control</span>
+            <span className="trust-label">State</span>
+            <span className="trust-label">User impact</span>
+            <span className="trust-label">Risk control</span>
+          </div>
+
+          {ledgerRules.map((rule) => {
+            const Icon = rule.icon;
             return (
-              <div key={feature.title} className="p-6" style={{ backgroundColor: 'rgba(17, 24, 32, 0.72)' }}>
-                <div
-                  className="mb-5 flex h-10 w-10 items-center justify-center rounded-md"
-                  style={{ backgroundColor: toneBg[feature.tone], color: toneColor[feature.tone] }}
-                >
-                  <Icon className="h-5 w-5" />
+              <div
+                key={rule.control}
+                className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.7fr_1.35fr_1.35fr] gap-3 lg:gap-4 px-5 py-4 border-b last:border-b-0"
+                style={{ borderColor: 'rgba(148, 163, 184, 0.12)' }}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md" style={{ backgroundColor: 'var(--tl-teal-soft)', color: 'var(--tl-teal)' }}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="text-sm font-bold" style={{ color: 'var(--tl-text)', fontFamily: '"DM Sans", sans-serif' }}>
+                    {rule.control}
+                  </span>
                 </div>
-                <h3 className="text-base font-bold" style={{ color: 'var(--tl-text)', fontFamily: '"DM Sans", sans-serif' }}>
-                  {feature.title}
-                </h3>
-                <p className="mt-2 text-sm leading-6" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
-                  {feature.body}
+                <div>
+                  <span className={`trust-status ${rule.stateClass}`}>{rule.state}</span>
+                </div>
+                <p className="text-sm leading-6" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                  {rule.userImpact}
+                </p>
+                <p className="text-sm leading-6" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                  {rule.riskControl}
                 </p>
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-8 trust-panel-subtle px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold" style={{ color: 'var(--tl-text)', fontFamily: '"DM Sans", sans-serif' }}>
+              No hidden arbitration promise
+            </p>
+            <p className="mt-1 text-sm" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+              Disputes and reward payouts are managed operationally, with on-chain movement when a final action is ready.
+            </p>
+          </div>
+          <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: 'var(--tl-teal)' }} />
         </div>
       </div>
     </section>

@@ -33,11 +33,13 @@ function formatCountdown(seconds: number): string {
 const cardStyle: React.CSSProperties = {
   maxWidth: '440px',
   margin: '0 auto',
-  backgroundColor: '#161B22',
-  border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: '16px',
+  backgroundColor: 'var(--tl-surface)',
+  border: '1px solid var(--tl-border)',
+  borderRadius: '8px',
   padding: '40px 32px',
 };
+
+const shortWallet = (address: string) => `${address.slice(0, 4)}...${address.slice(-4)}`;
 
 const ApproveRelease: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
@@ -492,7 +494,7 @@ const ApproveRelease: React.FC = () => {
               style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}
             >
               <p style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', lineHeight: 1.5 }}>
-                This invoice was paid by another wallet. Switch to the wallet that paid this invoice.
+                Connected: {publicKey ? shortWallet(publicKey.toBase58()) : 'unknown'}. This invoice was paid by {inv.client ? shortWallet(inv.client.toBase58()) : 'another wallet'}. Switch to the paying wallet to approve or dispute.
               </p>
             </div>
           )}

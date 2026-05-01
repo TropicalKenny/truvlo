@@ -4,11 +4,11 @@ import { usePrivy } from '@privy-io/react-auth';
 import { ArrowRight, CheckCircle2, Clock3, ExternalLink, LockKeyhole, Play, ShieldCheck } from 'lucide-react';
 
 const lifecycle = [
-  { title: 'Created', meta: 'Apr 24, 2026 - by you', status: 'Completed', tone: 'green' },
-  { title: 'Paid into escrow', meta: 'Apr 25, 2026 - client payment confirmed', status: 'Completed', tone: 'green' },
-  { title: 'Release requested', meta: 'Apr 28, 2026 - you requested release', status: 'Completed', tone: 'green' },
-  { title: 'Approved by client', meta: 'Apr 29, 2026 - client approved release', status: 'Completed', tone: 'green' },
-  { title: 'Withdrawn', meta: 'Apr 29, 2026 - funds sent to your wallet', status: 'Completed', tone: 'green' },
+  { title: 'Created', meta: 'Apr 24, 2026 - invoice shared', status: 'Created', statusClass: 'trust-status-blue' },
+  { title: 'Paid into escrow', meta: 'Apr 25, 2026 - client payment confirmed', status: 'In escrow', statusClass: 'trust-status-blue' },
+  { title: 'Release requested', meta: 'Apr 28, 2026 - creator requested release', status: 'Requested', statusClass: 'trust-status-amber' },
+  { title: 'Approved by client', meta: 'Apr 29, 2026 - client approved release', status: 'Approved', statusClass: 'trust-status-green' },
+  { title: 'Withdrawn', meta: 'Apr 29, 2026 - funds sent to wallet', status: 'Withdrawn', statusClass: 'trust-status-green' },
 ];
 
 const proofPoints = [
@@ -112,7 +112,7 @@ const Hero: React.FC = () => {
                       {item.meta}
                     </p>
                   </div>
-                  <span className="trust-status trust-status-green self-start">{item.status}</span>
+                  <span className={`trust-status ${item.statusClass} self-start`}>{item.status}</span>
                 </div>
               ))}
             </div>
@@ -149,7 +149,7 @@ const Hero: React.FC = () => {
 
         <div className="mt-10 border-t pt-8" style={{ borderColor: 'rgba(148, 163, 184, 0.1)' }}>
           <p className="text-center text-sm" style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>
-            Simple, transparent, secure
+            Real invoice states, client approvals, and managed dispute records in one ledger.
           </p>
         </div>
       </div>

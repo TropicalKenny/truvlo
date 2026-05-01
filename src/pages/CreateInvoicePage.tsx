@@ -5,10 +5,10 @@ import CreateInvoiceForm from '@/components/CreateInvoiceForm';
 
 const CreateInvoicePage: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+    <div className="trust-page min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 w-full px-4 sm:px-6 py-12">
-        <div style={{ maxWidth: '448px', margin: '0 auto' }}>
+        <div className="trust-form-shell">
           <div className="mb-8 text-center">
             <h1
               style={{

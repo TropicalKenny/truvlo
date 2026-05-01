@@ -49,15 +49,15 @@ type AdminSection = {
 };
 
 const colors = {
-  background: '#0D1117',
-  surface: '#141A22',
-  surfaceSoft: '#10161E',
-  border: 'rgba(148, 163, 184, 0.16)',
+  background: 'var(--tl-bg)',
+  surface: 'var(--tl-surface)',
+  surfaceSoft: 'var(--tl-bg-soft)',
+  border: 'var(--tl-border)',
   borderSoft: 'rgba(148, 163, 184, 0.10)',
-  text: '#F8FAFC',
-  muted: '#94A3B8',
-  dim: '#64748B',
-  teal: '#2DD4BF',
+  text: 'var(--tl-text)',
+  muted: 'var(--tl-muted)',
+  dim: 'var(--tl-dim)',
+  teal: 'var(--tl-teal)',
   amber: '#FCD34D',
   red: '#FCA5A5',
 };
@@ -188,7 +188,7 @@ const adminSections: AdminSection[] = [
 const panelStyle: React.CSSProperties = {
   backgroundColor: colors.surface,
   border: `1px solid ${colors.border}`,
-  borderRadius: '10px',
+  borderRadius: '8px',
 };
 
 const labelStyle: React.CSSProperties = {
@@ -475,7 +475,7 @@ const AdminPage: React.FC = () => {
           gap: 10px;
           min-height: 48px;
           padding: 0 22px;
-          border-radius: 10px;
+          border-radius: 8px;
           background: ${colors.teal};
           color: #071014;
           font-family: "DM Sans", sans-serif;
@@ -495,7 +495,7 @@ const AdminPage: React.FC = () => {
           gap: 12px;
           padding: 14px 16px;
           border: 1px solid rgba(252, 211, 77, 0.32);
-          border-radius: 10px;
+          border-radius: 8px;
           background: rgba(252, 211, 77, 0.06);
           color: ${colors.amber};
           font-family: "DM Sans", sans-serif;
@@ -506,7 +506,7 @@ const AdminPage: React.FC = () => {
         .admin-error {
           padding: 14px 16px;
           border: 1px solid rgba(248, 113, 113, 0.35);
-          border-radius: 10px;
+          border-radius: 8px;
           background: rgba(248, 113, 113, 0.06);
           color: ${colors.red};
           font-family: "DM Sans", sans-serif;
@@ -536,7 +536,7 @@ const AdminPage: React.FC = () => {
         .admin-stat-card {
           min-height: 106px;
           padding: 16px;
-          border-radius: 10px;
+          border-radius: 8px;
           background: ${colors.surface};
           border: 1px solid ${colors.border};
           text-align: left;
@@ -573,7 +573,7 @@ const AdminPage: React.FC = () => {
           -webkit-overflow-scrolling: touch;
           scrollbar-width: thin;
           border: 1px solid ${colors.border};
-          border-radius: 10px;
+          border-radius: 8px;
           background: ${colors.surfaceSoft};
         }
 
@@ -631,7 +631,7 @@ const AdminPage: React.FC = () => {
 
         .admin-data-panel {
           overflow: hidden;
-          border-radius: 10px;
+          border-radius: 8px;
           background: ${colors.surface};
           border: 1px solid ${colors.border};
         }

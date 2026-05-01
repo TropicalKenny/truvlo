@@ -37,8 +37,7 @@ class PaymentErrorBoundary extends React.Component<
     if (this.state.hasError) {
       return (
         <div
-          className="max-w-md mx-auto rounded-xl p-10 text-center"
-          style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+          className="trust-form-card max-w-md mx-auto p-10 text-center"
         >
           <AlertCircle className="h-10 w-10 mx-auto mb-4" style={{ color: '#EF4444' }} />
           <h3
@@ -90,7 +89,7 @@ class PaymentErrorBoundary extends React.Component<
 
 const PaymentPage: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+    <div className="trust-page min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 w-full px-4 sm:px-6 py-12">
         <PaymentErrorBoundary>

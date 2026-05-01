@@ -14,12 +14,18 @@ const Footer: React.FC = () => {
               On-chain escrow invoices with managed review when work goes sideways.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>
-            <span>Built on Solana</span>
-            <span aria-hidden="true">/</span>
-            <span>{network}</span>
-            <span aria-hidden="true">/</span>
-            <span>USDC and SOL</span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            {[
+              ['Network', network],
+              ['Tokens', 'USDC / SOL'],
+              ['Escrow', 'On-chain'],
+              ['Disputes', 'Managed review'],
+            ].map(([label, value]) => (
+              <div key={label} className="trust-panel-subtle px-3 py-2">
+                <p className="trust-label">{label}</p>
+                <p className="mt-1 trust-mono" style={{ color: 'var(--tl-muted)' }}>{value}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>

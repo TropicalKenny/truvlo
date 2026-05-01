@@ -20,7 +20,7 @@ assert.match(
 
 assert.match(approveSource, /Continue as client to approve or dispute/, 'approve page should use guest client wording');
 assert.match(approveSource, /No Truvlo profile setup needed/, 'approve page should explain client onboarding is not required');
-assert.match(approveSource, /This invoice was paid by another wallet/, 'approve page should explain wrong-wallet state');
+assert.match(approveSource, /Switch to the paying wallet to approve or dispute/, 'approve page should explain wrong-wallet state');
 assert.match(approveSource, /connectedWalletMatchesClient/, 'approve page should derive same-wallet client authorization before actions');
 assert.match(
   approveSource,
@@ -30,6 +30,11 @@ assert.match(
 
 assert.match(paymentSource, /Continue as client/, 'invoice payment should use client guest wording before login');
 assert.match(paymentSource, /Pay securely/, 'invoice payment should use payment-focused CTA copy after wallet connection');
+assert.match(
+  paymentSource,
+  /Use a wallet you can access later to approve release or raise a dispute/,
+  'invoice payment should explain same-wallet responsibility before payment',
+);
 assert.match(
   paymentSource,
   /Use this same wallet to approve releases or raise a dispute later/,

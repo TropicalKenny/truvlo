@@ -7,8 +7,8 @@ const profileApiSource = await readFile('api/profile.ts', 'utf8');
 
 assert.match(appSource, /OnboardingGate/, 'app should guard private routes for incomplete onboarding');
 assert.match(appSource, /path="\/onboarding"/, 'app should expose an onboarding route');
-assert.match(onboardingSource, /Continue with your Truvlo wallet/, 'onboarding should use friendly embedded-wallet copy');
-assert.match(onboardingSource, /Import my own wallet/, 'onboarding should offer importing an existing wallet');
+assert.match(onboardingSource, /Use your Truvlo wallet/, 'onboarding should use friendly embedded-wallet copy');
+assert.match(onboardingSource, /Import an existing wallet/, 'onboarding should offer importing an existing wallet');
 assert.match(onboardingSource, /displayName/, 'onboarding should collect display name');
 assert.match(onboardingSource, /notificationEmail/, 'onboarding should collect notification email');
 assert.match(onboardingSource, /onboarding_completed_at/, 'onboarding should mark completion');

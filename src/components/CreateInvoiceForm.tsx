@@ -264,7 +264,7 @@ const CreateInvoiceForm: React.FC = () => {
       if (errorMsg.includes('User rejected') || errorMsg.includes('rejected the request')) {
         displayMsg = 'Transaction cancelled.';
       } else if (errorMsg.toLowerCase().includes('insufficient')) {
-        displayMsg = 'Insufficient balance.';
+        displayMsg = 'Your active wallet needs more SOL for the network fee. Add devnet SOL, then try again.';
       }
       toast({ title: 'Something went wrong — try again', description: displayMsg, variant: 'destructive' });
     } finally {

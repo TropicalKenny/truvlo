@@ -171,10 +171,10 @@ const WalletOnboarding: React.FC = () => {
                 </div>
                 <div>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', color: '#F8FAFC', marginBottom: '4px' }}>
-                    Generate a new wallet
+                    Use your Truvlo wallet
                   </p>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B' }}>
-                    A secure wallet is created for you — no setup needed
+                    This wallet is linked to invoices, withdrawals, and reputation.
                   </p>
                 </div>
               </button>
@@ -200,7 +200,7 @@ const WalletOnboarding: React.FC = () => {
                 </div>
                 <div>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', color: '#F8FAFC', marginBottom: '4px' }}>
-                    Import existing wallet
+                    Import an existing wallet
                   </p>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B' }}>
                     Use your own wallet via private key or seed phrase

@@ -223,9 +223,9 @@ const OnboardingPage: React.FC = () => {
                 <ArrowLeft size={14} /> Back
               </button>
               <div>
-                <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#F8FAFC' }}>Choose your wallet</h2>
+                <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontSize: '1.25rem', fontWeight: 700, color: '#F8FAFC' }}>Set up your wallet</h2>
                 <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#94A3B8', fontSize: '14px', marginTop: '6px' }}>
-                  Truvlo has prepared a wallet for you. You can continue with it or import your own.
+                  Use your Truvlo wallet or import an existing wallet. This wallet is linked to invoices, withdrawals, and reputation.
                 </p>
               </div>
 
@@ -237,7 +237,7 @@ const OnboardingPage: React.FC = () => {
               >
                 <Wallet size={20} style={{ color: '#2DD4BF', flexShrink: 0 }} />
                 <span>
-                  <span style={{ display: 'block', fontFamily: '"DM Sans", sans-serif', fontWeight: 700 }}>Continue with your Truvlo wallet</span>
+                  <span style={{ display: 'block', fontFamily: '"DM Sans", sans-serif', fontWeight: 700 }}>Use your Truvlo wallet</span>
                   <span style={{ display: 'block', fontFamily: '"JetBrains Mono", monospace', color: '#64748B', fontSize: '12px', marginTop: '3px' }}>
                     {truvloWallet ? `${truvloWallet.address.slice(0, 6)}...${truvloWallet.address.slice(-6)}` : 'Preparing your wallet...'}
                   </span>
@@ -245,7 +245,7 @@ const OnboardingPage: React.FC = () => {
               </button>
 
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '18px' }}>
-                <p style={{ ...labelStyle, marginBottom: '10px' }}>Import my own wallet</p>
+                <p style={{ ...labelStyle, marginBottom: '10px' }}>Import an existing wallet</p>
                 <div style={{ display: 'flex', gap: '4px', backgroundColor: '#1C2128', borderRadius: '8px', padding: '3px', marginBottom: '14px' }}>
                   {(['privateKey', 'seedPhrase'] as const).map(mode => (
                     <button key={mode} type="button" onClick={() => { setImportMode(mode); setImportError(''); }} style={{ flex: 1, border: 'none', borderRadius: '6px', padding: '8px 0', backgroundColor: importMode === mode ? '#161B22' : 'transparent', color: importMode === mode ? '#F8FAFC' : '#64748B', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer' }}>

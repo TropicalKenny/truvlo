@@ -734,38 +734,12 @@ const Dashboard: React.FC = () => {
         onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(22,29,38,0.96)')}
         onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(17,24,32,0.86)')}
       >
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#94A3B8' }}>
-                {inv.invoiceId}
-              </span>
-              <DarkBadge variant={badgeVariant}>
-                {isDisputed && <><AlertTriangle className="h-3 w-3" />Disputed</>}
-                {!isDisputed && inv.status === InvoiceStatus.Unpaid && <><Clock className="h-3 w-3" />Pending</>}
-                {!isDisputed && inv.status === InvoiceStatus.PartiallyPaid && <><Clock className="h-3 w-3" />Partial</>}
-                {!isDisputed && inv.status === InvoiceStatus.FullyPaid && <><Check className="h-3 w-3" />In Escrow</>}
-                {!isDisputed && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Withdrawn</>}
-              </DarkBadge>
-              <span
-                className="px-2 py-0.5 rounded-full text-xs font-medium"
-                style={{
-                  backgroundColor: inv.tokenType === TokenType.USDC ? 'rgba(34,197,94,0.1)' : 'rgba(56,189,248,0.1)',
-                  color: inv.tokenType === TokenType.USDC ? '#4ADE80' : '#7DD3FC',
-                  fontFamily: '"DM Sans", sans-serif',
-                }}
-              >
-                {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
-              </span>
-            </div>
-
-            <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1.125rem', color: '#F8FAFC', marginBottom: '4px' }}>
-              {formatAmount(inv.amount, inv.tokenType)}
+        <div className="trust-ledger-row">
+          <div className="min-w-0">
+            <p className="trust-mono text-xs truncate" style={{ color: '#94A3B8' }}>{inv.invoiceId}</p>
+            <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+              Created {formatDate(inv.createdAt)}
             </p>
-            <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-              {formatDate(inv.createdAt)}
-            </p>
-
             {hasSchedule && !isDisputed && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid) && (
               <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>
                 Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) - installment {scheduleIdx + 1} of {schedule.length}
@@ -780,30 +754,50 @@ const Dashboard: React.FC = () => {
                 {inv.clientApproved ? 'Client approved - ready to withdraw' : 'Timeout passed - ready to withdraw'}
               </p>
             )}
+          </div>
 
+          <div>
+            <p className="trust-label lg:hidden">Amount</p>
+            <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1rem', color: '#F8FAFC' }}>
+              {formatAmount(inv.amount, inv.tokenType)}
+            </p>
+          </div>
+
+          <div>
+            <p className="trust-label lg:hidden">Paid</p>
+            <p className="text-sm" style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif' }}>
+              {formatAmount(inv.amountPaid, inv.tokenType)}
+            </p>
             {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
-              <div className="mt-3">
-                <div className="flex justify-between text-xs mb-1" style={{ color: '#64748B' }}>
-                  <span>Paid: {formatAmount(inv.amountPaid, inv.tokenType)}</span>
-                  <span>{progressPercent.toFixed(0)}%</span>
-                </div>
+              <div className="mt-2">
                 <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
                   <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{
-                      width: `${progressPercent}%`,
-                      backgroundColor: isDisputed ? '#F59E0B' : '#3B82F6',
-                    }}
+                    className="h-full rounded-full transition-[width] duration-300"
+                    style={{ width: `${progressPercent}%`, backgroundColor: isDisputed ? '#F59E0B' : '#3B82F6' }}
                   />
                 </div>
+                <p className="text-[11px] mt-1" style={{ color: '#64748B' }}>{progressPercent.toFixed(0)}%</p>
               </div>
             )}
           </div>
 
-          <div className="flex flex-col gap-2 items-end flex-shrink-0">
+          <div className="flex flex-wrap gap-2">
+            <DarkBadge variant={badgeVariant}>
+              {isDisputed && <><AlertTriangle className="h-3 w-3" />Disputed</>}
+              {!isDisputed && inv.status === InvoiceStatus.Unpaid && <><Clock className="h-3 w-3" />Pending</>}
+              {!isDisputed && inv.status === InvoiceStatus.PartiallyPaid && <><Clock className="h-3 w-3" />Partial</>}
+              {!isDisputed && inv.status === InvoiceStatus.FullyPaid && <><Check className="h-3 w-3" />In Escrow</>}
+              {!isDisputed && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Withdrawn</>}
+            </DarkBadge>
+            <span className={`trust-status ${inv.tokenType === TokenType.USDC ? 'trust-status-green' : 'trust-status-blue'}`}>
+              {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2 items-start lg:items-end flex-shrink-0">
             <button
               onClick={() => handleCopyLink(inv.invoiceId)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150"
               style={{
                 backgroundColor: 'transparent',
                 border: '1px solid rgba(255,255,255,0.1)',
@@ -821,7 +815,7 @@ const Dashboard: React.FC = () => {
               <button
                 onClick={() => handleRequestRelease(inv)}
                 disabled={requesting === inv.invoiceId}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-150 disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150 disabled:opacity-50"
                 style={{
                   backgroundColor: 'rgba(59,130,246,0.1)',
                   border: '1px solid rgba(59,130,246,0.3)',
@@ -926,38 +920,12 @@ const Dashboard: React.FC = () => {
         onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(22,29,38,0.96)')}
         onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(17,24,32,0.86)')}
       >
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#94A3B8' }}>
-                {inv.invoiceId}
-              </span>
-              <DarkBadge variant={badgeVariant}>
-                {isDisputed && <><AlertTriangle className="h-3 w-3" />Disputed</>}
-                {!isDisputed && needsAction && <><Clock className="h-3 w-3" />Action needed</>}
-                {!isDisputed && !needsAction && clientApproved && <><Check className="h-3 w-3" />Approved</>}
-                {!isDisputed && !needsAction && !clientApproved && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Withdrawn</>}
-                {!isDisputed && !needsAction && !clientApproved && inv.status !== InvoiceStatus.Released && <><Check className="h-3 w-3" />In escrow</>}
-              </DarkBadge>
-              <span
-                className="px-2 py-0.5 rounded-full text-xs font-medium"
-                style={{
-                  backgroundColor: inv.tokenType === TokenType.USDC ? 'rgba(34,197,94,0.1)' : 'rgba(56,189,248,0.1)',
-                  color: inv.tokenType === TokenType.USDC ? '#4ADE80' : '#7DD3FC',
-                  fontFamily: '"DM Sans", sans-serif',
-                }}
-              >
-                {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
-              </span>
-            </div>
-
-            <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1.125rem', color: '#F8FAFC', marginBottom: '4px' }}>
-              {formatAmount(inv.amount, inv.tokenType)}
+        <div className="trust-ledger-row">
+          <div className="min-w-0">
+            <p className="trust-mono text-xs truncate" style={{ color: '#94A3B8' }}>{inv.invoiceId}</p>
+            <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
+              From: <span style={{ fontFamily: creatorName ? '"DM Sans", sans-serif' : '"JetBrains Mono", monospace' }}>{creatorName || truncateWallet(creatorWallet)}</span> - {formatDate(inv.createdAt)}
             </p>
-            <p className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
-              From: <span style={{ fontFamily: creatorName ? '"DM Sans", sans-serif' : '"JetBrains Mono", monospace' }}>{creatorName || truncateWallet(creatorWallet)}</span> / {formatDate(inv.createdAt)}
-            </p>
-
             {schedule.length > 1 && (
               <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>
                 Installment {scheduleIdx + 1} of {schedule.length} - {formatAmount(released, inv.tokenType)} withdrawn of {formatAmount(paid, inv.tokenType)}
@@ -966,27 +934,50 @@ const Dashboard: React.FC = () => {
             {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen - dispute under review</p>}
             {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested withdrawal - {formatCountdown(secondsLeft)}</p>}
             {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this withdrawal</p>}
+          </div>
 
+          <div>
+            <p className="trust-label lg:hidden">Amount</p>
+            <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1rem', color: '#F8FAFC' }}>
+              {formatAmount(inv.amount, inv.tokenType)}
+            </p>
+          </div>
+
+          <div>
+            <p className="trust-label lg:hidden">Paid</p>
+            <p className="text-sm" style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif' }}>
+              {formatAmount(inv.amountPaid, inv.tokenType)}
+            </p>
             {(inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid || isDisputed) && (
-              <div className="mt-3">
-                <div className="flex justify-between text-xs mb-1" style={{ color: '#64748B' }}>
-                  <span>Paid: {formatAmount(inv.amountPaid, inv.tokenType)}</span>
-                  <span>{progressPercent.toFixed(0)}%</span>
-                </div>
+              <div className="mt-2">
                 <div className="h-1 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
                   <div
-                    className="h-full rounded-full transition-all duration-300"
+                    className="h-full rounded-full transition-[width] duration-300"
                     style={{ width: `${progressPercent}%`, backgroundColor: isDisputed ? '#F59E0B' : '#3B82F6' }}
                   />
                 </div>
+                <p className="text-[11px] mt-1" style={{ color: '#64748B' }}>{progressPercent.toFixed(0)}%</p>
               </div>
             )}
           </div>
 
-          <div className="flex flex-col gap-2 items-end flex-shrink-0">
+          <div className="flex flex-wrap gap-2">
+            <DarkBadge variant={badgeVariant}>
+              {isDisputed && <><AlertTriangle className="h-3 w-3" />Disputed</>}
+              {!isDisputed && needsAction && <><Clock className="h-3 w-3" />Action needed</>}
+              {!isDisputed && !needsAction && clientApproved && <><Check className="h-3 w-3" />Approved</>}
+              {!isDisputed && !needsAction && !clientApproved && inv.status === InvoiceStatus.Released && <><ArrowUpRight className="h-3 w-3" />Withdrawn</>}
+              {!isDisputed && !needsAction && !clientApproved && inv.status !== InvoiceStatus.Released && <><Check className="h-3 w-3" />In escrow</>}
+            </DarkBadge>
+            <span className={`trust-status ${inv.tokenType === TokenType.USDC ? 'trust-status-green' : 'trust-status-blue'}`}>
+              {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2 items-start lg:items-end flex-shrink-0">
             <button
               onClick={() => window.open(`${window.location.origin}/invoice/${inv.invoiceId}/${inv.creator.toBase58()}`, '_blank')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-150"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150"
               style={{
                 backgroundColor: 'transparent',
                 border: '1px solid rgba(255,255,255,0.1)',
@@ -1021,7 +1012,7 @@ const Dashboard: React.FC = () => {
                 <button
                   onClick={() => handleDispute(inv)}
                   disabled={approving === inv.invoiceId || disputing === inv.invoiceId}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all duration-150 disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150 disabled:opacity-50"
                   style={{
                     backgroundColor: 'transparent',
                     border: '1px solid rgba(245,158,11,0.3)',
@@ -1176,7 +1167,7 @@ const Dashboard: React.FC = () => {
           <Popover open={notifOpen} onOpenChange={handleNotifOpen}>
             <PopoverTrigger asChild>
               <button
-                className="relative w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150"
+                className="relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors duration-150"
                 style={{
                   backgroundColor: 'rgba(148,163,184,0.04)',
                   border: '1px solid var(--tl-border)',
@@ -1206,7 +1197,7 @@ const Dashboard: React.FC = () => {
           <button
             onClick={() => void fetchAll(true)}
             disabled={loading || refreshing}
-            className="w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150 disabled:opacity-50"
+            className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors duration-150 disabled:opacity-50"
             style={{
               backgroundColor: 'rgba(148,163,184,0.04)',
               border: '1px solid var(--tl-border)',
@@ -1329,7 +1320,7 @@ const Dashboard: React.FC = () => {
               <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.75rem', color: '#F8FAFC' }}>{sentStats.total}</p>
               <div className="flex gap-2 flex-wrap">
                 <span className="text-xs" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif' }}>{sentStats.unpaid} pending</span>
-                {sentStats.disputed > 0 && <span className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>· {sentStats.disputed} disputed</span>}
+                {sentStats.disputed > 0 && <span className="text-xs" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>- {sentStats.disputed} disputed</span>}
               </div>
             </StatCard>
           </div>
@@ -1349,7 +1340,16 @@ const Dashboard: React.FC = () => {
               ) : filteredSent.length === 0 ? (
                 <EmptyState message="No invoices yet." showCreate />
               ) : (
-                <div className="space-y-2">{filteredSent.map(renderCreatorCard)}</div>
+                <div className="space-y-2">
+                  <div className="trust-ledger-heading">
+                    <span>Invoice</span>
+                    <span>Amount</span>
+                    <span>Paid</span>
+                    <span>Status</span>
+                    <span>Action</span>
+                  </div>
+                  {filteredSent.map(renderCreatorCard)}
+                </div>
               )}
             </TabsContent>
           </Tabs>
@@ -1390,7 +1390,16 @@ const Dashboard: React.FC = () => {
               ) : filteredReceived.length === 0 ? (
                 <EmptyState message="No paid invoices yet. Once a client pays, it appears here." />
               ) : (
-                <div className="space-y-2">{filteredReceived.map(renderCreatorCard)}</div>
+                <div className="space-y-2">
+                  <div className="trust-ledger-heading">
+                    <span>Invoice</span>
+                    <span>Amount</span>
+                    <span>Paid</span>
+                    <span>Status</span>
+                    <span>Action</span>
+                  </div>
+                  {filteredReceived.map(renderCreatorCard)}
+                </div>
               )}
             </TabsContent>
           </Tabs>
@@ -1420,7 +1429,7 @@ const Dashboard: React.FC = () => {
           <div className="flex gap-2">
             <button
               onClick={() => setClientSection('action')}
-              className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+              className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
               style={{
                 backgroundColor: clientSection === 'action' ? '#161B22' : 'transparent',
                 border: clientSection === 'action' ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(255,255,255,0.06)',
@@ -1441,7 +1450,7 @@ const Dashboard: React.FC = () => {
             </button>
             <button
               onClick={() => setClientSection('history')}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
               style={{
                 backgroundColor: clientSection === 'history' ? '#161B22' : 'transparent',
                 border: clientSection === 'history' ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(255,255,255,0.06)',
@@ -1460,13 +1469,31 @@ const Dashboard: React.FC = () => {
             awaitingAction.length === 0 ? (
               <EmptyState message="No invoices awaiting your approval right now." />
             ) : (
-              <div className="space-y-2">{awaitingAction.map(i => renderClientCard(i, true))}</div>
+              <div className="space-y-2">
+                <div className="trust-ledger-heading">
+                  <span>Invoice</span>
+                  <span>Amount</span>
+                  <span>Paid</span>
+                  <span>Status</span>
+                  <span>Action</span>
+                </div>
+                {awaitingAction.map(i => renderClientCard(i, true))}
+              </div>
             )
           ) : (
             paymentHistory.length === 0 ? (
               <EmptyState message="No payment history yet. Invoices you pay will appear here." />
             ) : (
-              <div className="space-y-2">{paymentHistory.map(i => renderClientCard(i, false))}</div>
+              <div className="space-y-2">
+                <div className="trust-ledger-heading">
+                  <span>Invoice</span>
+                  <span>Amount</span>
+                  <span>Paid</span>
+                  <span>Status</span>
+                  <span>Action</span>
+                </div>
+                {paymentHistory.map(i => renderClientCard(i, false))}
+              </div>
             )
           )}
         </TabsContent>

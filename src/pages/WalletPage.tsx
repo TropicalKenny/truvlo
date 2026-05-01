@@ -347,7 +347,7 @@ const WalletPage: React.FC = () => {
       fetchBalances();
     } catch (err) {
       const msg = getErrorMessage(err);
-      const display = msg.includes('insufficient') ? 'Insufficient balance.'
+      const display = msg.includes('insufficient') ? `Your active wallet does not have enough ${sendToken} to send this amount. Add funds or reduce the amount.`
         : msg.includes('rejected') ? 'Transaction cancelled.' : msg;
       toast({ title: 'Send failed', description: display, variant: 'destructive' });
     } finally {
@@ -483,7 +483,10 @@ const WalletPage: React.FC = () => {
                     <button
                       onClick={() => {
                         setActiveWallet(w);
-                        toast({ title: 'Wallet switched — dashboard and invoices now use this wallet' });
+                        toast({
+                          title: 'Active wallet changed',
+                          description: 'New invoices and dashboard actions use this wallet. Existing client approvals still require the wallet that paid.',
+                        });
                       }}
                       style={{
                         fontFamily: '"DM Sans", sans-serif', fontSize: '11px', fontWeight: 500,

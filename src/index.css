@@ -93,7 +93,7 @@
   border-radius: 8px !important;
   padding: 8px 16px !important;
   height: 40px !important;
-  transition: all 150ms ease !important;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease !important;
   line-height: 1 !important;
 }
 
@@ -124,7 +124,7 @@
 .wallet-adapter-modal-wrapper {
   background: #161B22 !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 16px !important;
+  border-radius: 8px !important;
 }
 
 .wallet-adapter-modal-title {
@@ -172,7 +172,7 @@
   background: rgba(255, 255, 255, 0.06) !important;
   border-radius: 50% !important;
   color: #94A3B8 !important;
-  transition: all 150ms ease !important;
+  transition: background-color 150ms ease, color 150ms ease !important;
 }
 
 .wallet-adapter-modal-button-close:hover {
@@ -368,6 +368,49 @@
   border-radius: 8px;
 }
 
+.trust-page-shell {
+  width: min(100% - 32px, 1120px);
+  margin: 0 auto;
+  padding: 48px 0;
+}
+
+.trust-form-shell {
+  width: min(100%, 472px);
+  margin: 0 auto;
+}
+
+.trust-form-card {
+  background: linear-gradient(180deg, rgba(22, 29, 38, 0.96), rgba(12, 17, 23, 0.96));
+  border: 1px solid var(--tl-border);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+}
+
+.trust-input,
+.trust-select,
+.trust-textarea {
+  background: var(--tl-surface-2);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  color: var(--tl-text);
+  font-family: "DM Sans", sans-serif;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.trust-input:focus,
+.trust-select:focus,
+.trust-textarea:focus {
+  border-color: rgba(20, 200, 186, 0.42);
+  box-shadow: 0 0 0 3px rgba(20, 200, 186, 0.08);
+}
+
+.trust-input::placeholder,
+.trust-textarea::placeholder {
+  color: var(--tl-dim);
+}
+
 .trust-button-primary,
 .trust-button-secondary,
 .trust-icon-button {
@@ -467,6 +510,8 @@
 
 .trust-tabs [role="tab"] {
   transform: translateZ(0);
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  white-space: nowrap;
 }
 
 .trust-dashboard-grid {
@@ -484,6 +529,26 @@
   border-radius: 8px !important;
 }
 
+.trust-ledger-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(96px, 0.55fr) minmax(80px, 0.45fr) minmax(104px, 0.5fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.trust-ledger-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(96px, 0.55fr) minmax(80px, 0.45fr) minmax(104px, 0.5fr) auto;
+  gap: 14px;
+  padding: 0 16px 8px;
+  color: var(--tl-dim);
+  font-family: "DM Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 @media (max-width: 640px) {
   .trust-invoice-row {
     padding: 14px !important;
@@ -495,6 +560,17 @@
 
   .trust-invoice-row button {
     min-height: 36px;
+  }
+
+  .trust-ledger-heading {
+    display: none;
+  }
+
+  .trust-ledger-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
   }
 }
 

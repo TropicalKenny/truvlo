@@ -19,6 +19,11 @@ assert.match(invoicePaymentSource, /verification passes/, 'agent panel should ex
 assert.match(invoicePaymentSource, /automatically approve release/, 'agent panel should explain approval is policy-driven after proof');
 assert.match(approveReleaseSource, /Truvlo Agent is acting for the client/, 'approval page should show active agent policy audit messaging');
 assert.match(dashboardSource, /Truvlo Agent enabled/, 'dashboard should show active agent policy status');
+assert.match(dashboardSource, /maybeRequestAndAgentApprove/, 'dashboard proof submission should hand off to managed agent approval');
+assert.match(dashboardSource, /sdk\.requestRelease\(proofModal\.invoice\.invoiceId,\s*proofModal\.invoice\.tokenType\)/, 'proof submission should request release from the creator wallet before agent approval');
+assert.match(dashboardSource, /action:\s*'approve_release'/, 'proof submission should ask Truvlo Agent to approve release after verification passes');
+assert.match(dashboardSource, /verification_status !== 'passed'[\s\S]*recommended_action !== 'approve'/, 'agent approval should require passed verification and approve recommendation');
+assert.match(dashboardSource, /Agent approval submitted/, 'dashboard should confirm when Truvlo Agent approval is requested');
 
 assert.match(createInvoiceMetaSource, /handleAgentPolicies/, 'create-invoice metadata API should dispatch agent policy rewrites');
 assert.match(vercelConfigSource, /agent-policies.*create-invoice-meta/s, 'agent policy route should be rewritten into the consolidated function');

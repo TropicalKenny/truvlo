@@ -176,6 +176,7 @@ const Dashboard: React.FC = () => {
   const [agentVerificationMeta, setAgentVerificationMeta] = useState<Record<string, AgentVerificationMeta | null>>({});
   const [agentPolicyMeta, setAgentPolicyMeta] = useState<Record<string, AgentPolicyMeta | null>>({});
   const [proofModal, setProofModal] = useState<{
+    invoice: InvoiceData;
     invoiceId: string;
     creatorWallet: string;
     deliverableUrl: string;
@@ -584,13 +585,70 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const openProofModal = (invoiceId: string, creatorWallet: string) => {
+  const openProofModal = (invoice: InvoiceData, creatorWallet: string) => {
     setProofModal({
-      invoiceId,
+      invoice,
+      invoiceId: invoice.invoiceId,
       creatorWallet,
       deliverableUrl: '',
       proofText: '',
     });
+  };
+
+  const loadSingleAgentPolicy = async (invoiceId: string, creatorWallet: string) => {
+    const key = `${invoiceId}:${creatorWallet}`;
+    const cached = agentPolicyMeta[key];
+    if (cached) return cached;
+
+    const params = new URLSearchParams({ invoiceId, creatorWallet });
+    const res = await fetch(`/api/agent-policies?${params.toString()}`);
+    if (!res.ok) return null;
+    const data = await res.json() as { agent_policy?: AgentPolicyMeta | null };
+    const policy = data.agent_policy ?? null;
+    setAgentPolicyMeta(prev => ({ ...prev, [key]: policy }));
+    return policy;
+  };
+
+  const maybeRequestAndAgentApprove = async (verification: AgentVerificationMeta | null | undefined) => {
+    if (!proofModal || !sdk) return false;
+    if (verification?.verification_status !== 'passed' || verification.recommended_action !== 'approve') {
+      return false;
+    }
+
+    const policy = await loadSingleAgentPolicy(proofModal.invoiceId, proofModal.creatorWallet);
+    if (policy?.status !== 'active') return false;
+
+    const releaseable = getReleaseable(proofModal.invoice);
+    if (!proofModal.invoice.completionRequestedAt && releaseable > 0) {
+      setRequesting(proofModal.invoice.invoiceId);
+      const releaseRequest = await sdk.requestRelease(proofModal.invoice.invoiceId, proofModal.invoice.tokenType);
+      if (!releaseRequest.success) {
+        throw new Error(typeof releaseRequest.error === 'string' ? releaseRequest.error : 'Release request failed');
+      }
+    }
+
+    setApproving(proofModal.invoice.invoiceId);
+    const token = await getAccessToken();
+    const approveResponse = await fetch('/api/devnet-agent-actions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        action: 'approve_release',
+        invoiceId: proofModal.invoice.invoiceId,
+        creatorWallet: proofModal.creatorWallet,
+        tokenType: proofModal.invoice.tokenType === TokenType.USDC ? 'USDC' : 'SOL',
+        amount: fromSmallestUnit(proofModal.invoice.amount, proofModal.invoice.tokenType),
+      }),
+    });
+    const approveData = await approveResponse.json().catch(() => ({})) as { error?: string };
+    if (!approveResponse.ok) {
+      throw new Error(approveData.error || 'Truvlo Agent could not approve release');
+    }
+
+    return true;
   };
 
   const handleSubmitProof = async () => {
@@ -634,11 +692,22 @@ const Dashboard: React.FC = () => {
         ...prev,
         [key]: data.agent_verification ?? prev[key] ?? null,
       }));
+      let agentApproved = false;
+      try {
+        agentApproved = await maybeRequestAndAgentApprove(data.agent_verification);
+      } finally {
+        setRequesting(null);
+        setApproving(null);
+      }
       toast({
-        title: 'Proof submitted',
-        description: 'The agent recommendation has been updated.',
+        title: agentApproved ? 'Agent approval submitted' : 'Proof submitted',
+        description: agentApproved
+          ? 'Truvlo Agent approved release under the client policy. You can withdraw after the dashboard refreshes.'
+          : 'The agent recommendation has been updated.',
       });
       setProofModal(null);
+      lastFetchedAt.current = 0;
+      await fetchAll();
     } catch (error) {
       toast({
         title: 'Proof submission failed',
@@ -992,7 +1061,7 @@ const Dashboard: React.FC = () => {
 
             {agentReview && (
               <button
-                onClick={() => openProofModal(inv.invoiceId, creatorWallet)}
+                onClick={() => openProofModal(inv, creatorWallet)}
                 disabled={submittingProof === inv.invoiceId}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150 disabled:opacity-50"
                 style={{

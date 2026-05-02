@@ -16,6 +16,7 @@ assert.match(invoicePaymentSource, /\/api\/agent-policies/, 'invoice page should
 assert.match(invoicePaymentSource, /\/api\/devnet-agent-actions/, 'invoice page should trigger devnet agent payment after policy creation');
 assert.match(invoicePaymentSource, /invoice-only/, 'agent panel should explain invoice-only scope');
 assert.match(invoicePaymentSource, /verification passes/, 'agent panel should explain the approval rule');
+assert.match(invoicePaymentSource, /automatically approve release/, 'agent panel should explain approval is policy-driven after proof');
 assert.match(approveReleaseSource, /Truvlo Agent is acting for the client/, 'approval page should show active agent policy audit messaging');
 assert.match(dashboardSource, /Truvlo Agent enabled/, 'dashboard should show active agent policy status');
 

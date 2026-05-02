@@ -666,7 +666,7 @@ const InvoicePayment: React.FC = () => {
                         Use Truvlo Agent
                       </p>
                       <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#94A3B8', lineHeight: 1.5, marginTop: '4px' }}>
-                        The client delegates an invoice-only devnet agent to pay escrow now and approve release later only when verification passes.
+                        The client delegates an invoice-only devnet agent to pay escrow now and automatically approve release later only when verification passes.
                       </p>
                     </div>
                     {agentPolicy?.status === 'active' && (

@@ -137,8 +137,6 @@ const CreateInvoiceForm: React.FC = () => {
   const [jobType, setJobType] = useState<AgentJobType>('human_service');
   const [verificationMode, setVerificationMode] = useState<VerificationMode>('manual');
   const [successCriteria, setSuccessCriteria] = useState('');
-  const [deliverableUrl, setDeliverableUrl] = useState('');
-  const [proofText, setProofText] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [createdInvoice, setCreatedInvoice] = useState<{
@@ -255,8 +253,8 @@ const CreateInvoiceForm: React.FC = () => {
               jobType: agentMode ? jobType : 'human_service',
               verificationMode: agentMode ? verificationMode : 'manual',
               successCriteria: agentMode ? successCriteria.trim() : null,
-              deliverableUrl: agentMode ? deliverableUrl.trim() : null,
-              proofText: agentMode ? proofText.trim() : null,
+              deliverableUrl: null,
+              proofText: null,
             }),
           });
 
@@ -434,8 +432,6 @@ const CreateInvoiceForm: React.FC = () => {
               setJobType('human_service');
               setVerificationMode('manual');
               setSuccessCriteria('');
-              setDeliverableUrl('');
-              setProofText('');
             }}
             className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-opacity duration-150 hover:opacity-80"
             style={{
@@ -601,7 +597,7 @@ const CreateInvoiceForm: React.FC = () => {
                   Agent-assisted escrow
                 </p>
                 <p className="mt-1" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
-                  Add criteria and proof so Truvlo can show a recommendation. Clients still approve or dispute manually.
+                  Define the job and acceptance criteria now. Submit proof from the dashboard after the work is done.
                 </p>
               </div>
             </div>
@@ -673,31 +669,6 @@ const CreateInvoiceForm: React.FC = () => {
                   placeholder="Checklist the client should use to judge completion..."
                   value={successCriteria}
                   onChange={(e) => setSuccessCriteria(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="deliverableUrl" style={labelStyle}>Deliverable URL</label>
-                <DarkInput
-                  id="deliverableUrl"
-                  name="deliverableUrl"
-                  type="url"
-                  autoComplete="url"
-                  placeholder="https://..."
-                  value={deliverableUrl}
-                  onChange={(e) => setDeliverableUrl(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="proofText" style={labelStyle}>Proof text</label>
-                <DarkTextarea
-                  id="proofText"
-                  name="proofText"
-                  autoComplete="off"
-                  placeholder="Optional proof, notes, test results, or delivery summary..."
-                  value={proofText}
-                  onChange={(e) => setProofText(e.target.value)}
                 />
               </div>
             </div>

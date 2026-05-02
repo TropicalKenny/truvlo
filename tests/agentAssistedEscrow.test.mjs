@@ -17,10 +17,12 @@ assert.match(createInvoiceSource, /Agent-assisted escrow/, 'invoice form should 
 assert.match(createInvoiceSource, /jobType/, 'invoice form should track agent job type');
 assert.match(createInvoiceSource, /verificationMode/, 'invoice form should track verification mode');
 assert.match(createInvoiceSource, /successCriteria/, 'invoice form should collect success criteria');
-assert.match(createInvoiceSource, /deliverableUrl/, 'invoice form should collect an optional deliverable URL');
-assert.match(createInvoiceSource, /proofText/, 'invoice form should collect optional proof text');
+assert.doesNotMatch(createInvoiceSource, /id="deliverableUrl"/, 'invoice creation should not collect proof deliverable URL');
+assert.doesNotMatch(createInvoiceSource, /id="proofText"/, 'invoice creation should not collect proof text');
 assert.match(createInvoiceSource, /jobType:\s*agentMode \? jobType : 'human_service'/, 'invoice metadata payload should include job type with human fallback');
 assert.match(createInvoiceSource, /verificationMode:\s*agentMode \? verificationMode : 'manual'/, 'invoice metadata payload should include verification mode with manual fallback');
+assert.match(createInvoiceSource, /deliverableUrl:\s*null/, 'invoice creation should defer deliverable URL until proof submission');
+assert.match(createInvoiceSource, /proofText:\s*null/, 'invoice creation should defer proof text until proof submission');
 
 assert.match(createInvoiceMetaSource, /jobType/, 'create-invoice metadata API should accept job type');
 assert.match(createInvoiceMetaSource, /verificationMode/, 'create-invoice metadata API should accept verification mode');

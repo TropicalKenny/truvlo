@@ -24,8 +24,8 @@ assert.match(approveSource, /Switch to the paying wallet to approve or dispute/,
 assert.match(approveSource, /connectedWalletMatchesClient/, 'approve page should derive same-wallet client authorization before actions');
 assert.match(
   approveSource,
-  /disabled=\{approving \|\| disputing \|\| !connectedWalletMatchesClient\}/,
-  'approve and dispute actions should be disabled unless the connected wallet matches the invoice client wallet',
+  /disabled=\{approving \|\| disputing \|\| !canActAsClient\}/,
+  'approve and dispute actions should be disabled unless the connected wallet matches the invoice client wallet or a valid agent policy exists',
 );
 
 assert.match(paymentSource, /Continue as client/, 'invoice payment should use client guest wording before login');

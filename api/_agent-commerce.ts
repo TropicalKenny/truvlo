@@ -265,6 +265,7 @@ async function loadActiveAgentPolicy(input: {
   action: DevnetAgentAction;
   amount: number;
   tokenType?: string | null;
+  clientCommandUserId?: string | null;
 }): Promise<{ policy?: AgentPolicyRow; error?: { status: number; message: string } }> {
   const { data, error } = await supabase
     .from('agent_policies')
@@ -282,9 +283,13 @@ async function loadActiveAgentPolicy(input: {
   if (new Date(policy.expires_at).getTime() <= Date.now()) return { error: { status: 403, message: 'Truvlo Agent policy has expired' } };
   if (input.amount > Number(policy.max_amount)) return { error: { status: 403, message: 'Truvlo Agent policy amount limit exceeded' } };
   if (input.tokenType && policy.token_type !== input.tokenType) return { error: { status: 403, message: 'Truvlo Agent policy token mismatch' } };
+  const clientCommandUserId = input.clientCommandUserId ?? null;
+  if (clientCommandUserId && policy.client_privy_id !== clientCommandUserId) {
+    return { error: { status: 403, message: 'Only the client who enabled this Truvlo Agent policy can command it' } };
+  }
   if (input.action === 'pay_invoice' && !policy.can_pay) return { error: { status: 403, message: 'Truvlo Agent policy does not allow payment' } };
   if (input.action === 'approve_release' && !policy.can_approve_release) return { error: { status: 403, message: 'Truvlo Agent policy does not allow approval' } };
-  if (input.action === 'raise_dispute' && !policy.can_raise_dispute) return { error: { status: 403, message: 'Truvlo Agent policy does not allow dispute actions' } };
+  if (input.action === 'raise_dispute' && !policy.can_raise_dispute && !input.clientCommandUserId) return { error: { status: 403, message: 'Truvlo Agent policy does not allow dispute actions' } };
 
   return { policy };
 }
@@ -379,13 +384,18 @@ export async function handleDevnetAgentActions(req: VercelRequest, res: VercelRe
   const agentWallet = agentKeypair.publicKey.toBase58();
   if (!isAllowedAgentWallet(agentWallet)) return res.status(403).json({ error: 'Devnet agent wallet is not allowlisted' });
 
-  const { action, invoiceId, creatorWallet, tokenType, amount } = req.body as {
-    action?: DevnetAgentAction; invoiceId?: string; creatorWallet?: string; tokenType?: 'USDC' | 'SOL'; amount?: number;
+  const { action, invoiceId, creatorWallet, tokenType, amount, clientCommanded } = req.body as {
+    action?: DevnetAgentAction; invoiceId?: string; creatorWallet?: string; tokenType?: 'USDC' | 'SOL'; amount?: number; clientCommanded?: boolean;
   };
   const actions: DevnetAgentAction[] = ['pay_invoice', 'request_release', 'approve_release', 'raise_dispute'];
   if (!action || !actions.includes(action)) return res.status(400).json({ error: 'Invalid action' });
   if (!invoiceId || !creatorWallet) return res.status(400).json({ error: 'Missing required fields' });
   if (!isValidSolanaAddress(creatorWallet)) return res.status(400).json({ error: 'Invalid creator wallet' });
+  if (clientCommanded && action !== 'approve_release' && action !== 'raise_dispute') {
+    return res.status(400).json({ error: 'Client-commanded agent actions only support approval or dispute' });
+  }
+  const clientCommandUserId = clientCommanded ? await requireUserId(req) : null;
+  if (clientCommanded && !clientCommandUserId) return res.status(401).json({ error: 'Unauthorized' });
 
   const normalizedCreatorWallet = normalizeSolanaAddress(creatorWallet);
   const { data: invoiceMeta, error: metaError } = await supabase
@@ -419,13 +429,14 @@ export async function handleDevnetAgentActions(req: VercelRequest, res: VercelRe
       action,
       amount: requestedAmount,
       tokenType: tokenType ?? invoiceMeta.token_type,
+      clientCommandUserId,
     });
     if (policyError) return res.status(policyError.status).json({ error: policyError.message });
   }
 
   if (action === 'request_release' && verification?.verification_status !== 'passed') return res.status(409).json({ error: 'Agent release request requires passed verification' });
-  if (action === 'approve_release' && (verification?.verification_status !== 'passed' || verification?.recommended_action !== 'approve')) return res.status(409).json({ error: 'Agent approval requires passed verification and recommended_action approve' });
-  if (action === 'raise_dispute' && verification?.recommended_action !== 'dispute') return res.status(409).json({ error: 'Agent dispute requires recommended_action dispute' });
+  if (!clientCommanded && action === 'approve_release' && (verification?.verification_status !== 'passed' || verification?.recommended_action !== 'approve')) return res.status(409).json({ error: 'Agent approval requires passed verification and recommended_action approve' });
+  if (!clientCommanded && action === 'raise_dispute' && verification?.recommended_action !== 'dispute') return res.status(409).json({ error: 'Agent dispute requires recommended_action dispute' });
   if (action === 'request_release' && agentWallet !== invoiceMeta.creator_wallet) return res.status(403).json({ error: 'Agent wallet must be the invoice creator to request release' });
   if ((action === 'approve_release' || action === 'raise_dispute') && agentWallet !== invoiceMeta.client_wallet) return res.status(403).json({ error: 'Agent wallet must be the paying client to approve or dispute' });
 
@@ -469,10 +480,10 @@ export async function handleDevnetAgentActions(req: VercelRequest, res: VercelRe
     amount: requestedAmount,
     token_type: tokenType ?? invoiceMeta.token_type,
     signature: result.data?.signature ?? null,
-    note: 'Truvlo devnet demo automation',
+    note: clientCommanded ? 'Truvlo devnet demo client-commanded agent action' : 'Truvlo devnet demo automation',
   });
 
-  return res.status(200).json({ success: true, mode: 'Truvlo devnet demo automation', action, agent_wallet: agentWallet, signature: result.data?.signature });
+  return res.status(200).json({ success: true, mode: clientCommanded ? 'Truvlo devnet demo client-commanded agent action' : 'Truvlo devnet demo automation', action, agent_wallet: agentWallet, signature: result.data?.signature });
 }
 
 function getPayTo(): string | null {

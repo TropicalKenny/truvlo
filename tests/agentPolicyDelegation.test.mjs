@@ -18,6 +18,10 @@ assert.match(invoicePaymentSource, /invoice-only/, 'agent panel should explain i
 assert.match(invoicePaymentSource, /verification passes/, 'agent panel should explain the approval rule');
 assert.match(invoicePaymentSource, /automatically approve release/, 'agent panel should explain approval is policy-driven after proof');
 assert.match(approveReleaseSource, /Truvlo Agent is acting for the client/, 'approval page should show active agent policy audit messaging');
+assert.match(approveReleaseSource, /handleAgentPolicyAction/, 'approval page should route agent-paid invoices through the managed agent signer');
+assert.match(approveReleaseSource, /clientCommanded:\s*true/, 'approval page should mark human client fallback actions as explicitly commanded');
+assert.match(approveReleaseSource, /Truvlo Agent paid this invoice/, 'approval page should explain that the agent signer will act for agent-paid invoices');
+assert.match(approveReleaseSource, /connectedWalletMatchesClient \|\| canUseAgentPolicy/, 'approval buttons should remain usable when a valid agent policy exists');
 assert.match(dashboardSource, /Truvlo Agent enabled/, 'dashboard should show active agent policy status');
 assert.match(dashboardSource, /maybeRequestAndAgentApprove/, 'dashboard proof submission should hand off to managed agent approval');
 assert.match(dashboardSource, /sdk\.requestRelease\(proofModal\.invoice\.invoiceId,\s*proofModal\.invoice\.tokenType\)/, 'proof submission should request release from the creator wallet before agent approval');
@@ -34,6 +38,8 @@ assert.match(agentCommerceSource, /client_privy_id/, 'agent policy should store 
 assert.match(agentCommerceSource, /approval_rule:\s*'verification_passed_and_recommended_approve'/, 'default policy should require passed verification and approve recommendation');
 assert.match(agentCommerceSource, /loadActiveAgentPolicy/, 'devnet agent actions should load an active agent policy');
 assert.match(agentCommerceSource, /No active Truvlo Agent policy/, 'devnet agent actions should reject missing policies');
+assert.match(agentCommerceSource, /clientCommanded/, 'devnet agent actions should distinguish explicit human client commands from automation');
+assert.match(agentCommerceSource, /policy\.client_privy_id !== clientCommandUserId/, 'client-commanded agent actions should require the policy owner');
 assert.match(agentCommerceSource, /can_pay/, 'pay_invoice should require policy permission to pay');
 assert.match(agentCommerceSource, /can_approve_release/, 'approve_release should require policy permission to approve');
 assert.match(agentCommerceSource, /expires_at/, 'agent policy enforcement should check expiry');

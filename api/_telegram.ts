@@ -15,12 +15,22 @@ type TelegramLinkRow = {
   updated_at: string;
 };
 
-function telegramConfigured() {
-  return Boolean(TELEGRAM_BOT_TOKEN && TELEGRAM_BOT_USERNAME);
-}
-
 function generateTelegramCode() {
   return `TRUVLO-${randomBytes(5).toString('hex').toUpperCase()}`;
+}
+
+function getTelegramBotUsername() {
+  return TELEGRAM_BOT_USERNAME?.replace(/^@/, '').trim();
+}
+
+function telegramConfigured() {
+  return Boolean(TELEGRAM_BOT_TOKEN && getTelegramBotUsername());
+}
+
+function buildTelegramDeepLink(code: string) {
+  const username = getTelegramBotUsername();
+  if (!username) return null;
+  return `https://t.me/${encodeURIComponent(username)}?start=${encodeURIComponent(code)}`;
 }
 
 function getTelegramSecretHeader(req: VercelRequest) {
@@ -87,7 +97,7 @@ export async function handleTelegramLink(req: VercelRequest, res: VercelResponse
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({
       configured: telegramConfigured(),
-      bot_username: TELEGRAM_BOT_USERNAME ?? null,
+      bot_username: getTelegramBotUsername() ?? null,
       telegram_link: data as TelegramLinkRow | null,
     });
   }
@@ -104,7 +114,7 @@ export async function handleTelegramLink(req: VercelRequest, res: VercelResponse
     return res.status(200).json({
       code,
       expires_at: expiresAt,
-      deep_link: `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${code}`,
+      deep_link: buildTelegramDeepLink(code),
       instructions: `Open Telegram and tap Start. The bot receives /start ${code} automatically from the deep link.`,
     });
   }

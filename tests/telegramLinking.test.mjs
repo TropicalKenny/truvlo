@@ -34,7 +34,8 @@ assert.match(migrationSource, /alter table telegram_link_codes enable row level 
 assert.match(accountSource, /Connect Telegram/, 'account page should expose Telegram linking');
 assert.match(accountSource, /\/api\/telegram-link/, 'account page should call telegram link API');
 assert.match(accountSource, /telegramLink/, 'account page should track Telegram linked state');
-assert.match(accountSource, /window\.open\(data\.deep_link/, 'account page should open Telegram deep link');
+assert.match(accountSource, /window\.location\.href = data\.deep_link/, 'account page should navigate to Telegram deep link');
+assert.match(accountSource, /telegramConnectAttempt/, 'account page should show a fallback code if Telegram does not open the bot');
 
 assert.match(notifyClientSource, /sendTelegramToPrivyId/, 'client withdrawal notifications should also attempt Telegram');
 assert.match(notifyCreatorSource, /sendTelegramToPrivyId/, 'creator notifications should also attempt Telegram');

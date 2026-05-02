@@ -50,6 +50,12 @@ interface TelegramLinkState {
   } | null;
 }
 
+interface TelegramConnectAttempt {
+  code: string;
+  deep_link: string;
+  expires_at: string;
+}
+
 const cardStyle: React.CSSProperties = {
   backgroundColor: '#161B22',
   border: '1px solid rgba(255,255,255,0.08)',
@@ -86,6 +92,7 @@ const AccountPage: React.FC = () => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedReputation, setCopiedReputation] = useState(false);
   const [telegramLink, setTelegramLink] = useState<TelegramLinkState | null>(null);
+  const [telegramConnectAttempt, setTelegramConnectAttempt] = useState<TelegramConnectAttempt | null>(null);
   const [telegramBusy, setTelegramBusy] = useState(false);
 
   const responseError = async (res: Response, fallback: string) => {
@@ -176,9 +183,14 @@ const AccountPage: React.FC = () => {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json().catch(() => ({})) as { deep_link?: string; error?: string };
+      const data = await res.json().catch(() => ({})) as { code?: string; deep_link?: string; expires_at?: string; error?: string };
       if (!res.ok || !data.deep_link) throw new Error(data.error || `HTTP ${res.status}`);
-      window.open(data.deep_link, '_blank', 'noopener,noreferrer');
+      setTelegramConnectAttempt({
+        code: data.code || '',
+        deep_link: data.deep_link,
+        expires_at: data.expires_at || '',
+      });
+      window.location.href = data.deep_link;
       toast({ title: 'Telegram opened', description: 'Tap Start in Telegram to finish linking.' });
     } catch (err) {
       toast({ title: 'Telegram link failed', description: err instanceof Error ? err.message : 'Try again.', variant: 'destructive' });
@@ -198,6 +210,7 @@ const AccountPage: React.FC = () => {
       });
       if (!res.ok) throw new Error(await responseError(res, 'Telegram unlink failed'));
       setTelegramLink(current => current ? { ...current, telegram_link: null } : current);
+      setTelegramConnectAttempt(null);
       toast({ title: 'Telegram disconnected' });
     } catch (err) {
       toast({ title: 'Telegram unlink failed', description: err instanceof Error ? err.message : 'Try again.', variant: 'destructive' });
@@ -303,6 +316,35 @@ const AccountPage: React.FC = () => {
                 <p className="mt-2" style={{ fontFamily: '"DM Sans", sans-serif', color: '#FCD34D', fontSize: '12px' }}>
                   Telegram bot is not configured for this deployment yet.
                 </p>
+              )}
+              {!telegramLink?.telegram_link && telegramConnectAttempt && (
+                <div className="mt-4 rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#CBD5E1', fontSize: '12px', lineHeight: 1.5 }}>
+                    If Telegram opened without the bot, open @{telegramLink?.bot_username || 'truvlobot'} and send this code:
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <code className="flex-1 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: '#0D1117', color: '#F8FAFC', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      /start {telegramConnectAttempt.code}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copy(`/start ${telegramConnectAttempt.code}`, () => toast({ title: 'Telegram code copied' }))}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: '#F8FAFC', border: '1px solid rgba(255,255,255,0.08)' }}
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy
+                    </button>
+                    <a
+                      href={telegramConnectAttempt.deep_link}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm"
+                      style={{ backgroundColor: 'rgba(45,212,191,0.12)', color: '#2DD4BF', border: '1px solid rgba(45,212,191,0.3)', textDecoration: 'none' }}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Open bot
+                    </a>
+                  </div>
+                </div>
               )}
             </section>
 

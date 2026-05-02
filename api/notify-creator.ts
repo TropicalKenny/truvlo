@@ -8,6 +8,7 @@ import {
   walletBelongsToUser,
 } from './_shared.js';
 import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
+import { sendTelegramToPrivyId } from './_telegram.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
@@ -72,8 +73,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .eq('invoice_id', invoiceId)
     .eq('creator_wallet', normalizedCreatorWallet);
 
-  if (!RESEND_API_KEY) return res.status(200).json({ success: true, skipped: true });
-
   const { data: walletRow } = await supabase
     .from('wallets')
     .select('privy_id')
@@ -90,10 +89,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .eq('privy_id', walletRow.privy_id)
     .maybeSingle();
 
-  const creatorEmail = profile?.notification_email;
-  if (!creatorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(creatorEmail)) {
-    return res.status(200).json({ success: true, skipped: true });
-  }
+  const creatorEmail = typeof profile?.notification_email === 'string' ? profile.notification_email : '';
+  const hasCreatorEmail = !!creatorEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(creatorEmail);
 
   const shortWallet = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
   const dashboardUrl = 'https://truvlo.io/dashboard';
@@ -119,6 +116,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   const { subject, headline, body, accent } = eventConfig[event];
+  await sendTelegramToPrivyId({
+    privyId: walletRow.privy_id,
+    title: headline,
+    body: event === 'paid'
+      ? `Your client paid ${amount || 'the invoice amount'} into escrow for ${invoiceId}.`
+      : event === 'release_approved'
+        ? `Withdrawal was approved for ${invoiceId}. Open your dashboard to withdraw.`
+        : `A dispute was opened for ${invoiceId}. Open your dashboard to review the case.`,
+    url: dashboardUrl,
+  }).catch(error => console.error('Telegram notify-creator failed:', error));
+
+  if (!hasCreatorEmail) return res.status(200).json({ success: true, email_skipped: true });
+  if (!RESEND_API_KEY) return res.status(200).json({ success: true, email_skipped: true });
 
   const html = `
 <!DOCTYPE html>

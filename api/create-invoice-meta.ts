@@ -13,6 +13,7 @@ import {
   handleDevnetAgentActions,
   handleX402EscrowIntent,
 } from './_agent-commerce.js';
+import { handleTelegramLink, handleTelegramWebhook } from './_telegram.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
@@ -23,6 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (agentEndpoint === 'agent-policies') return handleAgentPolicies(req, res);
   if (agentEndpoint === 'devnet-agent-actions') return handleDevnetAgentActions(req, res);
   if (agentEndpoint === 'x402-escrow-intent') return handleX402EscrowIntent(req, res);
+  if (agentEndpoint === 'telegram-link') return handleTelegramLink(req, res);
+  if (agentEndpoint === 'telegram-webhook') return handleTelegramWebhook(req, res);
 
   if (req.method === 'GET') {
     const invoiceId = typeof req.query.invoiceId === 'string' ? req.query.invoiceId : '';

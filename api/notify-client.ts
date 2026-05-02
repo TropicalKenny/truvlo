@@ -8,6 +8,7 @@ import {
 } from './_shared.js';
 import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
 import { resolveAppOrigin } from './_notify-client-origin.js';
+import { sendTelegramToPrivyId } from './_telegram.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
@@ -44,7 +45,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  if (!RESEND_API_KEY) return res.status(500).json({ error: 'Email service not configured' });
   if (!isValidSolanaAddress(creatorWallet)) {
     return res.status(400).json({ error: 'Invalid creator wallet' });
   }
@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: meta, error: metaError } = await supabase
     .from('invoice_meta')
-    .select('client_email, sender_name, description')
+    .select('client_email, sender_name, description, client_privy_id')
     .eq('invoice_id', invoiceId)
     .eq('creator_wallet', normalizedCreatorWallet)
     .maybeSingle();
@@ -64,16 +64,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (metaError) return res.status(500).json({ error: metaError.message });
 
   const clientEmail = meta?.client_email;
-  if (!clientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
-    return res.status(400).json({ error: 'No client email on record for this invoice' });
-  }
 
   // FIX: Generate approve URL server-side from a trusted, allowlisted origin.
   // invoiceId is already validated to belong to this creator, so it is safe to embed.
   const approveUrl = `${appOrigin}/approve/${encodeURIComponent(invoiceId)}/${encodeURIComponent(normalizedCreatorWallet)}`;
-
   const shortCreator = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
   const displayName = senderName || meta?.sender_name || '';
+  const policyResult = await supabase
+    .from('agent_policies')
+    .select('client_privy_id')
+    .eq('invoice_id', invoiceId)
+    .eq('creator_wallet', normalizedCreatorWallet)
+    .eq('status', 'active')
+    .maybeSingle();
+  const telegramPrivyId = meta?.client_privy_id ?? policyResult.data?.client_privy_id ?? null;
+  const telegramResult = await sendTelegramToPrivyId({
+    privyId: telegramPrivyId,
+    title: 'Withdrawal requested',
+    body: `${displayName || 'A creator'} requested withdrawal for ${invoiceId}. Review the work, then approve or dispute in Truvlo.`,
+    url: approveUrl,
+  }).catch(error => console.error('Telegram notify-client failed:', error));
+
+  if (!clientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)) {
+    return telegramResult && 'ok' in telegramResult && telegramResult.ok
+      ? res.status(200).json({ success: true, email_skipped: true })
+      : res.status(400).json({ error: 'No client email or Telegram link on record for this invoice' });
+  }
+  if (!RESEND_API_KEY) return res.status(200).json({ success: true, email_skipped: true });
+
   const headline = displayName ? `${displayName} requested withdrawal approval` : 'Withdrawal requested';
   const body = displayName
     ? `<strong style="color:#F8FAFC;">${displayName}</strong> has marked the work complete and requested withdrawal.`

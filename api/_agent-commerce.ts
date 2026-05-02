@@ -16,6 +16,8 @@ import {
   walletBelongsToUser,
 } from './_shared.js';
 import { EscrowPaySDK, TokenType } from '../src/lib/escrowPaySDK.js';
+import { resolveAppOrigin } from './_notify-client-origin.js';
+import { sendTelegramToPrivyId } from './_telegram.js';
 
 const VALID_VERIFICATION_STATUSES = ['pending', 'passed', 'failed', 'needs_human_review'] as const;
 const VALID_CONFIDENCE_LEVELS = ['low', 'medium', 'high'] as const;
@@ -204,6 +206,28 @@ export async function handleAgentVerifications(req: VercelRequest, res: VercelRe
     .update({ success_criteria: criteria, deliverable_url: deliverable, proof_text: proof })
     .eq('invoice_id', invoiceId)
     .eq('creator_wallet', normalizedCreatorWallet);
+
+  const { data: policy } = await supabase
+    .from('agent_policies')
+    .select('client_privy_id')
+    .eq('invoice_id', invoiceId)
+    .eq('creator_wallet', normalizedCreatorWallet)
+    .eq('status', 'active')
+    .maybeSingle();
+  const appOrigin = resolveAppOrigin({
+    envOrigin: process.env.APP_ORIGIN,
+    vercelUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL,
+    headers: req.headers,
+  });
+  const reviewUrl = appOrigin
+    ? `${appOrigin}/approve/${encodeURIComponent(invoiceId)}/${encodeURIComponent(normalizedCreatorWallet)}`
+    : undefined;
+  await sendTelegramToPrivyId({
+    privyId: policy?.client_privy_id,
+    title: 'Proof submitted',
+    body: `Proof was submitted for ${invoiceId}. Truvlo Agent recommendation: ${data.recommended_action}.`,
+    url: reviewUrl,
+  }).catch(error => console.error('Telegram agent verification notification failed:', error));
 
   return res.status(200).json({ success: true, agent_verification: data });
 }

@@ -141,8 +141,16 @@ export async function handleTelegramWebhook(req: VercelRequest, res: VercelRespo
   const message = req.body?.message;
   const chatId = message?.chat?.id ? String(message.chat.id) : '';
   const text = typeof message?.text === 'string' ? message.text.trim() : '';
-  const code = text.match(/^\/start\s+([A-Za-z0-9_-]{6,64})/)?.[1] ?? null;
-  if (!chatId || !code) return res.status(200).json({ ok: true });
+  const startCode = text.match(/^\/start\s+([A-Za-z0-9_-]{6,64})/)?.[1] ?? null;
+  const rawCode = text.match(/^(TRUVLO-[A-F0-9]{10})$/i)?.[1] ?? null;
+  const code = startCode ?? rawCode;
+  if (!chatId) return res.status(200).json({ ok: true });
+  if (!code) {
+    if (text === '/start') {
+      await sendTelegramMessage(chatId, 'Open Truvlo, tap Connect Telegram, then send the full TRUVLO code shown on your Account page.');
+    }
+    return res.status(200).json({ ok: true });
+  }
 
   const { data: linkCode, error: codeError } = await supabase
     .from('telegram_link_codes')

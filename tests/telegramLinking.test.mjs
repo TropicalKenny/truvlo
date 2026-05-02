@@ -21,6 +21,8 @@ assert.match(telegramSource, /X-Telegram-Bot-Api-Secret-Token/i, 'telegram webho
 assert.match(telegramSource, /telegram_link_codes/, 'telegram link route should store pending link codes');
 assert.match(telegramSource, /telegram_links/, 'telegram webhook should store linked chat ids');
 assert.match(telegramSource, /\/start\s+\$\{code\}/, 'telegram deep link flow should expect start payload codes');
+assert.match(telegramSource, /rawCode/, 'telegram webhook should also accept pasted TRUVLO codes');
+assert.match(telegramSource, /send the full TRUVLO code/, 'telegram webhook should guide users when Telegram only sends /start');
 assert.match(telegramSource, /sendTelegramMessage/, 'telegram helper should send bot messages');
 assert.match(telegramSource, /sendTelegramToPrivyId/, 'telegram helper should send user-specific notifications');
 
@@ -36,6 +38,7 @@ assert.match(accountSource, /\/api\/telegram-link/, 'account page should call te
 assert.match(accountSource, /telegramLink/, 'account page should track Telegram linked state');
 assert.match(accountSource, /window\.location\.href = data\.deep_link/, 'account page should navigate to Telegram deep link');
 assert.match(accountSource, /telegramConnectAttempt/, 'account page should show a fallback code if Telegram does not open the bot');
+assert.match(accountSource, /copy\(`\/start \$\{telegramConnectAttempt\.code\}`/, 'account page should copy the full start command');
 
 assert.match(notifyClientSource, /sendTelegramToPrivyId/, 'client withdrawal notifications should also attempt Telegram');
 assert.match(notifyCreatorSource, /sendTelegramToPrivyId/, 'creator notifications should also attempt Telegram');

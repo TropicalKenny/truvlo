@@ -320,12 +320,12 @@ const AccountPage: React.FC = () => {
               {!telegramLink?.telegram_link && telegramConnectAttempt && (
                 <div className="mt-4 rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#CBD5E1', fontSize: '12px', lineHeight: 1.5 }}>
-                    If Telegram opened without the bot, open @{telegramLink?.bot_username || 'truvlobot'} and send this code:
+                    If Telegram sends only /start, copy and send the full line below:
                   </p>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <code className="flex-1 rounded-md px-3 py-2 text-sm" style={{ backgroundColor: '#0D1117', color: '#F8FAFC', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <code className="mt-3 block w-full rounded-md px-3 py-3 text-sm" style={{ backgroundColor: '#0D1117', color: '#F8FAFC', border: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap', overflowX: 'auto' }}>
                       /start {telegramConnectAttempt.code}
-                    </code>
+                  </code>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => copy(`/start ${telegramConnectAttempt.code}`, () => toast({ title: 'Telegram code copied' }))}
@@ -344,6 +344,9 @@ const AccountPage: React.FC = () => {
                       Open bot
                     </a>
                   </div>
+                  <p className="mt-2" style={{ fontFamily: '"DM Sans", sans-serif', color: '#64748B', fontSize: '11px', lineHeight: 1.45 }}>
+                    The code also works by itself: {telegramConnectAttempt.code}
+                  </p>
                 </div>
               )}
             </section>

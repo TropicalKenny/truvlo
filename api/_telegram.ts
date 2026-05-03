@@ -38,6 +38,12 @@ function getTelegramSecretHeader(req: VercelRequest) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function telegramSecretMatches(req: VercelRequest) {
+  const header = getTelegramSecretHeader(req);
+  if (!header) return false;
+  return header === TELEGRAM_WEBHOOK_SECRET;
+}
+
 function sanitizeTelegramText(text: string) {
   return text.replace(/[<>&]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[char] ?? char));
 }
@@ -134,7 +140,7 @@ export async function handleTelegramLink(req: VercelRequest, res: VercelResponse
 export async function handleTelegramWebhook(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!TELEGRAM_BOT_TOKEN) return res.status(200).json({ ok: true, skipped: true });
-  if (TELEGRAM_WEBHOOK_SECRET && getTelegramSecretHeader(req) !== TELEGRAM_WEBHOOK_SECRET) {
+  if (!telegramSecretMatches(req)) {
     return res.status(401).json({ error: 'Invalid Telegram webhook secret' });
   }
 

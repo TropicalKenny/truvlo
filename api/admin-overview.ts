@@ -48,12 +48,12 @@ function redactRows(section: AdminSection, rows: Row[], role: AdminRole): Row[] 
     }
 
     if (section === 'disputes') {
-      safe.id = maskIdentifier(row.id);
+      safe.id = role === 'owner' ? row.id : maskIdentifier(row.id);
       safe.invoice_id = row.invoice_id;
       safe.status = row.status;
       safe.opened_by_role = row.opened_by_role;
-      safe.creator_wallet = shortWallet(row.creator_wallet);
-      safe.client_wallet = shortWallet(row.client_wallet);
+      safe.creator_wallet = role === 'owner' ? row.creator_wallet : shortWallet(row.creator_wallet);
+      safe.client_wallet = role === 'owner' ? row.client_wallet : shortWallet(row.client_wallet);
       safe.opened_at = row.opened_at;
       safe.evidence_deadline_at = row.evidence_deadline_at;
       safe.recommendation_decision = row.recommendation_decision;

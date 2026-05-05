@@ -48,6 +48,7 @@ function redactRows(section: AdminSection, rows: Row[], role: AdminRole): Row[] 
     }
 
     if (section === 'disputes') {
+      safe.id = maskIdentifier(row.id);
       safe.invoice_id = row.invoice_id;
       safe.status = row.status;
       safe.opened_by_role = row.opened_by_role;
@@ -55,8 +56,24 @@ function redactRows(section: AdminSection, rows: Row[], role: AdminRole): Row[] 
       safe.client_wallet = shortWallet(row.client_wallet);
       safe.opened_at = row.opened_at;
       safe.evidence_deadline_at = row.evidence_deadline_at;
+      safe.recommendation_decision = row.recommendation_decision;
+      safe.recommendation_creator_bps = row.recommendation_creator_bps;
+      safe.recommendation_client_bps = row.recommendation_client_bps;
+      safe.recommendation_confidence = row.recommendation_confidence;
+      safe.recommendation_note = row.recommendation_note;
+      safe.recommendation_risks = row.recommendation_risks;
+      safe.recommendation_generated_at = row.recommendation_generated_at;
       safe.decision = row.decision;
       safe.resolved_at = row.resolved_at;
+      safe.resolution_creator_bps = row.resolution_creator_bps;
+      safe.resolution_client_bps = row.resolution_client_bps;
+      safe.verdict_note = row.verdict_note;
+      safe.verdict_hash = row.verdict_hash;
+      safe.verdict_hash_signature = row.verdict_hash_signature;
+      safe.resolution_signature = row.resolution_signature;
+      safe.onchain_resolved_at = row.onchain_resolved_at;
+      safe.token_type = row.token_type;
+      safe.amount = row.amount;
       return safe;
     }
 
@@ -252,13 +269,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .limit(25), warnings)
       : [];
 
-    const disputes = canSee(admin, 'disputes')
+    let disputes = canSee(admin, 'disputes')
       ? await safeQuery<Row>('disputes', supabase
           .from('dispute_cases')
-          .select('id, invoice_id, creator_wallet, client_wallet, status, opened_by_role, opened_at, evidence_deadline_at, decision, resolved_at')
+          .select('id, invoice_id, creator_wallet, client_wallet, status, opened_by_role, opened_at, evidence_deadline_at, recommendation_decision, recommendation_creator_bps, recommendation_client_bps, recommendation_confidence, recommendation_note, recommendation_risks, recommendation_generated_at, decision, resolved_at, resolution_creator_bps, resolution_client_bps, verdict_note, verdict_hash, verdict_hash_signature, resolution_signature, onchain_resolved_at')
           .order('opened_at', { ascending: false })
           .limit(50), warnings)
       : [];
+
+    if (disputes.length > 0) {
+      const invoiceIds = Array.from(new Set(disputes.map(row => String(row.invoice_id)).filter(Boolean)));
+      const disputeInvoiceMeta = await safeQuery<Row>('dispute invoice metadata', supabase
+        .from('invoice_meta')
+        .select('invoice_id, creator_wallet, token_type, amount')
+        .in('invoice_id', invoiceIds), warnings);
+      const metaByKey = new Map(disputeInvoiceMeta.map(row => [`${row.invoice_id}:${row.creator_wallet}`, row]));
+      disputes = disputes.map(row => ({
+        ...row,
+        token_type: metaByKey.get(`${row.invoice_id}:${row.creator_wallet}`)?.token_type ?? null,
+        amount: metaByKey.get(`${row.invoice_id}:${row.creator_wallet}`)?.amount ?? null,
+      }));
+    }
 
     const referralRewards = canSee(admin, 'referral_rewards')
       ? await safeQuery<Row>('referral rewards', supabase

@@ -1,8 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
+import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
+import { useConnection } from '@solana/wallet-adapter-react';
+import { AnchorProvider } from '@coral-xyz/anchor';
+import { PublicKey } from '@solana/web3.js';
 import Header from '@/components/Header';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { CONTRACT_PLATFORM_TREASURY_WALLET } from '@/lib/admin';
+import { EscrowPaySDK } from '@/lib/escrowPaySDK';
+import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
+import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
 import {
   Banknote,
   FileText,
@@ -124,6 +131,10 @@ const adminSections: AdminSection[] = [
       { key: 'invoice_id', label: 'Invoice' },
       { key: 'status', label: 'Status' },
       { key: 'opened_by_role', label: 'Opened by' },
+      { key: 'recommendation_decision', label: 'Recommendation' },
+      { key: 'recommendation_confidence', label: 'Confidence' },
+      { key: 'token_type', label: 'Token' },
+      { key: 'onchain_resolved_at', label: 'On-chain', date: true },
       { key: 'creator_wallet', label: 'Creator' },
       { key: 'client_wallet', label: 'Client' },
       { key: 'opened_at', label: 'Opened', date: true },
@@ -213,6 +224,12 @@ function formatDate(value: unknown): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+async function sha512Bytes(text: string): Promise<Uint8Array> {
+  const encoded = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-512', encoded);
+  return new Uint8Array(digest);
+}
+
 function getSectionFromHash(): AdminSectionId {
   if (typeof window === 'undefined') return 'invoices';
   const hash = window.location.hash.replace('#', '') as AdminSectionId;
@@ -254,10 +271,16 @@ const DataPanel = ({
   title,
   rows,
   columns,
+  actionLabel,
+  actionBusyId,
+  onAction,
 }: {
   title: string;
   rows: Array<Record<string, unknown>>;
   columns: Array<{ key: string; label: string; date?: boolean }>;
+  actionLabel?: string;
+  actionBusyId?: string | null;
+  onAction?: (row: Record<string, unknown>) => void;
 }) => (
   <section className="admin-data-panel">
     <div className="admin-data-panel-header">
@@ -269,12 +292,13 @@ const DataPanel = ({
         <thead>
           <tr>
             {columns.map(column => <th key={column.key}>{column.label}</th>)}
+            {onAction && <th>Action</th>}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="admin-empty-cell">
+              <td colSpan={columns.length + (onAction ? 1 : 0)} className="admin-empty-cell">
                 No records found.
               </td>
             </tr>
@@ -285,6 +309,18 @@ const DataPanel = ({
                   {column.date ? formatDate(row[column.key]) : shortValue(row[column.key])}
                 </td>
               ))}
+              {onAction && (
+                <td>
+                  <button
+                    type="button"
+                    className="admin-inline-button"
+                    onClick={() => onAction(row)}
+                    disabled={!row.id || actionBusyId === String(row.id)}
+                  >
+                    {actionBusyId === String(row.id) ? 'Running' : actionLabel}
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -296,14 +332,35 @@ const DataPanel = ({
 const AdminPage: React.FC = () => {
   const { ready, authenticated, login, getAccessToken } = usePrivy();
   const { activeWallet } = useActiveWallet();
+  const { connection } = useConnection();
+  const { signAndSendTransaction } = useSignAndSendTransaction();
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSectionId, setActiveSectionId] = useState<AdminSectionId>(() => getSectionFromHash());
   const [reconciling, setReconciling] = useState(false);
   const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
+  const [recommendationCaseId, setRecommendationCaseId] = useState<string | null>(null);
+  const [selectedDispute, setSelectedDispute] = useState<Record<string, unknown> | null>(null);
+  const [resolutionDecision, setResolutionDecision] = useState<'creator' | 'client' | 'split'>('split');
+  const [creatorShareBps, setCreatorShareBps] = useState(5000);
+  const [clientShareBps, setClientShareBps] = useState(5000);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [resolvingCaseId, setResolvingCaseId] = useState<string | null>(null);
+  const [onChainCaseId, setOnChainCaseId] = useState<string | null>(null);
 
   const activeAddress = activeWallet?.address ?? null;
+
+  const createAdminSdk = useCallback(() => {
+    if (!activeWallet || !activeAddress) return null;
+    const publicKey = new PublicKey(activeAddress);
+    const anchorWallet = createPrivySolanaAnchorWallet(activeWallet, publicKey);
+    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
+    const sponsorFn = async (tx: Uint8Array): Promise<string> => {
+      return sendSponsoredSolanaTransaction(signAndSendTransaction, activeWallet, tx);
+    };
+    return new EscrowPaySDK(provider, false, sponsorFn);
+  }, [activeAddress, activeWallet, connection, signAndSendTransaction]);
 
   const loadAdminData = useCallback(async () => {
     if (!activeAddress) return;
@@ -380,9 +437,25 @@ const AdminPage: React.FC = () => {
 
   const selectSection = (sectionId: AdminSectionId) => {
     setActiveSectionId(sectionId);
+    if (sectionId !== 'disputes') {
+      setSelectedDispute(null);
+    }
     if (window.location.hash !== `#${sectionId}`) {
       window.history.replaceState(null, '', `#${sectionId}`);
     }
+  };
+
+  const selectDispute = (row: Record<string, unknown>) => {
+    setSelectedDispute(row);
+    const recommendedDecision = row.recommendation_decision === 'creator' || row.recommendation_decision === 'client' || row.recommendation_decision === 'split'
+      ? row.recommendation_decision
+      : 'split';
+    setResolutionDecision(recommendedDecision);
+    const creatorBps = Number(row.recommendation_creator_bps ?? (recommendedDecision === 'creator' ? 10000 : recommendedDecision === 'client' ? 0 : 5000));
+    const clientBps = Number(row.recommendation_client_bps ?? (recommendedDecision === 'creator' ? 0 : recommendedDecision === 'client' ? 10000 : 5000));
+    setCreatorShareBps(Number.isFinite(creatorBps) ? creatorBps : 5000);
+    setClientShareBps(Number.isFinite(clientBps) ? clientBps : 5000);
+    setResolutionNote(String(row.recommendation_note ?? ''));
   };
 
   const reconcileDisputes = async () => {
@@ -407,6 +480,154 @@ const AdminPage: React.FC = () => {
       setReconcileMessage(err instanceof Error ? err.message : 'Reconciliation failed');
     } finally {
       setReconciling(false);
+    }
+  };
+
+  const resolveDisputeOffchain = async () => {
+    if (!activeAddress || !selectedDispute?.id) return;
+    const caseId = String(selectedDispute.id);
+    if (creatorShareBps + clientShareBps !== 10000) {
+      setReconcileMessage('Creator and client basis points must total 10000.');
+      return;
+    }
+    setResolvingCaseId(caseId);
+    setReconcileMessage(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/disputes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'resolve',
+          caseId,
+          adminWallet: activeAddress,
+          decision: resolutionDecision,
+          creatorShareBps,
+          clientShareBps,
+          verdictNote: resolutionNote,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Resolution failed');
+      setReconcileMessage('Dispute resolution recorded. On-chain fund movement remains a separate treasury action.');
+      await loadAdminData();
+      setSelectedDispute(data.dispute_case as Record<string, unknown>);
+    } catch (err) {
+      setReconcileMessage(err instanceof Error ? err.message : 'Resolution failed');
+    } finally {
+      setResolvingCaseId(null);
+    }
+  };
+
+  const resolveDisputeOnChain = async () => {
+    if (!activeAddress || !selectedDispute?.id) return;
+    const caseId = String(selectedDispute.id);
+    if (activeAddress !== CONTRACT_PLATFORM_TREASURY_WALLET) {
+      setReconcileMessage('Connect the platform treasury wallet before signing the on-chain resolution.');
+      return;
+    }
+    const tokenType = String(selectedDispute.token_type ?? '').toUpperCase();
+    if (tokenType !== 'USDC' && tokenType !== 'SOL') {
+      setReconcileMessage('On-chain dispute resolution needs a USDC or SOL invoice.');
+      return;
+    }
+    if (selectedDispute.status !== 'resolved') {
+      setReconcileMessage('Record the final reviewed decision before signing the on-chain resolution.');
+      return;
+    }
+    if (creatorShareBps + clientShareBps !== 10000) {
+      setReconcileMessage('Creator and client basis points must total 10000.');
+      return;
+    }
+
+    setOnChainCaseId(caseId);
+    setReconcileMessage(null);
+    try {
+      const sdk = createAdminSdk();
+      if (!sdk) throw new Error('Wallet not ready');
+      const invoiceId = String(selectedDispute.invoice_id ?? '');
+      const creatorWallet = String(selectedDispute.creator_wallet ?? '');
+      const clientWallet = String(selectedDispute.client_wallet ?? '');
+      if (!invoiceId || !creatorWallet || !clientWallet) {
+        throw new Error('Missing invoice, creator, or client wallet for on-chain resolution.');
+      }
+
+      const verdictPayload = JSON.stringify({
+        caseId,
+        invoiceId,
+        decision: resolutionDecision,
+        creatorShareBps,
+        clientShareBps,
+        verdictNote: resolutionNote,
+      });
+      const verdictHash = await sha512Bytes(verdictPayload);
+      const verdictResult = await sdk.storeVerdictHash(invoiceId, new PublicKey(creatorWallet), verdictHash);
+      if (!verdictResult.success || !verdictResult.data) {
+        throw new Error(verdictResult.error || 'Could not store verdict hash on-chain.');
+      }
+
+      const creatorPubkey = new PublicKey(creatorWallet);
+      const clientPubkey = new PublicKey(clientWallet);
+      const resolutionResult = tokenType === 'SOL'
+        ? await sdk.resolveDisputeSol(invoiceId, creatorPubkey, clientPubkey, creatorShareBps, clientShareBps)
+        : await sdk.resolveDispute(invoiceId, creatorPubkey, clientPubkey, creatorShareBps, clientShareBps);
+      if (!resolutionResult.success || !resolutionResult.data) {
+        throw new Error(resolutionResult.error || 'Could not resolve dispute on-chain.');
+      }
+
+      const token = await getAccessToken();
+      const res = await fetch('/api/disputes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'mark_onchain_resolved',
+          caseId,
+          adminWallet: activeAddress,
+          verdictHashSignature: verdictResult.data.signature,
+          resolutionSignature: resolutionResult.data.signature,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'On-chain signatures could not be recorded.');
+      setReconcileMessage(`On-chain resolution signed: ${resolutionResult.data.signature.slice(0, 8)}...${resolutionResult.data.signature.slice(-8)}.`);
+      await loadAdminData();
+      setSelectedDispute(data.dispute_case as Record<string, unknown>);
+    } catch (err) {
+      setReconcileMessage(err instanceof Error ? err.message : 'On-chain resolution failed');
+    } finally {
+      setOnChainCaseId(null);
+    }
+  };
+
+  const recommendDispute = async (row: Record<string, unknown>) => {
+    if (!activeAddress || !row.id) return;
+    const caseId = String(row.id);
+    setRecommendationCaseId(caseId);
+    setReconcileMessage(null);
+    try {
+      const token = await getAccessToken();
+      const res = await fetch('/api/disputes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action: 'recommend', caseId, adminWallet: activeAddress }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Recommendation failed');
+      setReconcileMessage(`Recommendation: ${data.recommendation?.decision ?? 'manual review'} (${data.recommendation?.confidence ?? 'low'} confidence).`);
+      await loadAdminData();
+    } catch (err) {
+      setReconcileMessage(err instanceof Error ? err.message : 'Recommendation failed');
+    } finally {
+      setRecommendationCaseId(null);
     }
   };
 
@@ -488,6 +709,23 @@ const AdminPage: React.FC = () => {
         .admin-primary-button:hover { background: #38E6D0; }
         .admin-primary-button:active { transform: translateY(1px); }
         .admin-primary-button:disabled { opacity: 0.65; cursor: not-allowed; }
+
+        .admin-inline-button {
+          min-height: 32px;
+          padding: 0 10px;
+          border-radius: 8px;
+          border: 1px solid rgba(45, 212, 191, 0.34);
+          background: rgba(45, 212, 191, 0.08);
+          color: ${colors.teal};
+          font-family: "DM Sans", sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .admin-inline-button:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
 
         .admin-warning {
           display: grid;
@@ -629,6 +867,78 @@ const AdminPage: React.FC = () => {
           gap: 18px;
         }
 
+        .admin-review-panel {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 360px;
+          gap: 18px;
+          padding: 20px;
+          border-radius: 8px;
+          background: ${colors.surface};
+          border: 1px solid ${colors.border};
+        }
+
+        .admin-review-title {
+          color: ${colors.text};
+          font-family: "Space Grotesk", sans-serif;
+          font-size: 1.05rem;
+          font-weight: 700;
+          margin-bottom: 6px;
+        }
+
+        .admin-review-body {
+          color: #C5D6F0;
+          font-family: "DM Sans", sans-serif;
+          font-size: 14px;
+          line-height: 1.6;
+          white-space: pre-wrap;
+        }
+
+        .admin-review-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          margin: 18px 0;
+        }
+
+        .admin-review-metric {
+          padding: 14px;
+          border-radius: 8px;
+          border: 1px solid ${colors.borderSoft};
+          background: ${colors.surfaceSoft};
+        }
+
+        .admin-form-stack {
+          display: grid;
+          gap: 12px;
+        }
+
+        .admin-field-label {
+          color: #7890B5;
+          font-family: "DM Sans", sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.07em;
+        }
+
+        .admin-input,
+        .admin-select,
+        .admin-textarea {
+          width: 100%;
+          border-radius: 8px;
+          border: 1px solid ${colors.border};
+          background: ${colors.surfaceSoft};
+          color: ${colors.text};
+          font-family: "DM Sans", sans-serif;
+          font-size: 14px;
+          padding: 10px 12px;
+        }
+
+        .admin-textarea {
+          min-height: 110px;
+          resize: vertical;
+        }
+
         .admin-data-panel {
           overflow: hidden;
           border-radius: 8px;
@@ -736,6 +1046,14 @@ const AdminPage: React.FC = () => {
           .admin-stat-value {
             font-size: 1.6rem;
           }
+
+          .admin-review-panel {
+            grid-template-columns: 1fr;
+          }
+
+          .admin-review-grid {
+            grid-template-columns: 1fr;
+          }
         }
       `}</style>
       <main className="admin-shell">
@@ -835,7 +1153,134 @@ const AdminPage: React.FC = () => {
                 title={activeSection.title}
                 rows={activeRows}
                 columns={activeSection.columns}
+                actionLabel={activeSection.id === 'disputes' && adminRole === 'owner' ? 'Review' : undefined}
+                actionBusyId={recommendationCaseId}
+                onAction={activeSection.id === 'disputes' && adminRole === 'owner' ? selectDispute : undefined}
               />
+
+              {activeSection.id === 'disputes' && selectedDispute && adminRole === 'owner' && (
+                <section className="admin-review-panel">
+                  <div>
+                    <p style={labelStyle}>Dispute review</p>
+                    <h2 className="admin-review-title">{String(selectedDispute.invoice_id ?? 'Selected dispute')}</h2>
+                    <div className="admin-review-grid">
+                      <div className="admin-review-metric">
+                        <p className="admin-field-label">Recommendation</p>
+                        <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{shortValue(selectedDispute.recommendation_decision)}</p>
+                      </div>
+                      <div className="admin-review-metric">
+                        <p className="admin-field-label">Creator share</p>
+                        <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{shortValue(selectedDispute.recommendation_creator_bps)} bps</p>
+                      </div>
+                      <div className="admin-review-metric">
+                        <p className="admin-field-label">Confidence</p>
+                        <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{shortValue(selectedDispute.recommendation_confidence)}</p>
+                      </div>
+                      <div className="admin-review-metric">
+                        <p className="admin-field-label">Token</p>
+                        <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{shortValue(selectedDispute.token_type)}</p>
+                      </div>
+                      <div className="admin-review-metric">
+                        <p className="admin-field-label">Final decision</p>
+                        <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{shortValue(selectedDispute.decision)}</p>
+                      </div>
+                      <div className="admin-review-metric">
+                        <p className="admin-field-label">On-chain</p>
+                        <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{selectedDispute.onchain_resolved_at ? 'signed' : 'pending'}</p>
+                      </div>
+                    </div>
+                    <p className="admin-field-label">Reasoning</p>
+                    <p className="admin-review-body">{String(selectedDispute.recommendation_note || 'No recommendation has been generated yet.')}</p>
+                    <div style={{ height: 16 }} />
+                    <p className="admin-field-label">Risk flags</p>
+                    <p className="admin-review-body">{String(selectedDispute.recommendation_risks || 'No risk flags recorded.')}</p>
+                  </div>
+
+                  <div className="admin-form-stack">
+                    <button
+                      type="button"
+                      className="admin-primary-button"
+                      onClick={() => recommendDispute(selectedDispute)}
+                      disabled={recommendationCaseId === String(selectedDispute.id)}
+                    >
+                      {recommendationCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gavel className="h-4 w-4" />}
+                      Generate recommendation
+                    </button>
+
+                    <label className="admin-form-stack">
+                      <span className="admin-field-label">Final decision</span>
+                      <select
+                        className="admin-select"
+                        value={resolutionDecision}
+                        onChange={event => {
+                          const next = event.target.value as 'creator' | 'client' | 'split';
+                          setResolutionDecision(next);
+                          if (next === 'creator') {
+                            setCreatorShareBps(10000);
+                            setClientShareBps(0);
+                          } else if (next === 'client') {
+                            setCreatorShareBps(0);
+                            setClientShareBps(10000);
+                          } else {
+                            setCreatorShareBps(5000);
+                            setClientShareBps(5000);
+                          }
+                        }}
+                      >
+                        <option value="creator">Creator</option>
+                        <option value="client">Client</option>
+                        <option value="split">Split</option>
+                      </select>
+                    </label>
+
+                    <label className="admin-form-stack">
+                      <span className="admin-field-label">Creator bps</span>
+                      <input
+                        className="admin-input"
+                        type="number"
+                        min={0}
+                        max={10000}
+                        value={creatorShareBps}
+                        onChange={event => {
+                          const next = Number(event.target.value);
+                          setCreatorShareBps(next);
+                          setClientShareBps(10000 - next);
+                        }}
+                      />
+                    </label>
+
+                    <label className="admin-form-stack">
+                      <span className="admin-field-label">Client bps</span>
+                      <input className="admin-input" type="number" min={0} max={10000} value={clientShareBps} onChange={event => setClientShareBps(Number(event.target.value))} />
+                    </label>
+
+                    <label className="admin-form-stack">
+                      <span className="admin-field-label">Verdict note</span>
+                      <textarea className="admin-textarea" value={resolutionNote} onChange={event => setResolutionNote(event.target.value)} />
+                    </label>
+
+                    <button
+                      type="button"
+                      className="admin-primary-button"
+                      onClick={resolveDisputeOffchain}
+                      disabled={resolvingCaseId === String(selectedDispute.id)}
+                    >
+                      {resolvingCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
+                      Record final decision
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-primary-button"
+                      onClick={resolveDisputeOnChain}
+                      disabled={onChainCaseId === String(selectedDispute.id) || Boolean(selectedDispute.onchain_resolved_at)}
+                    >
+                      {onChainCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                      Sign on-chain resolution
+                    </button>
+                    <p className="admin-muted-note">This records the reviewed decision first, then the treasury wallet can store a verdict hash and split USDC or SOL escrow on-chain.</p>
+                  </div>
+                </section>
+              )}
             </div>
           </>
         )}

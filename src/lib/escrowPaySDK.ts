@@ -836,6 +836,115 @@ export class EscrowPaySDK {
     }
   }
 
+  async storeVerdictHash(
+    invoiceId: string,
+    creatorPubkey: PublicKey,
+    verdictHash: Uint8Array | number[]
+  ): Promise<SDKResult<{ signature: string }>> {
+    if (!this.provider.publicKey) return { success: false, error: 'Wallet not connected' };
+    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
+    if (verdictHash.length !== 64) return { success: false, error: 'Verdict hash must be 64 bytes' };
+    if (!this.provider.publicKey.equals(PLATFORM_TREASURY)) {
+      return { success: false, error: 'Connect the platform treasury wallet to sign this action.' };
+    }
+
+    try {
+      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+      const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
+      const builder = this.program.methods
+        .storeVerdictHash(invoiceId, Array.from(verdictHash))
+        .accounts({
+          invoice: invoiceAddress,
+          kenny: this.provider.publicKey,
+        });
+      const tx = await this.sendTx(builder);
+      return { success: true, data: { signature: tx } };
+    } catch (error: any) {
+      this.logError('storeVerdictHash', error);
+      return { success: false, error: this.parseError(error) };
+    }
+  }
+
+  async resolveDispute(
+    invoiceId: string,
+    creatorPubkey: PublicKey,
+    clientPubkey: PublicKey,
+    creatorBps: number,
+    clientBps: number
+  ): Promise<SDKResult<{ signature: string }>> {
+    if (!this.provider.publicKey) return { success: false, error: 'Wallet not connected' };
+    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
+    if (!this.provider.publicKey.equals(PLATFORM_TREASURY)) {
+      return { success: false, error: 'Connect the platform treasury wallet to sign this action.' };
+    }
+    if (!Number.isInteger(creatorBps) || !Number.isInteger(clientBps) || creatorBps < 0 || clientBps < 0 || creatorBps + clientBps !== 10000) {
+      return { success: false, error: 'Creator and client basis points must total 10000.' };
+    }
+
+    try {
+      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+      const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
+      const [escrowAddress] = await this.getEscrowPDA(invoiceId, creatorPubkey);
+      const creatorToken = getAssociatedTokenAddressSync(this.usdcMint, creatorPubkey);
+      const clientToken = getAssociatedTokenAddressSync(this.usdcMint, clientPubkey);
+      const builder = this.program.methods
+        .resolveDispute(invoiceId, creatorBps, clientBps)
+        .accounts({
+          invoice: invoiceAddress,
+          escrow: escrowAddress,
+          creatorToken,
+          clientToken,
+          usdcMint: this.usdcMint,
+          creator: creatorPubkey,
+          kenny: this.provider.publicKey,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        });
+      const tx = await this.sendTx(builder);
+      return { success: true, data: { signature: tx } };
+    } catch (error: any) {
+      this.logError('resolveDispute', error);
+      return { success: false, error: this.parseError(error) };
+    }
+  }
+
+  async resolveDisputeSol(
+    invoiceId: string,
+    creatorPubkey: PublicKey,
+    clientPubkey: PublicKey,
+    creatorBps: number,
+    clientBps: number
+  ): Promise<SDKResult<{ signature: string }>> {
+    if (!this.provider.publicKey) return { success: false, error: 'Wallet not connected' };
+    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
+    if (!this.provider.publicKey.equals(PLATFORM_TREASURY)) {
+      return { success: false, error: 'Connect the platform treasury wallet to sign this action.' };
+    }
+    if (!Number.isInteger(creatorBps) || !Number.isInteger(clientBps) || creatorBps < 0 || clientBps < 0 || creatorBps + clientBps !== 10000) {
+      return { success: false, error: 'Creator and client basis points must total 10000.' };
+    }
+
+    try {
+      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+      const [invoiceAddress] = await this.getInvoicePDA(invoiceId, creatorPubkey);
+      const builder = this.program.methods
+        .resolveDisputeSol(invoiceId, creatorBps, clientBps)
+        .accounts({
+          invoice: invoiceAddress,
+          creator: creatorPubkey,
+          client: clientPubkey,
+          kenny: this.provider.publicKey,
+          systemProgram: SystemProgram.programId,
+        });
+      const tx = await this.sendTx(builder);
+      return { success: true, data: { signature: tx } };
+    } catch (error: any) {
+      this.logError('resolveDisputeSol', error);
+      return { success: false, error: this.parseError(error) };
+    }
+  }
+
   isAutoReleaseReady(invoice: InvoiceData): boolean {
     if (!invoice.completionRequestedAt) return false;
     const requestedAt = invoice.completionRequestedAt.toNumber();

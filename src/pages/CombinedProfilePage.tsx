@@ -4,7 +4,7 @@ import { useConnection } from '@solana/wallet-adapter-react';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey, Connection } from '@solana/web3.js';
 import { ExternalLink, AlertCircle, Loader2, Shield, Zap, TrendingUp, Info, Copy, Check } from 'lucide-react';
-import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
+import { EscrowPaySDK, InvoiceData, InvoiceStatus } from '@/lib/escrowPaySDK';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -159,7 +159,7 @@ const CombinedProfilePage: React.FC = () => {
   const [totalPaid, setTotalPaid] = useState(0);
   const [disputedAsCreator, setDisputedAsCreator] = useState(0);
   const [disputedAsClient, setDisputedAsClient] = useState(0);
-  const [memberSince, setMemberSince] = useState('—');
+  const [_memberSince, setMemberSince] = useState('—');
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [copied, setCopied] = useState(false);
 

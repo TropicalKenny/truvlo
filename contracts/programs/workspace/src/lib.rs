@@ -603,6 +603,70 @@ pub mod workspace {
     }
 
     // ----------------------------------------------------------
+    // RESOLVE DISPUTE - SOL (KENNY ONLY)
+    // SOL escrow is held as lamports on the invoice PDA.
+    // Keep the invoice rent-exempt and split only unreleased funds.
+    // ----------------------------------------------------------
+    pub fn resolve_dispute_sol(
+        ctx: Context<ResolveDisputeSol>,
+        invoice_id: String,
+        creator_bps: u16,
+        client_bps: u16,
+    ) -> Result<()> {
+        let invoice = &ctx.accounts.invoice;
+        require!(invoice.invoice_id == invoice_id, ErrorCode::InvalidInvoiceId);
+        require!(invoice.status == InvoiceStatus::Disputed, ErrorCode::NotDisputed);
+        require!(ctx.accounts.kenny.key() == PLATFORM_TREASURY, ErrorCode::Unauthorized);
+        require!(invoice.creator == ctx.accounts.creator.key(), ErrorCode::Unauthorized);
+        if let Some(client_key) = invoice.client {
+            require!(ctx.accounts.client.key() == client_key, ErrorCode::InvalidOwner);
+        } else {
+            return err!(ErrorCode::InvalidOwner);
+        }
+        require!(creator_bps as u32 + client_bps as u32 == 10000, ErrorCode::InvalidSplit);
+        require!(invoice.token_type == TokenType::SOL, ErrorCode::TokenTypeMismatch);
+
+        let splittable = invoice.amount_paid
+            .checked_sub(invoice.amount_released)
+            .ok_or(ErrorCode::MathOverflow)?;
+        require!(splittable > 0, ErrorCode::NoFundsToSplit);
+
+        let creator_share = splittable
+            .checked_mul(creator_bps as u64).ok_or(ErrorCode::MathOverflow)?
+            .checked_div(10000).ok_or(ErrorCode::MathOverflow)?;
+        let client_share = splittable
+            .checked_sub(creator_share).ok_or(ErrorCode::MathOverflow)?;
+
+        let invoice_info = ctx.accounts.invoice.to_account_info();
+        let creator_info = ctx.accounts.creator.to_account_info();
+        let client_info = ctx.accounts.client.to_account_info();
+        let rent = Rent::get()?;
+        let rent_exempt_minimum = rent.minimum_balance(8 + Invoice::LEN);
+        let invoice_lamports = invoice_info.lamports();
+        let available_lamports = invoice_lamports.checked_sub(rent_exempt_minimum).ok_or(ErrorCode::MathOverflow)?;
+        require!(splittable <= available_lamports, ErrorCode::ReleaseExceedsAvailable);
+
+        let total_split = creator_share.checked_add(client_share).ok_or(ErrorCode::MathOverflow)?;
+        **invoice_info.try_borrow_mut_lamports()? = invoice_lamports
+            .checked_sub(total_split).ok_or(ErrorCode::MathOverflow)?;
+        if creator_share > 0 {
+            **creator_info.try_borrow_mut_lamports()? = creator_info.lamports()
+                .checked_add(creator_share).ok_or(ErrorCode::MathOverflow)?;
+        }
+        if client_share > 0 {
+            **client_info.try_borrow_mut_lamports()? = client_info.lamports()
+                .checked_add(client_share).ok_or(ErrorCode::MathOverflow)?;
+        }
+
+        let invoice = &mut ctx.accounts.invoice;
+        invoice.amount_released = invoice.amount_released.checked_add(creator_share).ok_or(ErrorCode::MathOverflow)?;
+        invoice.status = InvoiceStatus::Released;
+        invoice.released_at = Some(Clock::get()?.unix_timestamp);
+
+        Ok(())
+    }
+
+    // ----------------------------------------------------------
     // STORE VERDICT HASH (KENNY ONLY)
     // SHA-512 hash of the dispute verdict produced off-chain.
     // Written on-chain after Claude reviews evidence in Supabase.
@@ -756,6 +820,23 @@ pub struct ResolveDispute<'info> {
     pub kenny: Signer<'info>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(invoice_id: String)]
+pub struct ResolveDisputeSol<'info> {
+    #[account(mut, seeds = [b"invoice", invoice_id.as_bytes(), invoice.creator.as_ref()], bump = invoice.bump)]
+    pub invoice: Account<'info, Invoice>,
+    /// CHECK: Creator account - validated in instruction body
+    #[account(mut)]
+    pub creator: AccountInfo<'info>,
+    /// CHECK: Client account - validated in instruction body
+    #[account(mut)]
+    pub client: AccountInfo<'info>,
+    /// Kenny's wallet - must match PLATFORM_TREASURY
+    #[account(mut, constraint = kenny.key() == PLATFORM_TREASURY @ ErrorCode::Unauthorized)]
+    pub kenny: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 

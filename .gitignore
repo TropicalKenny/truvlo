@@ -75,6 +75,8 @@ CODEBASE_TEACHER.md
 AUDIT_POLICY_PACK.md
 .playwright-mcp
 .worktrees/
+.codex-appdata/
+.codex-logs/
 colosseum-assets
 GOALS.md
 scripts

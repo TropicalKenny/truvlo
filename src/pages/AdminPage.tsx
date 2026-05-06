@@ -394,8 +394,33 @@ const AdminPage: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  const accessButtonStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    padding: '0 22px',
+    borderRadius: 8,
+    backgroundColor: colors.teal,
+    color: '#071014',
+    fontFamily: '"DM Sans", sans-serif',
+    fontSize: 14,
+    fontWeight: 700,
+    border: 0,
+    cursor: 'pointer',
+  };
+
   if (!ready) {
-    return <div style={{ minHeight: '100vh', backgroundColor: colors.background }} />;
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: colors.background }}>
+        <Header />
+        <main className="max-w-xl mx-auto px-6 py-20 text-center">
+          <ShieldAlert className="h-10 w-10 mx-auto mb-4" style={{ color: colors.amber }} />
+          <h1 style={{ color: colors.text, fontFamily: '"Space Grotesk", sans-serif', fontSize: '1.75rem', fontWeight: 700 }}>Admin access</h1>
+          <p className="mt-3" style={{ color: colors.muted, fontFamily: '"DM Sans", sans-serif' }}>Preparing wallet authentication...</p>
+        </main>
+      </div>
+    );
   }
 
   if (!authenticated) {
@@ -406,7 +431,7 @@ const AdminPage: React.FC = () => {
           <ShieldAlert className="h-10 w-10 mx-auto mb-4" style={{ color: colors.amber }} />
           <h1 style={{ color: colors.text, fontFamily: '"Space Grotesk", sans-serif', fontSize: '1.75rem', fontWeight: 700 }}>Admin access</h1>
           <p className="mt-3 mb-6" style={{ color: colors.muted, fontFamily: '"DM Sans", sans-serif' }}>Connect the admin wallet to view operations.</p>
-          <button onClick={() => login()} className="admin-primary-button">Connect admin wallet</button>
+          <button onClick={() => login()} style={accessButtonStyle}>Connect admin wallet</button>
         </main>
       </div>
     );
@@ -484,7 +509,14 @@ const AdminPage: React.FC = () => {
   };
 
   const resolveDisputeOffchain = async () => {
-    if (!activeAddress || !selectedDispute?.id) return;
+    if (!activeAddress) {
+      setReconcileMessage('Admin wallet is not ready. Refresh the page after Privy finishes loading your wallet.');
+      return;
+    }
+    if (!selectedDispute?.id) {
+      setReconcileMessage('Select a dispute row again before recording the final decision.');
+      return;
+    }
     const caseId = String(selectedDispute.id);
     if (creatorShareBps + clientShareBps !== 10000) {
       setReconcileMessage('Creator and client basis points must total 10000.');
@@ -523,7 +555,14 @@ const AdminPage: React.FC = () => {
   };
 
   const resolveDisputeOnChain = async () => {
-    if (!activeAddress || !selectedDispute?.id) return;
+    if (!activeAddress) {
+      setReconcileMessage('Admin wallet is not ready. Refresh the page after Privy finishes loading your wallet.');
+      return;
+    }
+    if (!selectedDispute?.id) {
+      setReconcileMessage('Select a dispute row again before signing the on-chain resolution.');
+      return;
+    }
     const caseId = String(selectedDispute.id);
     if (activeAddress !== CONTRACT_PLATFORM_TREASURY_WALLET) {
       setReconcileMessage('Connect the platform treasury wallet before signing the on-chain resolution.');
@@ -606,7 +645,14 @@ const AdminPage: React.FC = () => {
   };
 
   const recommendDispute = async (row: Record<string, unknown>) => {
-    if (!activeAddress || !row.id) return;
+    if (!activeAddress) {
+      setReconcileMessage('Admin wallet is not ready. Refresh the page after Privy finishes loading your wallet.');
+      return;
+    }
+    if (!row.id) {
+      setReconcileMessage('Select a dispute row again before generating a recommendation.');
+      return;
+    }
     const caseId = String(row.id);
     setRecommendationCaseId(caseId);
     setReconcileMessage(null);
@@ -1197,6 +1243,12 @@ const AdminPage: React.FC = () => {
                   </div>
 
                   <div className="admin-form-stack">
+                    {reconcileMessage && (
+                      <div className="admin-warning" role="status" aria-live="polite">
+                        <ShieldAlert className="h-5 w-5 mt-0.5" />
+                        <span>{reconcileMessage}</span>
+                      </div>
+                    )}
                     <button
                       type="button"
                       className="admin-primary-button"

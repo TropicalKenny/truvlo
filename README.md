@@ -62,7 +62,19 @@ For Vercel API routes locally:
 npm run dev:full
 ```
 
-When using the Vite app at `http://127.0.0.1:5173`, keep `npm run dev:full -- --listen 127.0.0.1:3000` running too. Vite proxies `/api/*` to the full local API server so Supabase-backed admin and dispute routes work without deploying first.
+For admin or dispute QA, run both local servers. Keep Vercel API routes on `http://127.0.0.1:3000`:
+
+```bash
+npm run dev:full -- --listen 127.0.0.1:3000
+```
+
+Then run the Vite frontend on `http://127.0.0.1:5173`:
+
+```bash
+npm run dev
+```
+
+Vite proxies `/api/*` to the Vercel server so Supabase-backed admin and dispute routes work without loading Vite development modules through Vercel.
 
 Production build:
 

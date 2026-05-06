@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.vercel
+.worktrees
+.codex-appdata
+.codex-logs
+.codex-temp-index-*
+contracts/target
+contracts/.anchor
+colosseum-assets
+social-videos

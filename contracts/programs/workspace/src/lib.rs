@@ -813,7 +813,8 @@ pub struct ResolveDispute<'info> {
     #[account(mut)]
     pub client_token: Account<'info, TokenAccount>,
     pub usdc_mint: Account<'info, Mint>,
-    /// CHECK: Creator account for token association
+    /// CHECK: Creator account for token association and escrow close destination
+    #[account(mut)]
     pub creator: AccountInfo<'info>,
     /// Kenny's wallet — must match PLATFORM_TREASURY
     #[account(mut, constraint = kenny.key() == PLATFORM_TREASURY @ ErrorCode::Unauthorized)]

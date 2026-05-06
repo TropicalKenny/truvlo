@@ -929,7 +929,8 @@
           "name": "usdc_mint"
         },
         {
-          "name": "creator"
+          "name": "creator",
+          "writable": true
         },
         {
           "name": "kenny",

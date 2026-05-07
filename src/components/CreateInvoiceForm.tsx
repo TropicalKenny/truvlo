@@ -6,7 +6,7 @@ import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider } from '@coral-xyz/anchor';
 import { PublicKey } from '@solana/web3.js';
-import { Loader2, Copy, ExternalLink, Check } from 'lucide-react';
+import { Loader2, Copy, ExternalLink, Check, Bot } from 'lucide-react';
 import { EscrowPaySDK, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
@@ -66,6 +66,23 @@ const labelStyle: React.CSSProperties = {
   marginBottom: '6px',
 };
 
+type AgentJobType = 'human_service' | 'research_task' | 'code_task' | 'api_task' | 'file_delivery';
+type VerificationMode = 'manual' | 'agent_assisted' | 'deterministic';
+
+const agentJobOptions: Array<{ value: AgentJobType; label: string }> = [
+  { value: 'human_service', label: 'Human service' },
+  { value: 'research_task', label: 'Research task' },
+  { value: 'code_task', label: 'Code task' },
+  { value: 'api_task', label: 'API task' },
+  { value: 'file_delivery', label: 'File delivery' },
+];
+
+const verificationModeOptions: Array<{ value: VerificationMode; label: string }> = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'agent_assisted', label: 'Agent-assisted' },
+  { value: 'deterministic', label: 'Deterministic' },
+];
+
 const DarkInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
   const [focused, setFocused] = useState(false);
   return (
@@ -116,6 +133,10 @@ const CreateInvoiceForm: React.FC = () => {
   const [clientEmail, setClientEmail] = useState('');
   const [senderName, setSenderName] = useState('');
   const [tokenType, setTokenType] = useState<TokenType>(TokenType.USDC);
+  const [agentMode, setAgentMode] = useState(false);
+  const [jobType, setJobType] = useState<AgentJobType>('human_service');
+  const [verificationMode, setVerificationMode] = useState<VerificationMode>('manual');
+  const [successCriteria, setSuccessCriteria] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [createdInvoice, setCreatedInvoice] = useState<{
@@ -187,6 +208,10 @@ const CreateInvoiceForm: React.FC = () => {
       toast({ title: 'Valid email required', variant: 'destructive' });
       return;
     }
+    if (agentMode && !successCriteria.trim()) {
+      toast({ title: 'Success criteria required', description: 'Add a short checklist for agent-assisted review.', variant: 'destructive' });
+      return;
+    }
 
     setIsCreating(true);
 
@@ -225,6 +250,11 @@ const CreateInvoiceForm: React.FC = () => {
               tokenType: tokenType === TokenType.USDC ? 'USDC' : 'SOL',
               amount: amountNum,
               invoiceUrl,
+              jobType: agentMode ? jobType : 'human_service',
+              verificationMode: agentMode ? verificationMode : 'manual',
+              successCriteria: agentMode ? successCriteria.trim() : null,
+              deliverableUrl: null,
+              proofText: null,
             }),
           });
 
@@ -398,6 +428,10 @@ const CreateInvoiceForm: React.FC = () => {
               setDescription('');
               setClientEmail('');
               setSenderName('');
+              setAgentMode(false);
+              setJobType('human_service');
+              setVerificationMode('manual');
+              setSuccessCriteria('');
             }}
             className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-opacity duration-150 hover:opacity-80"
             style={{
@@ -545,6 +579,100 @@ const CreateInvoiceForm: React.FC = () => {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
+        </div>
+
+        {/* Agent-assisted escrow */}
+        <div
+          className="rounded-lg p-4"
+          style={{
+            backgroundColor: '#1C2128',
+            border: agentMode ? '1px solid rgba(45,212,191,0.28)' : '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: agentMode ? '#2DD4BF' : '#64748B' }} />
+              <div>
+                <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: 600 }}>
+                  Agent-assisted escrow
+                </p>
+                <p className="mt-1" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
+                  Define the job and acceptance criteria now. Submit proof from the dashboard after the work is done.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !agentMode;
+                setAgentMode(next);
+                if (!next) {
+                  setJobType('human_service');
+                  setVerificationMode('manual');
+                } else {
+                  setJobType('research_task');
+                  setVerificationMode('agent_assisted');
+                }
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity duration-150 hover:opacity-90"
+              style={{
+                backgroundColor: agentMode ? '#2DD4BF' : 'transparent',
+                border: agentMode ? '1px solid #2DD4BF' : '1px solid rgba(255,255,255,0.12)',
+                color: agentMode ? '#0D1117' : '#94A3B8',
+                fontFamily: '"DM Sans", sans-serif',
+                cursor: 'pointer',
+              }}
+            >
+              {agentMode ? 'On' : 'Off'}
+            </button>
+          </div>
+
+          {agentMode && (
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="jobType" style={labelStyle}>Job type</label>
+                  <select
+                    id="jobType"
+                    name="jobType"
+                    value={jobType}
+                    onChange={(e) => setJobType(e.target.value as AgentJobType)}
+                    style={inputStyle}
+                  >
+                    {agentJobOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="verificationMode" style={labelStyle}>Verification mode</label>
+                  <select
+                    id="verificationMode"
+                    name="verificationMode"
+                    value={verificationMode}
+                    onChange={(e) => setVerificationMode(e.target.value as VerificationMode)}
+                    style={inputStyle}
+                  >
+                    {verificationModeOptions.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="successCriteria" style={labelStyle}>Success criteria</label>
+                <DarkTextarea
+                  id="successCriteria"
+                  name="successCriteria"
+                  autoComplete="off"
+                  placeholder="Checklist the client should use to judge completion..."
+                  value={successCriteria}
+                  onChange={(e) => setSuccessCriteria(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Fee info */}

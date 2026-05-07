@@ -929,7 +929,8 @@
           "name": "usdc_mint"
         },
         {
-          "name": "creator"
+          "name": "creator",
+          "writable": true
         },
         {
           "name": "kenny",
@@ -946,6 +947,90 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "invoice_id",
+          "type": "string"
+        },
+        {
+          "name": "creator_bps",
+          "type": "u16"
+        },
+        {
+          "name": "client_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "resolve_dispute_sol",
+      "discriminator": [
+        17,
+        252,
+        31,
+        28,
+        181,
+        13,
+        132,
+        85
+      ],
+      "accounts": [
+        {
+          "name": "invoice",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  111,
+                  105,
+                  99,
+                  101
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "invoice_id"
+              },
+              {
+                "kind": "account",
+                "path": "invoice.creator",
+                "account": "Invoice"
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator",
+          "docs": [
+            "Creator account - validated in instruction body"
+          ],
+          "writable": true
+        },
+        {
+          "name": "client",
+          "docs": [
+            "Client account - validated in instruction body"
+          ],
+          "writable": true
+        },
+        {
+          "name": "kenny",
+          "docs": [
+            "Kenny's wallet - must match PLATFORM_TREASURY"
+          ],
+          "writable": true,
+          "signer": true
         },
         {
           "name": "system_program",

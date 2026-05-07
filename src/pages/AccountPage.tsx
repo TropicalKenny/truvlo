@@ -6,7 +6,7 @@ import { AuthProfile, useAuthProfile } from '@/contexts/AuthProfileContext';
 import Header from '@/components/Header';
 import { useToast } from '@/hooks/use-toast';
 import { formatTokenAmountValue } from '@/lib/amountFormat';
-import { Check, Copy, ExternalLink, Loader2, Wallet, ArrowRight } from 'lucide-react';
+import { Check, Copy, ExternalLink, Loader2, Wallet, ArrowRight, MessageCircle } from 'lucide-react';
 
 type TokenType = 'USDC' | 'SOL';
 
@@ -38,6 +38,22 @@ interface ReferralPanelData {
   profile: AuthProfile | null;
   summary: Record<TokenType, ReferralRewardSummary>;
   payout_requests: PayoutRequestSummary[];
+}
+
+interface TelegramLinkState {
+  configured: boolean;
+  bot_username: string | null;
+  telegram_link: {
+    telegram_username: string | null;
+    telegram_first_name: string | null;
+    linked_at: string;
+  } | null;
+}
+
+interface TelegramConnectAttempt {
+  code: string;
+  deep_link: string;
+  expires_at: string;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -75,6 +91,9 @@ const AccountPage: React.FC = () => {
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedReputation, setCopiedReputation] = useState(false);
+  const [telegramLink, setTelegramLink] = useState<TelegramLinkState | null>(null);
+  const [telegramConnectAttempt, setTelegramConnectAttempt] = useState<TelegramConnectAttempt | null>(null);
+  const [telegramBusy, setTelegramBusy] = useState(false);
 
   const responseError = async (res: Response, fallback: string) => {
     try {
@@ -115,6 +134,13 @@ const AccountPage: React.FC = () => {
         } else if (!cancelled) {
           setReferralError(await responseError(referralsRes, 'Rewards load failed'));
         }
+
+        const telegramRes = await fetch('/api/telegram-link', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (telegramRes.ok && !cancelled) {
+          setTelegramLink(await telegramRes.json() as TelegramLinkState);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load account data');
@@ -145,6 +171,51 @@ const AccountPage: React.FC = () => {
       done();
     } catch {
       toast({ title: 'Failed to copy', variant: 'destructive' });
+    }
+  };
+
+  const connectTelegram = async () => {
+    setTelegramBusy(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sign in again to connect Telegram.');
+      const res = await fetch('/api/telegram-link', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({})) as { code?: string; deep_link?: string; expires_at?: string; error?: string };
+      if (!res.ok || !data.deep_link) throw new Error(data.error || `HTTP ${res.status}`);
+      setTelegramConnectAttempt({
+        code: data.code || '',
+        deep_link: data.deep_link,
+        expires_at: data.expires_at || '',
+      });
+      window.location.href = data.deep_link;
+      toast({ title: 'Telegram opened', description: 'Tap Start in Telegram to finish linking.' });
+    } catch (err) {
+      toast({ title: 'Telegram link failed', description: err instanceof Error ? err.message : 'Try again.', variant: 'destructive' });
+    } finally {
+      setTelegramBusy(false);
+    }
+  };
+
+  const disconnectTelegram = async () => {
+    setTelegramBusy(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sign in again to disconnect Telegram.');
+      const res = await fetch('/api/telegram-link', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await responseError(res, 'Telegram unlink failed'));
+      setTelegramLink(current => current ? { ...current, telegram_link: null } : current);
+      setTelegramConnectAttempt(null);
+      toast({ title: 'Telegram disconnected' });
+    } catch (err) {
+      toast({ title: 'Telegram unlink failed', description: err instanceof Error ? err.message : 'Try again.', variant: 'destructive' });
+    } finally {
+      setTelegramBusy(false);
     }
   };
 
@@ -205,6 +276,79 @@ const AccountPage: React.FC = () => {
                   <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#94A3B8', marginTop: '4px' }}>{profile?.notification_email || 'Not configured'}</p>
                 </div>
               </div>
+            </section>
+
+            <section style={cardStyle} className="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p style={labelStyle}>Telegram alerts</p>
+                  <p style={{ ...valueStyle, fontSize: '1.25rem', marginTop: '4px' }}>
+                    {telegramLink?.telegram_link
+                      ? telegramLink.telegram_link.telegram_username
+                        ? `@${telegramLink.telegram_link.telegram_username}`
+                        : telegramLink.telegram_link.telegram_first_name || 'Connected'
+                      : 'Not connected'}
+                  </p>
+                </div>
+                <MessageCircle className="h-5 w-5" style={{ color: '#2DD4BF' }} />
+              </div>
+              <p className="mt-3" style={{ fontFamily: '"DM Sans", sans-serif', color: '#94A3B8', fontSize: '13px', lineHeight: 1.55 }}>
+                Get fast invoice, proof, and Truvlo Agent review alerts. Approval and disputes still happen inside Truvlo.
+              </p>
+              <button
+                type="button"
+                onClick={telegramLink?.telegram_link ? disconnectTelegram : connectTelegram}
+                disabled={telegramBusy || telegramLink?.configured === false}
+                className="mt-4 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{
+                  backgroundColor: telegramLink?.telegram_link ? 'rgba(255,255,255,0.04)' : 'rgba(45,212,191,0.12)',
+                  color: telegramLink?.telegram_link ? '#F8FAFC' : '#2DD4BF',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  fontFamily: '"DM Sans", sans-serif',
+                  cursor: telegramBusy || telegramLink?.configured === false ? 'default' : 'pointer',
+                }}
+              >
+                {telegramBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                {!telegramBusy && <MessageCircle className="h-4 w-4" />}
+                {telegramLink?.telegram_link ? 'Disconnect Telegram' : 'Connect Telegram'}
+              </button>
+              {telegramLink?.configured === false && (
+                <p className="mt-2" style={{ fontFamily: '"DM Sans", sans-serif', color: '#FCD34D', fontSize: '12px' }}>
+                  Telegram bot is not configured for this deployment yet.
+                </p>
+              )}
+              {!telegramLink?.telegram_link && telegramConnectAttempt && (
+                <div className="mt-4 rounded-lg p-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#CBD5E1', fontSize: '12px', lineHeight: 1.5 }}>
+                    If Telegram sends only /start, copy and send the full line below:
+                  </p>
+                  <code className="mt-3 block w-full rounded-md px-3 py-3 text-sm" style={{ backgroundColor: '#0D1117', color: '#F8FAFC', border: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap', overflowX: 'auto' }}>
+                      /start {telegramConnectAttempt.code}
+                  </code>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => copy(`/start ${telegramConnectAttempt.code}`, () => toast({ title: 'Telegram code copied' }))}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: '#F8FAFC', border: '1px solid rgba(255,255,255,0.08)' }}
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy
+                    </button>
+                    <a
+                      href={telegramConnectAttempt.deep_link}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm"
+                      style={{ backgroundColor: 'rgba(45,212,191,0.12)', color: '#2DD4BF', border: '1px solid rgba(45,212,191,0.3)', textDecoration: 'none' }}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Open bot
+                    </a>
+                  </div>
+                  <p className="mt-2" style={{ fontFamily: '"DM Sans", sans-serif', color: '#64748B', fontSize: '11px', lineHeight: 1.45 }}>
+                    The code also works by itself: {telegramConnectAttempt.code}
+                  </p>
+                </div>
+              )}
             </section>
 
             <section style={cardStyle} className="p-5">

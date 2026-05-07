@@ -8,7 +8,7 @@ import { AnchorProvider, type Wallet as AnchorWallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
 import {
   Loader2, AlertCircle, Check, ArrowLeft, Shield,
-  ExternalLink, Plus, Trash2, Wallet
+  ExternalLink, Plus, Trash2, Wallet, Bot
 } from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
@@ -33,6 +33,22 @@ interface InvoiceMeta {
   description: string | null;
   token_type: 'USDC' | 'SOL' | null;
   amount: number | string | null;
+}
+
+interface AgentPolicy {
+  invoice_id: string;
+  creator_wallet: string;
+  client_wallet: string;
+  agent_wallet: string;
+  max_amount: number | string;
+  token_type: 'USDC' | 'SOL';
+  can_pay: boolean;
+  can_approve_release: boolean;
+  can_raise_dispute: boolean;
+  approval_rule: 'verification_passed_and_recommended_approve';
+  status: 'active' | 'disabled' | 'expired';
+  expires_at: string;
+  updated_at?: string;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -78,6 +94,8 @@ const InvoicePayment: React.FC = () => {
   const [solPriceStatus, setSolPriceStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [invoiceMeta, setInvoiceMeta] = useState<InvoiceMeta | null>(null);
+  const [agentPolicy, setAgentPolicy] = useState<AgentPolicy | null>(null);
+  const [agentBusy, setAgentBusy] = useState(false);
 
   const urlParams = useMemo(() => {
     if (!invoiceId || !creator) return { valid: false, error: 'Invalid invoice link - missing parameters' };
@@ -126,7 +144,8 @@ const InvoicePayment: React.FC = () => {
       try {
         const creatorPubkey = new PublicKey(urlParams.creator!);
         const metadataUrl = `/api/create-invoice-meta?invoiceId=${encodeURIComponent(urlParams.invoiceId!)}&creatorWallet=${encodeURIComponent(urlParams.creator!)}`;
-        const [result, price, metaRes] = await Promise.all([
+        const policyUrl = `/api/create-invoice-meta?agentEndpoint=agent-policies&invoiceId=${encodeURIComponent(urlParams.invoiceId!)}&creatorWallet=${encodeURIComponent(urlParams.creator!)}`;
+        const [result, price, metaRes, policyRes] = await Promise.all([
           readOnlySdk.fetchInvoice(urlParams.invoiceId!, creatorPubkey),
           fetch('/api/sol-price')
             .then(async (res) => {
@@ -136,6 +155,7 @@ const InvoicePayment: React.FC = () => {
             })
             .catch(() => null),
           fetch(metadataUrl).catch(() => null),
+          fetch(policyUrl).catch(() => null),
         ]);
         if (price) {
           setSolPriceUsd(price);
@@ -149,6 +169,12 @@ const InvoicePayment: React.FC = () => {
         } else {
           setInvoiceMeta(null);
         }
+        if (policyRes?.ok) {
+          const policyData = await policyRes.json() as { agent_policy?: AgentPolicy | null };
+          setAgentPolicy(policyData.agent_policy ?? null);
+        } else {
+          setAgentPolicy(null);
+        }
         if (result.success && result.data) {
           setPageState({ type: 'invoice_loaded', invoice: result.data });
         } else {
@@ -159,7 +185,7 @@ const InvoicePayment: React.FC = () => {
       }
     };
     fetchInvoice();
-  }, [connection, urlParams.valid, urlParams.invoiceId, urlParams.creator]);
+  }, [connection, sdkInitError, urlParams.creator, urlParams.error, urlParams.invoiceId, urlParams.valid]);
 
   const getDecimals = (t: TokenType) => t === TokenType.USDC ? 6 : 9;
 
@@ -282,6 +308,85 @@ const InvoicePayment: React.FC = () => {
   };
 
   // ── LOADING ─────────────────────────────────────────────────────
+  const handleEnableAgentPolicy = async () => {
+    if (pageState.type !== 'invoice_loaded') return;
+    if (!authenticated) {
+      login();
+      return;
+    }
+    if (!publicKey || !creator) {
+      toast({ title: 'Wallet not connected', variant: 'destructive' });
+      return;
+    }
+
+    const invoice = pageState.invoice;
+    const breakdown = calculateBreakdown(invoice);
+    if (breakdown.amount <= 0) {
+      toast({ title: 'Invalid amount', variant: 'destructive' });
+      return;
+    }
+    if (breakdown.priceUnavailable) {
+      toast({ title: 'SOL price unavailable', description: 'Please wait a moment and try again.', variant: 'destructive' });
+      return;
+    }
+
+    setAgentBusy(true);
+    try {
+      const token = await getAccessToken();
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const policyResponse = await fetch('/api/create-invoice-meta?agentEndpoint=agent-policies', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          invoiceId: invoice.invoiceId,
+          creatorWallet: creator,
+          clientWallet: publicKey.toBase58(),
+          maxAmount: breakdown.amount,
+          tokenType: invoice.tokenType === TokenType.USDC ? 'USDC' : 'SOL',
+        }),
+      });
+      const policyData = await policyResponse.json().catch(() => ({})) as { error?: string; agent_policy?: AgentPolicy };
+      if (!policyResponse.ok) throw new Error(policyData.error || 'Could not enable Truvlo Agent');
+      setAgentPolicy(policyData.agent_policy ?? null);
+
+      const payResponse = await fetch('/api/devnet-agent-actions', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          action: 'pay_invoice',
+          invoiceId: invoice.invoiceId,
+          creatorWallet: creator,
+          tokenType: invoice.tokenType === TokenType.USDC ? 'USDC' : 'SOL',
+          amount: breakdown.amount,
+        }),
+      });
+      const payData = await payResponse.json().catch(() => ({})) as { error?: string; signature?: string };
+      if (!payResponse.ok) throw new Error(payData.error || 'Truvlo Agent could not pay this invoice');
+
+      const readOnlySdk = createReadOnlySdk(connection);
+      const creatorPubkey = new PublicKey(creator);
+      const updated = readOnlySdk ? await readOnlySdk.fetchInvoice(invoice.invoiceId, creatorPubkey) : null;
+      setPageState({
+        type: 'payment_success',
+        invoice: updated?.success && updated.data ? updated.data : invoice,
+        paidAmount: breakdown.amount,
+        txSignature: payData.signature || '',
+      });
+      toast({ title: 'Truvlo Agent paid this invoice', description: 'Funds are now locked in escrow on devnet.' });
+    } catch (error) {
+      toast({
+        title: 'Truvlo Agent failed',
+        description: error instanceof Error ? error.message : 'Try manual payment instead.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAgentBusy(false);
+    }
+  };
+
   if (pageState.type === 'loading') {
     return (
       <div style={cardStyle}>
@@ -543,6 +648,74 @@ const InvoicePayment: React.FC = () => {
               <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
                 Your payment is held securely in a smart contract. You decide how funds are withdrawn by the creator.
               </p>
+            </div>
+
+            <div
+              className="rounded-lg p-4"
+              style={{
+                border: '1px solid rgba(45,212,191,0.24)',
+                backgroundColor: agentPolicy?.status === 'active' ? 'rgba(45,212,191,0.08)' : 'rgba(15,23,32,0.66)',
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <Bot className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#5EEAD4' }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: 700, color: '#F8FAFC' }}>
+                        Use Truvlo Agent
+                      </p>
+                      <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#94A3B8', lineHeight: 1.5, marginTop: '4px' }}>
+                        The client delegates an invoice-only devnet agent to pay escrow now and automatically approve release later only when verification passes.
+                      </p>
+                    </div>
+                    {agentPolicy?.status === 'active' && (
+                      <span
+                        className="px-2.5 py-0.5 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: 'rgba(34,197,94,0.12)', color: '#4ADE80', fontFamily: '"DM Sans", sans-serif' }}
+                      >
+                        Agent enabled for this invoice
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      ['Scope', 'invoice-only'],
+                      ['Limit', formatAmount(breakdown.amount, invoice.tokenType)],
+                      ['Can approve', 'only if review says approve'],
+                      ['Disputes', 'human review only'],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-md px-3 py-2" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                        <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</p>
+                        <p style={{ color: '#CBD5E1', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', marginTop: '2px' }}>{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleEnableAgentPolicy}
+                    disabled={agentBusy || breakdown.amount <= 0 || breakdown.priceUnavailable || agentPolicy?.status === 'active'}
+                    className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
+                    style={{
+                      backgroundColor: agentPolicy?.status === 'active' ? 'rgba(34,197,94,0.18)' : '#2DD4BF',
+                      color: agentPolicy?.status === 'active' ? '#4ADE80' : '#0D1117',
+                      border: 'none',
+                      fontFamily: '"DM Sans", sans-serif',
+                      cursor: agentBusy || agentPolicy?.status === 'active' ? 'default' : 'pointer',
+                    }}
+                  >
+                    {agentBusy
+                      ? <><Loader2 className="h-4 w-4 animate-spin" />Agent working...</>
+                      : agentPolicy?.status === 'active'
+                        ? <><Check className="h-4 w-4" />Truvlo Agent enabled</>
+                        : authenticated
+                          ? <><Bot className="h-4 w-4" />Enable agent and pay escrow</>
+                          : <><Bot className="h-4 w-4" />Login to use Truvlo Agent</>}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Withdrawal schedule builder */}

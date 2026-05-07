@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
@@ -6,7 +6,7 @@ import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
 import { useActiveWallet } from '@/contexts/ActiveWalletContext';
 import { AnchorProvider, type Wallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection, Transaction, VersionedTransaction } from '@solana/web3.js';
-import { Loader2, AlertCircle, Check, AlertTriangle, Clock } from 'lucide-react';
+import { Loader2, AlertCircle, Check, AlertTriangle, Clock, Bot } from 'lucide-react';
 import { EscrowPaySDK, InvoiceData, InvoiceStatus, TokenType } from '@/lib/escrowPaySDK';
 import { createPrivySolanaAnchorWallet } from '@/lib/privySolanaAnchorWallet';
 import { sendSponsoredSolanaTransaction } from '@/lib/privySponsoredSolana';
@@ -19,6 +19,26 @@ type PageState =
   | { type: 'loaded'; invoice: InvoiceData }
   | { type: 'approved' }
   | { type: 'disputed' };
+
+type AgentVerification = {
+  verification_status: 'pending' | 'passed' | 'failed' | 'needs_human_review';
+  confidence: 'low' | 'medium' | 'high';
+  summary: string | null;
+  risks: string | null;
+  recommended_action: 'approve' | 'dispute' | 'manual_review';
+  verifier_type: 'rule' | 'ai' | 'manual';
+};
+
+type AgentPolicy = {
+  status: 'active' | 'disabled' | 'expired';
+  agent_wallet: string;
+  max_amount: number | string;
+  token_type: 'USDC' | 'SOL';
+  can_approve_release: boolean;
+  can_raise_dispute?: boolean;
+  approval_rule: 'verification_passed_and_recommended_approve';
+  expires_at: string;
+};
 
 function formatCountdown(seconds: number): string {
   if (seconds <= 0) return 'Auto-releasing soon';
@@ -60,6 +80,8 @@ const ApproveRelease: React.FC = () => {
   const [disputing, setDisputing] = useState(false);
   const [sdkInitError, setSdkInitError] = useState<string | null>(null);
   const [now, setNow] = useState(Math.floor(Date.now() / 1000));
+  const [agentVerification, setAgentVerification] = useState<AgentVerification | null>(null);
+  const [agentPolicy, setAgentPolicy] = useState<AgentPolicy | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -83,7 +105,7 @@ const ApproveRelease: React.FC = () => {
     } catch { return null; }
   }, [connection, publicKey, privyWallet, signAndSendTransaction]);
 
-  const createReadOnlySdk = (conn: Connection): EscrowPaySDK | null => {
+  const createReadOnlySdk = useCallback((conn: Connection): EscrowPaySDK | null => {
     try {
       const mock: Wallet = {
         publicKey: new PublicKey('11111111111111111111111111111111'),
@@ -95,9 +117,9 @@ const ApproveRelease: React.FC = () => {
       if (!instance.isInitialized()) { setSdkInitError(instance.getInitError()); return null; }
       return instance;
     } catch { return null; }
-  };
+  }, []);
 
-  const fetchInvoice = async () => {
+  const fetchInvoice = useCallback(async () => {
     if (!urlValid) { setPageState({ type: 'error', message: 'Invalid link — missing invoice ID or creator address.' }); return; }
     const readOnly = createReadOnlySdk(connection);
     if (!readOnly) { setPageState({ type: 'error', message: sdkInitError || 'Failed to initialize. Please refresh.' }); return; }
@@ -111,9 +133,31 @@ const ApproveRelease: React.FC = () => {
     } catch (e) {
       setPageState({ type: 'error', message: e instanceof Error ? e.message : 'Failed to load invoice.' });
     }
-  };
+  }, [connection, createReadOnlySdk, creator, invoiceId, sdkInitError, urlValid]);
 
-  useEffect(() => { fetchInvoice(); }, [connection, urlValid]);
+  useEffect(() => { fetchInvoice(); }, [fetchInvoice]);
+
+  useEffect(() => {
+    if (!urlValid || !invoiceId || !creator) return;
+    const params = new URLSearchParams({ invoiceId, creatorWallet: creator });
+    const verificationParams = new URLSearchParams(params);
+    verificationParams.set('agentEndpoint', 'agent-verifications');
+    const policyParams = new URLSearchParams(params);
+    policyParams.set('agentEndpoint', 'agent-policies');
+    Promise.all([
+      fetch(`/api/create-invoice-meta?${verificationParams.toString()}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
+      fetch(`/api/create-invoice-meta?${policyParams.toString()}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
+    ]).then(([verificationData, policyData]: [
+      { agent_verification?: AgentVerification | null } | null,
+      { agent_policy?: AgentPolicy | null } | null,
+    ]) => {
+      setAgentVerification(verificationData?.agent_verification ?? null);
+      setAgentPolicy(policyData?.agent_policy ?? null);
+    }).catch(() => {
+      setAgentVerification(null);
+      setAgentPolicy(null);
+    });
+  }, [urlValid, invoiceId, creator]);
 
   const fromSmallestUnit = (amount: unknown, tokenType: TokenType) => {
     const decimals = tokenType === TokenType.USDC ? 6 : 9;
@@ -140,8 +184,98 @@ const ApproveRelease: React.FC = () => {
   const isConnectedWalletInvoiceClient = (invoice: InvoiceData) =>
     !!connected && !!publicKey && !!invoice.client && invoice.client.toBase58() === publicKey.toBase58();
 
+  const isAgentPolicyClient = (invoice: InvoiceData) =>
+    authenticated
+    && agentPolicy?.status === 'active'
+    && !!invoice.client
+    && invoice.client.toBase58() === agentPolicy.agent_wallet;
+
+  const handleAgentPolicyAction = async (action: 'approve_release' | 'raise_dispute') => {
+    if (pageState.type !== 'loaded') return;
+    if (!authenticated) {
+      await login();
+      return;
+    }
+    if (!isAgentPolicyClient(pageState.invoice)) {
+      toast({ title: 'Truvlo Agent policy not available', variant: 'destructive' });
+      return;
+    }
+
+    if (action === 'approve_release') setApproving(true);
+    else setDisputing(true);
+
+    try {
+      const token = await getAccessToken();
+      const response = await fetch('/api/devnet-agent-actions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action,
+          invoiceId,
+          creatorWallet: creator,
+          tokenType: pageState.invoice.tokenType === TokenType.USDC ? 'USDC' : 'SOL',
+          amount: fromSmallestUnit(pageState.invoice.amountPaid || pageState.invoice.amount, pageState.invoice.tokenType),
+          clientCommanded: true,
+        }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+
+      if (action === 'approve_release') {
+        setPageState({ type: 'approved' });
+        fetch('/api/notify-creator', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ invoiceId, creatorWallet: creator, clientWallet: agentPolicy?.agent_wallet ?? '', event: 'release_approved' }),
+        }).catch(() => {});
+      } else {
+        setPageState({ type: 'disputed' });
+        await fetch('/api/disputes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            action: 'open',
+            invoiceId,
+            openedByWallet: agentPolicy?.agent_wallet ?? '',
+          }),
+        }).catch(error => console.error('Dispute case recording failed:', error));
+        fetch('/api/notify-creator', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ invoiceId, creatorWallet: creator, clientWallet: agentPolicy?.agent_wallet ?? '', event: 'disputed' }),
+        }).catch(() => {});
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Agent action failed.';
+      toast({
+        title: action === 'approve_release' ? 'Agent approval failed' : 'Agent dispute failed',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      if (action === 'approve_release') setApproving(false);
+      else setDisputing(false);
+    }
+  };
+
   const handleApprove = async () => {
     if (pageState.type !== 'loaded') return;
+    if (isAgentPolicyClient(pageState.invoice)) {
+      await handleAgentPolicyAction('approve_release');
+      return;
+    }
     if (!isConnectedWalletInvoiceClient(pageState.invoice)) {
       toast({ title: 'Connect the wallet you paid with', variant: 'destructive' });
       return;
@@ -172,6 +306,10 @@ const ApproveRelease: React.FC = () => {
 
   const handleDispute = async () => {
     if (pageState.type !== 'loaded') return;
+    if (isAgentPolicyClient(pageState.invoice)) {
+      await handleAgentPolicyAction('raise_dispute');
+      return;
+    }
     if (!isConnectedWalletInvoiceClient(pageState.invoice)) {
       toast({ title: 'Connect the wallet you paid with', variant: 'destructive' });
       return;
@@ -361,7 +499,16 @@ const ApproveRelease: React.FC = () => {
   const amountValue = fromSmallestUnit(inv.amountPaid || inv.amount, inv.tokenType);
   const symbol = inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL';
   const connectedWalletMatchesClient = isConnectedWalletInvoiceClient(inv);
-  const connectedWrongWallet = connected && !connectedWalletMatchesClient;
+  const canUseAgentPolicy = isAgentPolicyClient(inv);
+  const canActAsClient = connectedWalletMatchesClient || canUseAgentPolicy;
+  const connectedWrongWallet = connected && !connectedWalletMatchesClient && !canUseAgentPolicy;
+  const agentReviewColor = agentVerification?.verification_status === 'passed' ? '#4ADE80'
+    : agentVerification?.verification_status === 'failed' ? '#F87171'
+    : '#FCD34D';
+  const agentReviewLabel = agentVerification?.verification_status === 'passed' ? 'Looks complete'
+    : agentVerification?.verification_status === 'failed' ? 'Risk flagged'
+    : agentVerification?.verification_status === 'pending' ? 'Agent review pending'
+    : 'Needs review';
 
   return (
     <div style={cardStyle}>
@@ -410,6 +557,58 @@ const ApproveRelease: React.FC = () => {
           <p style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#94A3B8' }}>{invoiceId}</p>
         </div>
       </div>
+
+      {agentVerification && (
+        <div
+          className="rounded-lg p-3.5 mb-5"
+          style={{ backgroundColor: 'rgba(17,24,32,0.9)', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4" style={{ color: agentReviewColor }} />
+              <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: 600 }}>
+                Agent-assisted review
+              </p>
+            </div>
+            <span className="trust-status" style={{ color: agentReviewColor, backgroundColor: 'rgba(255,255,255,0.06)' }}>
+              {agentReviewLabel}
+            </span>
+          </div>
+          {agentVerification.summary && (
+            <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.55 }}>
+              {agentVerification.summary}
+            </p>
+          )}
+          {agentVerification.risks && (
+            <p className="mt-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', lineHeight: 1.5 }}>
+              Risk note: {agentVerification.risks}
+            </p>
+          )}
+          <p className="mt-2" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', lineHeight: 1.5 }}>
+            This is a recommendation, not an automatic release. Approving or disputing still requires your wallet.
+          </p>
+        </div>
+      )}
+
+      {agentPolicy?.status === 'active' && (
+        <div
+          className="rounded-lg p-3.5 mb-5"
+          style={{ backgroundColor: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)' }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Bot className="h-4 w-4" style={{ color: '#5EEAD4' }} />
+            <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: 600 }}>
+              Truvlo Agent is acting for the client
+            </p>
+          </div>
+          <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.55 }}>
+            Truvlo Agent paid this invoice for you. You can command the agent signer to approve or dispute from this page; automated approval still requires passed verification.
+          </p>
+          <p className="mt-2 trust-mono" style={{ color: '#64748B', fontSize: '11px' }}>
+            Agent {shortWallet(agentPolicy.agent_wallet)}
+          </p>
+        </div>
+      )}
 
       {/* Countdown timer */}
       {secondsLeft > 0 && !isDisputed && !alreadyApproved && (
@@ -468,7 +667,7 @@ const ApproveRelease: React.FC = () => {
                   Continue as client to approve or dispute
                 </p>
                 <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5, marginTop: '5px' }}>
-                  No Truvlo profile setup needed. Use the same wallet that paid this invoice.
+                  No Truvlo profile setup needed. Use the same wallet that paid this invoice, or log in as the client who enabled Truvlo Agent.
                 </p>
               </div>
               <button
@@ -501,14 +700,14 @@ const ApproveRelease: React.FC = () => {
 
           <button
             onClick={handleApprove}
-            disabled={approving || disputing || !connectedWalletMatchesClient}
+            disabled={approving || disputing || !canActAsClient}
             className="w-full flex items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
             style={{
               backgroundColor: '#2DD4BF',
               color: '#0D1117',
               fontFamily: '"DM Sans", sans-serif',
               border: 'none',
-              cursor: approving || !connectedWalletMatchesClient ? 'default' : 'pointer',
+              cursor: approving || !canActAsClient ? 'default' : 'pointer',
             }}
           >
             {approving
@@ -518,14 +717,14 @@ const ApproveRelease: React.FC = () => {
 
           <button
             onClick={handleDispute}
-            disabled={approving || disputing || !connectedWalletMatchesClient}
+            disabled={approving || disputing || !canActAsClient}
             className="w-full flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-medium transition-all duration-150 hover:opacity-80 disabled:opacity-50"
             style={{
               backgroundColor: 'transparent',
               border: '1px solid rgba(245,158,11,0.3)',
               color: '#FCD34D',
               fontFamily: '"DM Sans", sans-serif',
-              cursor: disputing || !connectedWalletMatchesClient ? 'default' : 'pointer',
+              cursor: disputing || !canActAsClient ? 'default' : 'pointer',
             }}
           >
             {disputing

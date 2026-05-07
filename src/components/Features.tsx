@@ -76,7 +76,11 @@ const Features: React.FC = () => {
           <button
             onClick={() => {
               if (!ready) return;
-              authenticated ? navigate('/create') : login();
+              if (authenticated) {
+                navigate('/create');
+              } else {
+                login();
+              }
             }}
             disabled={!ready}
             className="trust-button-primary inline-flex items-center justify-center gap-2 px-5 py-3 text-sm w-full sm:w-fit"

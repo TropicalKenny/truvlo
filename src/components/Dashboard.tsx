@@ -9,7 +9,7 @@ import { AnchorProvider } from '@coral-xyz/anchor';
 import {
   Plus, FileText, Clock, Check, ArrowUpRight, Loader2, Copy,
   RefreshCw, Bell, AlertTriangle, SendHorizonal, ThumbsUp,
-  ArrowDownLeft, ExternalLink, Wallet as WalletIcon
+  ArrowDownLeft, ExternalLink, Wallet as WalletIcon, Bot
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -29,6 +29,30 @@ interface InvoiceWithKey {
 
 interface ClientInvoiceMeta {
   sender_name: string | null;
+}
+
+interface AgentVerificationMeta {
+  verification_status: 'pending' | 'passed' | 'failed' | 'needs_human_review';
+  confidence: 'low' | 'medium' | 'high';
+  summary?: string | null;
+  risks?: string | null;
+  recommended_action?: 'approve' | 'dispute' | 'manual_review';
+  verifier_type?: 'rule' | 'ai' | 'manual';
+}
+
+interface AgentPolicyMeta {
+  status: 'active' | 'disabled' | 'expired';
+  agent_wallet: string;
+}
+
+interface DisputeResolutionMeta {
+  status?: string | null;
+  decision?: 'creator' | 'client' | 'split' | null;
+  resolution_creator_bps?: number | null;
+  resolution_client_bps?: number | null;
+  resolution_signature?: string | null;
+  verdict_hash_signature?: string | null;
+  onchain_resolved_at?: string | null;
 }
 
 type AmountLike =
@@ -159,6 +183,17 @@ const Dashboard: React.FC = () => {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const displayName = profile?.display_name ?? null;
   const [clientInvoiceMeta, setClientInvoiceMeta] = useState<Record<string, ClientInvoiceMeta>>({});
+  const [agentVerificationMeta, setAgentVerificationMeta] = useState<Record<string, AgentVerificationMeta | null>>({});
+  const [agentPolicyMeta, setAgentPolicyMeta] = useState<Record<string, AgentPolicyMeta | null>>({});
+  const [disputeResolutionMeta, setDisputeResolutionMeta] = useState<Record<string, DisputeResolutionMeta | null>>({});
+  const [proofModal, setProofModal] = useState<{
+    invoice: InvoiceData;
+    invoiceId: string;
+    creatorWallet: string;
+    deliverableUrl: string;
+    proofText: string;
+  } | null>(null);
+  const [submittingProof, setSubmittingProof] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60000);
@@ -321,6 +356,95 @@ const Dashboard: React.FC = () => {
     void loadClientInvoiceMeta(clientInvoices);
   }, [clientInvoices, loadClientInvoiceMeta]);
 
+  const loadAgentVerificationMeta = useCallback(async (invoices: InvoiceWithKey[]) => {
+    const missing = invoices.filter(({ account: inv }) => {
+      const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+      return !(key in agentVerificationMeta);
+    });
+    if (missing.length === 0) return;
+
+    const loadedEntries = await Promise.all(missing.map(async ({ account: inv }) => {
+      const creatorWallet = inv.creator.toBase58();
+      const key = `${inv.invoiceId}:${creatorWallet}`;
+      try {
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet, agentEndpoint: 'agent-verifications' });
+        const res = await fetch(`/api/create-invoice-meta?${params.toString()}`);
+        if (!res.ok) return [key, null] as const;
+        const data = await res.json() as { agent_verification?: AgentVerificationMeta | null };
+        return [key, data.agent_verification ?? null] as const;
+      } catch {
+        return [key, null] as const;
+      }
+    }));
+
+    setAgentVerificationMeta(prev => ({ ...prev, ...Object.fromEntries(loadedEntries) }));
+  }, [agentVerificationMeta]);
+
+  const loadAgentPolicyMeta = useCallback(async (invoices: InvoiceWithKey[]) => {
+    const missing = invoices.filter(({ account: inv }) => {
+      const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+      return !(key in agentPolicyMeta);
+    });
+    if (missing.length === 0) return;
+
+    const loadedEntries = await Promise.all(missing.map(async ({ account: inv }) => {
+      const creatorWallet = inv.creator.toBase58();
+      const key = `${inv.invoiceId}:${creatorWallet}`;
+      try {
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet, agentEndpoint: 'agent-policies' });
+        const res = await fetch(`/api/create-invoice-meta?${params.toString()}`);
+        if (!res.ok) return [key, null] as const;
+        const data = await res.json() as { agent_policy?: AgentPolicyMeta | null };
+        return [key, data.agent_policy ?? null] as const;
+      } catch {
+        return [key, null] as const;
+      }
+    }));
+
+    setAgentPolicyMeta(prev => ({ ...prev, ...Object.fromEntries(loadedEntries) }));
+  }, [agentPolicyMeta]);
+
+  useEffect(() => {
+    const invoices = [...sentInvoices, ...clientInvoices];
+    if (invoices.length === 0) return;
+    void loadAgentVerificationMeta(invoices);
+    void loadAgentPolicyMeta(invoices);
+  }, [sentInvoices, clientInvoices, loadAgentVerificationMeta, loadAgentPolicyMeta]);
+
+  const loadDisputeResolutionMeta = useCallback(async (invoices: InvoiceWithKey[]) => {
+    const disputeInvoices = invoices.filter(({ account: inv }) => Boolean(inv.disputeRaisedAt));
+    const missing = disputeInvoices.filter(({ account: inv }) => {
+      const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+      return !(key in disputeResolutionMeta);
+    });
+    if (missing.length === 0) return;
+
+    const token = await getAccessToken();
+    const loadedEntries = await Promise.all(missing.map(async ({ account: inv }) => {
+      const creatorWallet = inv.creator.toBase58();
+      const key = `${inv.invoiceId}:${creatorWallet}`;
+      try {
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId });
+        const res = await fetch(`/api/disputes?${params.toString()}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) return [key, null] as const;
+        const data = await res.json() as { dispute_case?: DisputeResolutionMeta | null };
+        return [key, data.dispute_case ?? null] as const;
+      } catch {
+        return [key, null] as const;
+      }
+    }));
+
+    setDisputeResolutionMeta(prev => ({ ...prev, ...Object.fromEntries(loadedEntries) }));
+  }, [disputeResolutionMeta, getAccessToken]);
+
+  useEffect(() => {
+    const invoices = [...sentInvoices, ...clientInvoices];
+    if (invoices.length === 0) return;
+    void loadDisputeResolutionMeta(invoices);
+  }, [sentInvoices, clientInvoices, loadDisputeResolutionMeta]);
+
   // ============================================================
   // HELPERS
   // ============================================================
@@ -365,6 +489,16 @@ const Dashboard: React.FC = () => {
     if (sol > 0) lines.push(formatTokenAmount(sol, TokenType.SOL));
     return lines.length > 0 ? lines : ['-'];
   };
+
+  const formatSharePercent = (bps: number | null | undefined) => {
+    const value = Number(bps ?? 0);
+    if (!Number.isFinite(value)) return '0%';
+    const percent = value / 100;
+    return `${percent.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+  };
+
+  const disputeExplorerUrl = (signature: string) =>
+    `https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`;
 
   const getReleaseable = (inv: InvoiceData) => {
     const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
@@ -503,6 +637,140 @@ const Dashboard: React.FC = () => {
       toast({ title: 'Link copied' });
     } catch {
       toast({ title: 'Failed to copy', variant: 'destructive' });
+    }
+  };
+
+  const openProofModal = (invoice: InvoiceData, creatorWallet: string) => {
+    setProofModal({
+      invoice,
+      invoiceId: invoice.invoiceId,
+      creatorWallet,
+      deliverableUrl: '',
+      proofText: '',
+    });
+  };
+
+  const loadSingleAgentPolicy = async (invoiceId: string, creatorWallet: string) => {
+    const key = `${invoiceId}:${creatorWallet}`;
+    const cached = agentPolicyMeta[key];
+    if (cached) return cached;
+
+    const params = new URLSearchParams({ invoiceId, creatorWallet, agentEndpoint: 'agent-policies' });
+    const res = await fetch(`/api/create-invoice-meta?${params.toString()}`);
+    if (!res.ok) return null;
+    const data = await res.json() as { agent_policy?: AgentPolicyMeta | null };
+    const policy = data.agent_policy ?? null;
+    setAgentPolicyMeta(prev => ({ ...prev, [key]: policy }));
+    return policy;
+  };
+
+  const maybeRequestAndAgentApprove = async (verification: AgentVerificationMeta | null | undefined) => {
+    if (!proofModal || !sdk) return false;
+    if (verification?.verification_status !== 'passed' || verification.recommended_action !== 'approve') {
+      return false;
+    }
+
+    const policy = await loadSingleAgentPolicy(proofModal.invoiceId, proofModal.creatorWallet);
+    if (policy?.status !== 'active') return false;
+
+    const releaseable = getReleaseable(proofModal.invoice);
+    if (!proofModal.invoice.completionRequestedAt && releaseable > 0) {
+      setRequesting(proofModal.invoice.invoiceId);
+      const releaseRequest = await sdk.requestRelease(proofModal.invoice.invoiceId, proofModal.invoice.tokenType);
+      if (!releaseRequest.success) {
+        throw new Error(typeof releaseRequest.error === 'string' ? releaseRequest.error : 'Release request failed');
+      }
+    }
+
+    setApproving(proofModal.invoice.invoiceId);
+    const token = await getAccessToken();
+    const approveResponse = await fetch('/api/devnet-agent-actions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        action: 'approve_release',
+        invoiceId: proofModal.invoice.invoiceId,
+        creatorWallet: proofModal.creatorWallet,
+        tokenType: proofModal.invoice.tokenType === TokenType.USDC ? 'USDC' : 'SOL',
+        amount: fromSmallestUnit(proofModal.invoice.amount, proofModal.invoice.tokenType),
+      }),
+    });
+    const approveData = await approveResponse.json().catch(() => ({})) as { error?: string };
+    if (!approveResponse.ok) {
+      throw new Error(approveData.error || 'Truvlo Agent could not approve release');
+    }
+
+    return true;
+  };
+
+  const handleSubmitProof = async () => {
+    if (!proofModal || !publicKey) return;
+    const deliverableUrl = proofModal.deliverableUrl.trim();
+    const proofText = proofModal.proofText.trim();
+    if (!deliverableUrl && !proofText) {
+      toast({
+        title: 'Add proof first',
+        description: 'Add a deliverable link or a short proof summary.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSubmittingProof(proofModal.invoiceId);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch('/api/create-invoice-meta?agentEndpoint=agent-verifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          invoiceId: proofModal.invoiceId,
+          creatorWallet: proofModal.creatorWallet,
+          submittedByWallet: publicKey.toBase58(),
+          deliverableUrl: deliverableUrl || undefined,
+          proofText: proofText || undefined,
+        }),
+      });
+      const data = await response.json().catch(() => ({})) as {
+        error?: string;
+        agent_verification?: AgentVerificationMeta | null;
+      };
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+
+      const key = `${proofModal.invoiceId}:${proofModal.creatorWallet}`;
+      setAgentVerificationMeta(prev => ({
+        ...prev,
+        [key]: data.agent_verification ?? prev[key] ?? null,
+      }));
+      let agentApproved = false;
+      try {
+        agentApproved = await maybeRequestAndAgentApprove(data.agent_verification);
+      } finally {
+        setRequesting(null);
+        setApproving(null);
+      }
+      toast({
+        title: agentApproved ? 'Agent approval submitted' : 'Proof submitted',
+        description: agentApproved
+          ? 'Truvlo Agent approved release under the client policy. You can withdraw after the dashboard refreshes.'
+          : 'The agent recommendation has been updated.',
+      });
+      setProofModal(null);
+      lastFetchedAt.current = 0;
+      await fetchAll();
+    } catch (error) {
+      toast({
+        title: 'Proof submission failed',
+        description: error instanceof Error ? error.message : 'Try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingProof(null);
     }
   };
 
@@ -696,9 +964,73 @@ const Dashboard: React.FC = () => {
   const statusColors: Record<string, string> = {
     amber: '#F59E0B', orange: '#F97316', blue: '#3B82F6', green: '#22C55E', default: 'rgba(255,255,255,0.12)',
   };
+  const getAgentReviewStatus = (invoiceId: string, creatorWallet: string) => {
+    const review = agentVerificationMeta[`${invoiceId}:${creatorWallet}`];
+    if (!review) return null;
+    if (review.verification_status === 'passed') return { label: 'Looks complete', color: '#4ADE80' };
+    if (review.verification_status === 'failed') return { label: 'Risk flagged', color: '#F87171' };
+    if (review.verification_status === 'pending') return { label: 'Agent review pending', color: '#FCD34D' };
+    return { label: 'Needs review', color: '#FCD34D' };
+  };
+  const getAgentPolicyStatus = (invoiceId: string, creatorWallet: string) => {
+    const policy = agentPolicyMeta[`${invoiceId}:${creatorWallet}`];
+    if (!policy) return null;
+    if (policy.status === 'active') return { label: 'Truvlo Agent enabled', color: '#5EEAD4' };
+    if (policy.status === 'expired') return { label: 'Agent policy expired', color: '#FCD34D' };
+    return { label: 'Agent policy disabled', color: '#94A3B8' };
+  };
+
+  const renderDisputeResolutionReceipt = (inv: InvoiceData, role: 'creator' | 'client') => {
+    const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+    const dispute = disputeResolutionMeta[key];
+    if (!dispute || dispute.status !== 'resolved' || !dispute.onchain_resolved_at) return null;
+    const ownShare = role === 'creator' ? dispute.resolution_creator_bps : dispute.resolution_client_bps;
+    const counterpartyShare = role === 'creator' ? dispute.resolution_client_bps : dispute.resolution_creator_bps;
+    const counterpartyLabel = role === 'creator' ? 'client' : 'creator';
+    const decision = dispute.decision === 'split'
+      ? 'Split resolution'
+      : dispute.decision === role
+        ? 'Resolved in your favor'
+        : 'Dispute resolved';
+
+    return (
+      <div
+        className="rounded-lg p-3 mt-3"
+        style={{
+          backgroundColor: 'rgba(45,212,191,0.07)',
+          border: '1px solid rgba(45,212,191,0.24)',
+        }}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5EEAD4', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}>
+              {decision}
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+              Your wallet received {formatSharePercent(ownShare)}. The {counterpartyLabel} received {formatSharePercent(counterpartyShare)}.
+            </p>
+          </div>
+          {dispute.resolution_signature && (
+            <a
+              href={disputeExplorerUrl(dispute.resolution_signature)}
+              target="_blank"
+              rel="noreferrer"
+              className="trust-status trust-status-green"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Resolution tx
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderCreatorCard = (invoice: InvoiceWithKey) => {
     const inv = invoice.account;
+    const creatorWallet = inv.creator.toBase58();
+    const agentReview = getAgentReviewStatus(inv.invoiceId, creatorWallet);
+    const agentPolicy = getAgentPolicyStatus(inv.invoiceId, creatorWallet);
     const total = fromSmallestUnit(inv.amount, inv.tokenType);
     const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
     const progressPercent = total > 0 ? (paid / total) * 100 : 0;
@@ -761,6 +1093,16 @@ const Dashboard: React.FC = () => {
                 {inv.clientApproved ? 'Client approved - ready to withdraw' : 'Timeout passed - ready to withdraw'}
               </p>
             )}
+            {agentReview && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentReview.color, fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />{agentReview.label}
+              </p>
+            )}
+            {agentPolicy && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentPolicy.color, fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />{agentPolicy.label}
+              </p>
+            )}
           </div>
 
           <div>
@@ -817,6 +1159,25 @@ const Dashboard: React.FC = () => {
             >
               <Copy className="h-3.5 w-3.5" />Copy Link
             </button>
+
+            {agentReview && (
+              <button
+                onClick={() => openProofModal(inv, creatorWallet)}
+                disabled={submittingProof === inv.invoiceId}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150 disabled:opacity-50"
+                style={{
+                  backgroundColor: 'rgba(45,212,191,0.1)',
+                  border: '1px solid rgba(45,212,191,0.28)',
+                  color: '#5EEAD4',
+                  fontFamily: '"DM Sans", sans-serif',
+                  cursor: submittingProof === inv.invoiceId ? 'default' : 'pointer',
+                }}
+              >
+                {submittingProof === inv.invoiceId
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Submitting...</>
+                  : <><FileText className="h-3.5 w-3.5" />Submit proof</>}
+              </button>
+            )}
 
             {canRequest && (
               <button
@@ -885,6 +1246,7 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
+        {renderDisputeResolutionReceipt(inv, 'creator')}
       </div>
     );
   };
@@ -904,6 +1266,8 @@ const Dashboard: React.FC = () => {
     const needsAction = releaseRequested && !clientApproved && !isDisputed && secondsLeft > 0;
     const creatorWallet = inv.creator.toBase58();
     const creatorName = clientInvoiceMeta[`${inv.invoiceId}:${creatorWallet}`]?.sender_name;
+    const agentReview = getAgentReviewStatus(inv.invoiceId, creatorWallet);
+    const agentPolicy = getAgentPolicyStatus(inv.invoiceId, creatorWallet);
 
     const leftBorderColor = isDisputed ? statusColors.amber
       : needsAction ? statusColors.blue
@@ -941,6 +1305,16 @@ const Dashboard: React.FC = () => {
             {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen - dispute under review</p>}
             {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested withdrawal - {formatCountdown(secondsLeft)}</p>}
             {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this withdrawal</p>}
+            {agentReview && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentReview.color, fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />{agentReview.label}
+              </p>
+            )}
+            {agentPolicy && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentPolicy.color, fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />{agentPolicy.label}
+              </p>
+            )}
           </div>
 
           <div>
@@ -1036,6 +1410,7 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
+        {renderDisputeResolutionReceipt(inv, 'client')}
       </div>
     );
   };
@@ -1558,6 +1933,127 @@ const Dashboard: React.FC = () => {
         )}
       </aside>
       </div>
+
+      {/* Proof Modal */}
+      {proofModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.72)' }}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg p-5"
+            style={{
+              backgroundColor: '#111820',
+              border: '1px solid rgba(45,212,191,0.24)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
+            }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p
+                  className="text-lg font-semibold"
+                  style={{ color: '#F8FAFC', fontFamily: '"Space Grotesk", sans-serif' }}
+                >
+                  Submit proof
+                </p>
+                <p
+                  className="mt-2 text-sm leading-6"
+                  style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}
+                >
+                  Add the deliverable and evidence. Truvlo updates the agent recommendation, while release still requires approval.
+                </p>
+              </div>
+              <button
+                onClick={() => setProofModal(null)}
+                className="rounded-lg px-3 py-1.5 text-xs"
+                style={{
+                  backgroundColor: 'transparent',
+                  border: '1px solid rgba(148,163,184,0.16)',
+                  color: '#94A3B8',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span
+                  className="block text-xs uppercase tracking-widest mb-2"
+                  style={{ color: '#93C5FD', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}
+                >
+                  Deliverable URL
+                </span>
+                <input
+                  value={proofModal.deliverableUrl}
+                  onChange={event => setProofModal(prev => prev ? { ...prev, deliverableUrl: event.target.value } : prev)}
+                  placeholder="https://..."
+                  className="w-full rounded-lg px-4 py-3 text-sm outline-none"
+                  style={{
+                    backgroundColor: 'rgba(15,23,32,0.92)',
+                    border: '1px solid rgba(148,163,184,0.16)',
+                    color: '#F8FAFC',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                />
+              </label>
+
+              <label className="block">
+                <span
+                  className="block text-xs uppercase tracking-widest mb-2"
+                  style={{ color: '#93C5FD', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}
+                >
+                  Proof text
+                </span>
+                <textarea
+                  value={proofModal.proofText}
+                  onChange={event => setProofModal(prev => prev ? { ...prev, proofText: event.target.value } : prev)}
+                  placeholder="Summarize what was delivered, tests passed, files included, or acceptance notes..."
+                  rows={5}
+                  className="w-full rounded-lg px-4 py-3 text-sm outline-none resize-none"
+                  style={{
+                    backgroundColor: 'rgba(15,23,32,0.92)',
+                    border: '1px solid rgba(148,163,184,0.16)',
+                    color: '#F8FAFC',
+                    fontFamily: '"DM Sans", sans-serif',
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+              <button
+                onClick={() => setProofModal(null)}
+                className="rounded-lg px-4 py-2 text-sm"
+                style={{
+                  backgroundColor: 'transparent',
+                  border: '1px solid rgba(148,163,184,0.16)',
+                  color: '#CBD5E1',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitProof}
+                disabled={submittingProof === proofModal.invoiceId}
+                className="flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                style={{
+                  backgroundColor: '#2DD4BF',
+                  color: '#0D1117',
+                  border: 'none',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >
+                {submittingProof === proofModal.invoiceId
+                  ? <><Loader2 className="h-4 w-4 animate-spin" />Submitting...</>
+                  : <><FileText className="h-4 w-4" />Submit proof</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Withdrawal Modal */}
       {releaseModal && (

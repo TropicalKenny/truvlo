@@ -9,7 +9,6 @@ import {
   createAssociatedTokenAccount,
   mintTo,
   getAccount,
-  getAssociatedTokenAddress,
 } from "@solana/spl-token";
 import {
   PublicKey,
@@ -402,7 +401,6 @@ describe("EscrowPay Invoice Payment Program", () => {
       const partialPayment = new anchor.BN(1 * LAMPORTS_PER_SOL); // 1 SOL
       const expectedFee = partialPayment.toNumber() * PLATFORM_FEE_BPS / 10000;
 
-      const clientBalanceBefore = await provider.connection.getBalance(client.publicKey);
       const treasuryBalanceBefore = await provider.connection.getBalance(PLATFORM_TREASURY);
       const invoiceBalanceBefore = await provider.connection.getBalance(invoicePDA);
 

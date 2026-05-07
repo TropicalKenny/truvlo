@@ -8,9 +8,15 @@ import {
 } from './_shared.js';
 import { logAdminAction, requireAdmin } from './_admin.js';
 import { sendDisputeAdminAlerts } from './_admin-alerts.js';
+import { DEFAULT_FROM_EMAIL, readResendError } from './_email.js';
+import { resolveAppOrigin } from './_notify-client-origin.js';
 
 type DisputeDecision = 'creator' | 'client' | 'split';
 type DisputeSide = 'creator' | 'client' | 'admin';
+type RecommendationConfidence = 'low' | 'medium' | 'high';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
+const APP_ORIGIN = process.env.APP_ORIGIN;
 
 function parseDecision(value: unknown): DisputeDecision | null {
   return value === 'creator' || value === 'client' || value === 'split' ? value : null;
@@ -24,13 +30,298 @@ function getAdminPrivyIds(): string[] {
     .filter(Boolean);
 }
 
-async function loadAdminFromRequest(req: VercelRequest, permission: 'disputes' | 'dispute_resolve') {
+async function loadAdminFromRequest(req: VercelRequest, permission: 'disputes' | 'dispute_recommend' | 'dispute_resolve') {
   const wallet = typeof req.query.adminWallet === 'string'
     ? req.query.adminWallet
     : typeof req.body?.adminWallet === 'string'
       ? req.body.adminWallet
       : undefined;
   return requireAdmin(req, wallet, permission);
+}
+
+function includesAny(text: string, patterns: RegExp[]): boolean {
+  return patterns.some(pattern => pattern.test(text));
+}
+
+function joinEvidence(
+  evidence: Array<{ side?: string | null; evidence_type?: string | null; note?: string | null; evidence_url?: string | null }>,
+  side: DisputeSide
+) {
+  return evidence
+    .filter(row => row.side === side)
+    .map(row => [row.evidence_type, row.note, row.evidence_url].filter(Boolean).join(' '))
+    .join('\n')
+    .toLowerCase();
+}
+
+function buildDisputeRecommendation(input: {
+  invoiceMeta?: {
+    description?: string | null;
+    success_criteria?: string | null;
+    deliverable_url?: string | null;
+    proof_text?: string | null;
+  } | null;
+  evidence: Array<{ side?: string | null; evidence_type?: string | null; note?: string | null; evidence_url?: string | null }>;
+  verification?: {
+    verification_status?: string | null;
+    recommended_action?: string | null;
+    confidence?: string | null;
+  } | null;
+}): {
+  decision: DisputeDecision;
+  creatorShareBps: number;
+  clientShareBps: number;
+  confidence: RecommendationConfidence;
+  note: string;
+  risks: string;
+} {
+  const creatorEvidence = joinEvidence(input.evidence, 'creator');
+  const clientEvidence = joinEvidence(input.evidence, 'client');
+  const adminEvidence = joinEvidence(input.evidence, 'admin');
+  const proofText = [
+    input.invoiceMeta?.description,
+    input.invoiceMeta?.success_criteria,
+    input.invoiceMeta?.deliverable_url,
+    input.invoiceMeta?.proof_text,
+    creatorEvidence,
+    adminEvidence,
+  ].filter(Boolean).join('\n').toLowerCase();
+
+  const completionSignals = [/\bcomplete(d)?\b/, /\bdelivered\b/, /\bmerged\b/, /\blive\b/, /\bapproved\b/, /\bpassed\b/, /\bproof\b/];
+  const failureSignals = [/\bincomplete\b/, /\bnot delivered\b/, /\bbroken\b/, /\bfailed\b/, /\berror\b/, /\brefund\b/, /\bmissing\b/, /\bscam\b/];
+
+  const hasCreatorEvidence = creatorEvidence.trim().length > 0 || Boolean(input.invoiceMeta?.proof_text || input.invoiceMeta?.deliverable_url);
+  const hasClientEvidence = clientEvidence.trim().length > 0;
+  const agentPassed = input.verification?.verification_status === 'passed' && input.verification?.recommended_action === 'approve';
+  const agentFlagged = input.verification?.verification_status === 'failed' || input.verification?.recommended_action === 'dispute';
+  const proofLooksComplete = includesAny(proofText, completionSignals);
+  const clientShowsFailure = includesAny(clientEvidence, failureSignals);
+
+  if (agentPassed && !clientShowsFailure) {
+    return {
+      decision: 'creator',
+      creatorShareBps: 10000,
+      clientShareBps: 0,
+      confidence: input.verification?.confidence === 'high' ? 'high' : 'medium',
+      note: 'Truvlo recommends releasing funds to the creator because the submitted proof passed agent-assisted verification and no strong client failure evidence was found.',
+      risks: 'Admin must still confirm the deliverable and evidence before resolving funds.',
+    };
+  }
+
+  if (agentFlagged && clientShowsFailure) {
+    return {
+      decision: 'client',
+      creatorShareBps: 0,
+      clientShareBps: 10000,
+      confidence: 'medium',
+      note: 'Truvlo recommends refunding the client because agent verification flagged the work and client evidence contains failure or refund signals.',
+      risks: 'Admin should verify that the client evidence directly relates to the agreed scope before resolving.',
+    };
+  }
+
+  if (hasCreatorEvidence && proofLooksComplete && !hasClientEvidence) {
+    return {
+      decision: 'creator',
+      creatorShareBps: 10000,
+      clientShareBps: 0,
+      confidence: 'medium',
+      note: 'Truvlo recommends creator-favored resolution because creator proof suggests completion and the client has not submitted contrary evidence.',
+      risks: 'This recommendation is evidence-asymmetric; admin should give the client a fair chance to respond if the evidence window is still open.',
+    };
+  }
+
+  if (!hasCreatorEvidence && hasClientEvidence && clientShowsFailure) {
+    return {
+      decision: 'client',
+      creatorShareBps: 0,
+      clientShareBps: 10000,
+      confidence: 'medium',
+      note: 'Truvlo recommends client-favored resolution because client evidence alleges non-delivery or failure and no creator proof is present.',
+      risks: 'This recommendation is evidence-asymmetric; admin should confirm creator evidence is actually absent before resolving.',
+    };
+  }
+
+  if (hasCreatorEvidence && hasClientEvidence) {
+    return {
+      decision: 'split',
+      creatorShareBps: 5000,
+      clientShareBps: 5000,
+      confidence: 'low',
+      note: 'Truvlo recommends a split review because both parties submitted evidence and the rule-based evaluator cannot safely pick a full winner.',
+      risks: 'Admin should read both sides and adjust the split before final resolution.',
+    };
+  }
+
+  return {
+    decision: 'split',
+    creatorShareBps: 5000,
+    clientShareBps: 5000,
+    confidence: 'low',
+    note: 'Truvlo recommends manual split review because there is not enough evidence for a confident creator or client outcome.',
+    risks: 'Do not resolve until the admin has reviewed missing proof, client objections, and the original scope.',
+  };
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatShare(bps: unknown): string {
+  const numeric = Number(bps ?? 0);
+  if (!Number.isFinite(numeric)) return '0%';
+  return `${(numeric / 100).toFixed(numeric % 100 === 0 ? 0 : 2)}%`;
+}
+
+function buildExplorerUrl(signature: string): string {
+  return `https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`;
+}
+
+function buildResolutionEmail(input: {
+  recipientRole: 'creator' | 'client';
+  invoiceId: string;
+  tokenType: string;
+  amount: string;
+  decision: string;
+  creatorShareBps: number;
+  clientShareBps: number;
+  resolutionSignature: string;
+  verdictHashSignature: string;
+  dashboardUrl: string;
+}) {
+  const recipientShare = input.recipientRole === 'creator'
+    ? input.creatorShareBps
+    : input.clientShareBps;
+  const counterpartyShare = input.recipientRole === 'creator'
+    ? input.clientShareBps
+    : input.creatorShareBps;
+  const headline = input.decision === 'split'
+    ? 'Dispute resolved with a split'
+    : input.decision === input.recipientRole
+      ? 'Dispute resolved in your favor'
+      : 'Dispute resolved';
+  const shareLabel = input.recipientRole === 'creator' ? 'Creator share' : 'Client share';
+  const otherShareLabel = input.recipientRole === 'creator' ? 'Client share' : 'Creator share';
+  const explorerUrl = buildExplorerUrl(input.resolutionSignature);
+  const verdictUrl = buildExplorerUrl(input.verdictHashSignature);
+
+  return `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:32px;">
+    <div style="background:#0D1117;border-radius:16px;padding:28px;border:1px solid rgba(255,255,255,0.08);">
+      <div style="font-size:20px;font-weight:700;color:#F8FAFC;margin-bottom:16px;">Truvlo</div>
+      <h1 style="margin:0 0 8px;font-size:22px;color:#F8FAFC;">${escapeHtml(headline)}</h1>
+      <p style="margin:0 0 20px;color:#94A3B8;line-height:1.6;">
+        The dispute for invoice <strong style="color:#F8FAFC;">${escapeHtml(input.invoiceId)}</strong> has been resolved on devnet.
+        Funds were moved by the on-chain resolution transaction.
+      </p>
+      <div style="background:#161B22;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;">Invoice</div>
+        <div style="color:#F8FAFC;font-family:monospace;margin-top:4px;">${escapeHtml(input.invoiceId)}</div>
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Amount</div>
+        <div style="color:#F8FAFC;font-size:22px;font-weight:700;margin-top:4px;">${escapeHtml(input.amount)} ${escapeHtml(input.tokenType)}</div>
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Outcome</div>
+        <div style="color:#F8FAFC;margin-top:4px;text-transform:capitalize;">${escapeHtml(input.decision)}</div>
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">${escapeHtml(shareLabel)}</div>
+        <div style="color:#F8FAFC;margin-top:4px;">${formatShare(recipientShare)}</div>
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">${escapeHtml(otherShareLabel)}</div>
+        <div style="color:#94A3B8;margin-top:4px;">${formatShare(counterpartyShare)}</div>
+      </div>
+      <div style="background:#1C2128;border-left:3px solid #2DD4BF;border-radius:10px;padding:14px 16px;margin-bottom:20px;">
+        <div style="color:#F8FAFC;font-size:13px;font-weight:600;margin-bottom:4px;">Resolution proof</div>
+        <div style="color:#94A3B8;font-size:13px;line-height:1.6;">
+          Resolution transaction:
+          <a href="${explorerUrl}" style="color:#2DD4BF;word-break:break-all;">${escapeHtml(input.resolutionSignature)}</a><br>
+          Verdict hash transaction:
+          <a href="${verdictUrl}" style="color:#2DD4BF;word-break:break-all;">${escapeHtml(input.verdictHashSignature)}</a>
+        </div>
+      </div>
+      <a href="${escapeHtml(input.dashboardUrl)}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Open Dashboard</a>
+    </div>
+  </div>
+</body>
+</html>`.trim();
+}
+
+async function sendDisputeResolutionEmails(input: {
+  req: VercelRequest;
+  disputeCase: Record<string, unknown>;
+}) {
+  if (!RESEND_API_KEY) return;
+
+  const invoiceId = String(input.disputeCase.invoice_id ?? '');
+  const creatorWallet = String(input.disputeCase.creator_wallet ?? '');
+  const resolutionSignature = String(input.disputeCase.resolution_signature ?? '');
+  const verdictHashSignature = String(input.disputeCase.verdict_hash_signature ?? '');
+  if (!invoiceId || !creatorWallet || !resolutionSignature || !verdictHashSignature) return;
+
+  const { data: invoiceMeta, error } = await supabase
+    .from('invoice_meta')
+    .select('creator_email, client_email, token_type, amount')
+    .eq('invoice_id', invoiceId)
+    .eq('creator_wallet', creatorWallet)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Dispute resolution email metadata lookup failed:', error);
+    return;
+  }
+
+  const appOrigin = resolveAppOrigin({
+    envOrigin: APP_ORIGIN,
+    vercelUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL,
+    headers: input.req.headers,
+  });
+  const dashboardUrl = appOrigin ? `${appOrigin}/dashboard` : 'https://truvlo.io/dashboard';
+
+  const decision = String(input.disputeCase.decision ?? 'split');
+  const tokenType = String(invoiceMeta?.token_type ?? '');
+  const amount = String(invoiceMeta?.amount ?? '');
+  const creatorShareBps = Number(input.disputeCase.resolution_creator_bps ?? 0);
+  const clientShareBps = Number(input.disputeCase.resolution_client_bps ?? 0);
+
+  const recipients = [
+    { role: 'creator' as const, email: invoiceMeta?.creator_email },
+    { role: 'client' as const, email: invoiceMeta?.client_email },
+  ].filter(row => typeof row.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email));
+
+  await Promise.all(recipients.map(async recipient => {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `Truvlo <${FROM_EMAIL}>`,
+        to: [recipient.email],
+        subject: `Dispute resolved - ${invoiceId}`,
+        html: buildResolutionEmail({
+          recipientRole: recipient.role,
+          invoiceId,
+          tokenType,
+          amount,
+          decision,
+          creatorShareBps,
+          clientShareBps,
+          resolutionSignature,
+          verdictHashSignature,
+          dashboardUrl,
+        }),
+      }),
+    });
+
+    if (!response.ok) {
+      const resendError = await readResendError(response);
+      console.error(`Resend error (dispute resolution ${recipient.role}):`, resendError);
+    }
+  }));
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -264,6 +555,91 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, evidence: inserted });
     }
 
+    if (action === 'recommend') {
+      const admin = await loadAdminFromRequest(req, 'dispute_recommend');
+      if (!admin && !isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const { caseId } = req.body as { caseId?: string };
+      if (!caseId) {
+        return res.status(400).json({ error: 'caseId is required' });
+      }
+
+      const { data: disputeCase, error: caseError } = await supabase
+        .from('dispute_cases')
+        .select('*')
+        .eq('id', caseId)
+        .maybeSingle();
+
+      if (caseError) return res.status(500).json({ error: caseError.message });
+      if (!disputeCase) return res.status(404).json({ error: 'Dispute case not found' });
+      if (disputeCase.status === 'resolved' || disputeCase.status === 'closed') {
+        return res.status(409).json({ error: 'Cannot recommend a resolved or closed dispute' });
+      }
+
+      const [{ data: evidence, error: evidenceError }, { data: invoiceMeta }, { data: verification }] = await Promise.all([
+        supabase
+          .from('dispute_evidence')
+          .select('side, evidence_type, evidence_url, note')
+          .eq('case_id', caseId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('invoice_meta')
+          .select('description, success_criteria, deliverable_url, proof_text')
+          .eq('invoice_id', disputeCase.invoice_id)
+          .eq('creator_wallet', disputeCase.creator_wallet)
+          .maybeSingle(),
+        supabase
+          .from('agent_verifications')
+          .select('verification_status, recommended_action, confidence')
+          .eq('invoice_id', disputeCase.invoice_id)
+          .eq('creator_wallet', disputeCase.creator_wallet)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      if (evidenceError) return res.status(500).json({ error: evidenceError.message });
+
+      const recommendation = buildDisputeRecommendation({
+        invoiceMeta,
+        evidence: evidence ?? [],
+        verification,
+      });
+
+      const { data, error } = await supabase
+        .from('dispute_cases')
+        .update({
+          status: 'under_review',
+          recommendation_decision: recommendation.decision,
+          recommendation_creator_bps: recommendation.creatorShareBps,
+          recommendation_client_bps: recommendation.clientShareBps,
+          recommendation_confidence: recommendation.confidence,
+          recommendation_note: recommendation.note,
+          recommendation_risks: recommendation.risks,
+          recommendation_generated_by_privy_id: userId,
+          recommendation_generated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', caseId)
+        .select('*')
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      if (admin) {
+        await logAdminAction(admin, 'dispute.recommend', 'dispute_case', caseId, {
+          decision: recommendation.decision,
+          creator_share_bps: recommendation.creatorShareBps,
+          client_share_bps: recommendation.clientShareBps,
+          confidence: recommendation.confidence,
+        }).catch(logError => console.error('Admin audit log error:', logError));
+      }
+
+      return res.status(200).json({ success: true, dispute_case: data, recommendation });
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // POST action=resolve  (unchanged — already admin-gated)
     // ─────────────────────────────────────────────────────────────────
@@ -331,6 +707,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           client_share_bps: shares.client,
         }).catch(logError => console.error('Admin audit log error:', logError));
       }
+      return res.status(200).json({ success: true, dispute_case: data });
+    }
+
+    if (action === 'mark_onchain_resolved') {
+      const admin = await loadAdminFromRequest(req, 'dispute_resolve');
+      if (!admin && !isAdmin) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      const {
+        caseId,
+        verdictHashSignature,
+        resolutionSignature,
+      } = req.body as {
+        caseId?: string;
+        verdictHashSignature?: string;
+        resolutionSignature?: string;
+      };
+
+      if (!caseId || !verdictHashSignature || !resolutionSignature) {
+        return res.status(400).json({ error: 'Missing on-chain resolution signatures' });
+      }
+
+      const { data, error } = await supabase
+        .from('dispute_cases')
+        .update({
+          verdict_hash_signature: verdictHashSignature,
+          resolution_signature: resolutionSignature,
+          onchain_resolved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', caseId)
+        .select('*')
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      if (admin) {
+        await logAdminAction(admin, 'dispute.onchain_resolve', 'dispute_case', caseId, {
+          verdict_hash_signature: verdictHashSignature,
+          resolution_signature: resolutionSignature,
+        }).catch(logError => console.error('Admin audit log error:', logError));
+      }
+      await sendDisputeResolutionEmails({ req, disputeCase: data as Record<string, unknown> })
+        .catch(emailError => console.error('Dispute resolution email send failed:', emailError));
       return res.status(200).json({ success: true, dispute_case: data });
     }
 

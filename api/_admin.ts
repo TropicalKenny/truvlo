@@ -21,6 +21,7 @@ export type AdminPermission =
   | AdminSection
   | 'admin_overview'
   | 'dispute_backfill'
+  | 'dispute_recommend'
   | 'dispute_resolve'
   | 'payout_process';
 
@@ -48,8 +49,8 @@ const ROLE_SECTIONS: Record<AdminRole, AdminSection[]> = {
 };
 
 const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
-  owner: [...ROLE_SECTIONS.owner, 'admin_overview', 'dispute_backfill', 'dispute_resolve', 'payout_process'],
-  dispute_admin: [...ROLE_SECTIONS.dispute_admin, 'admin_overview'],
+  owner: [...ROLE_SECTIONS.owner, 'admin_overview', 'dispute_backfill', 'dispute_recommend', 'dispute_resolve', 'payout_process'],
+  dispute_admin: [...ROLE_SECTIONS.dispute_admin, 'admin_overview', 'dispute_recommend'],
   payout_admin: [...ROLE_SECTIONS.payout_admin, 'admin_overview', 'payout_process'],
   support_admin: [...ROLE_SECTIONS.support_admin, 'admin_overview'],
 };

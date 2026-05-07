@@ -12,6 +12,12 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/agent-verifications", "destination": "/api/create-invoice-meta?agentEndpoint=agent-verifications" },
+    { "source": "/api/agent-policies", "destination": "/api/create-invoice-meta?agentEndpoint=agent-policies" },
+    { "source": "/api/devnet-agent-actions", "destination": "/api/create-invoice-meta?agentEndpoint=devnet-agent-actions" },
+    { "source": "/api/x402-escrow-intent", "destination": "/api/create-invoice-meta?agentEndpoint=x402-escrow-intent" },
+    { "source": "/api/telegram-link", "destination": "/api/create-invoice-meta?agentEndpoint=telegram-link" },
+    { "source": "/api/telegram-webhook", "destination": "/api/create-invoice-meta?agentEndpoint=telegram-webhook" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

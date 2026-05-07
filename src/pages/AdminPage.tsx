@@ -544,9 +544,9 @@ const AdminPage: React.FC = () => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Resolution failed');
-      setReconcileMessage('Dispute resolution recorded. On-chain fund movement remains a separate treasury action.');
+      setReconcileMessage('Final decision saved. Use "Resolve and move funds" to sign the treasury transaction.');
       await loadAdminData();
-      setSelectedDispute(data.dispute_case as Record<string, unknown>);
+      setSelectedDispute({ ...selectedDispute, ...(data.dispute_case as Record<string, unknown>) });
     } catch (err) {
       setReconcileMessage(err instanceof Error ? err.message : 'Resolution failed');
     } finally {
@@ -573,10 +573,6 @@ const AdminPage: React.FC = () => {
       setReconcileMessage('On-chain dispute resolution needs a USDC or SOL invoice.');
       return;
     }
-    if (selectedDispute.status !== 'resolved') {
-      setReconcileMessage('Record the final reviewed decision before signing the on-chain resolution.');
-      return;
-    }
     if (creatorShareBps + clientShareBps !== 10000) {
       setReconcileMessage('Creator and client basis points must total 10000.');
       return;
@@ -585,11 +581,37 @@ const AdminPage: React.FC = () => {
     setOnChainCaseId(caseId);
     setReconcileMessage(null);
     try {
+      const token = await getAccessToken();
+      let disputeForChain = selectedDispute;
+
+      if (selectedDispute.status !== 'resolved') {
+        const decisionRes = await fetch('/api/disputes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            action: 'resolve',
+            caseId,
+            adminWallet: activeAddress,
+            decision: resolutionDecision,
+            creatorShareBps,
+            clientShareBps,
+            verdictNote: resolutionNote,
+          }),
+        });
+        const decisionData = await decisionRes.json();
+        if (!decisionRes.ok) throw new Error(decisionData?.error || 'Final decision could not be recorded.');
+        disputeForChain = { ...selectedDispute, ...(decisionData.dispute_case as Record<string, unknown>) };
+        setSelectedDispute(disputeForChain);
+      }
+
       const sdk = createAdminSdk();
       if (!sdk) throw new Error('Wallet not ready');
-      const invoiceId = String(selectedDispute.invoice_id ?? '');
-      const creatorWallet = String(selectedDispute.creator_wallet ?? '');
-      const clientWallet = String(selectedDispute.client_wallet ?? '');
+      const invoiceId = String(disputeForChain.invoice_id ?? '');
+      const creatorWallet = String(disputeForChain.creator_wallet ?? '');
+      const clientWallet = String(disputeForChain.client_wallet ?? '');
       if (!invoiceId || !creatorWallet || !clientWallet) {
         throw new Error('Missing invoice, creator, or client wallet for on-chain resolution.');
       }
@@ -617,7 +639,6 @@ const AdminPage: React.FC = () => {
         throw new Error(resolutionResult.error || 'Could not resolve dispute on-chain.');
       }
 
-      const token = await getAccessToken();
       const res = await fetch('/api/disputes', {
         method: 'POST',
         headers: {
@@ -636,7 +657,7 @@ const AdminPage: React.FC = () => {
       if (!res.ok) throw new Error(data?.error || 'On-chain signatures could not be recorded.');
       setReconcileMessage(`On-chain resolution signed: ${resolutionResult.data.signature.slice(0, 8)}...${resolutionResult.data.signature.slice(-8)}.`);
       await loadAdminData();
-      setSelectedDispute(data.dispute_case as Record<string, unknown>);
+      setSelectedDispute({ ...disputeForChain, ...(data.dispute_case as Record<string, unknown>) });
     } catch (err) {
       setReconcileMessage(err instanceof Error ? err.message : 'On-chain resolution failed');
     } finally {
@@ -1253,10 +1274,14 @@ const AdminPage: React.FC = () => {
                       type="button"
                       className="admin-primary-button"
                       onClick={() => recommendDispute(selectedDispute)}
-                      disabled={recommendationCaseId === String(selectedDispute.id)}
+                      disabled={
+                        recommendationCaseId === String(selectedDispute.id) ||
+                        selectedDispute.status === 'resolved' ||
+                        Boolean(selectedDispute.onchain_resolved_at)
+                      }
                     >
                       {recommendationCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gavel className="h-4 w-4" />}
-                      Generate recommendation
+                      {selectedDispute.status === 'resolved' || selectedDispute.onchain_resolved_at ? 'Recommendation closed' : 'Generate recommendation'}
                     </button>
 
                     <label className="admin-form-stack">
@@ -1318,7 +1343,7 @@ const AdminPage: React.FC = () => {
                       disabled={resolvingCaseId === String(selectedDispute.id)}
                     >
                       {resolvingCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-                      Record final decision
+                      Save decision only
                     </button>
                     <button
                       type="button"
@@ -1327,9 +1352,9 @@ const AdminPage: React.FC = () => {
                       disabled={onChainCaseId === String(selectedDispute.id) || Boolean(selectedDispute.onchain_resolved_at)}
                     >
                       {onChainCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                      Sign on-chain resolution
+                      Resolve and move funds
                     </button>
-                    <p className="admin-muted-note">This records the reviewed decision first, then the treasury wallet can store a verdict hash and split USDC or SOL escrow on-chain.</p>
+                    <p className="admin-muted-note">"Resolve and move funds" saves the decision if needed, then asks the treasury wallet to sign the on-chain split.</p>
                   </div>
                 </section>
               )}

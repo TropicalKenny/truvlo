@@ -45,6 +45,16 @@ interface AgentPolicyMeta {
   agent_wallet: string;
 }
 
+interface DisputeResolutionMeta {
+  status?: string | null;
+  decision?: 'creator' | 'client' | 'split' | null;
+  resolution_creator_bps?: number | null;
+  resolution_client_bps?: number | null;
+  resolution_signature?: string | null;
+  verdict_hash_signature?: string | null;
+  onchain_resolved_at?: string | null;
+}
+
 type AmountLike =
 
   | number
@@ -175,6 +185,7 @@ const Dashboard: React.FC = () => {
   const [clientInvoiceMeta, setClientInvoiceMeta] = useState<Record<string, ClientInvoiceMeta>>({});
   const [agentVerificationMeta, setAgentVerificationMeta] = useState<Record<string, AgentVerificationMeta | null>>({});
   const [agentPolicyMeta, setAgentPolicyMeta] = useState<Record<string, AgentPolicyMeta | null>>({});
+  const [disputeResolutionMeta, setDisputeResolutionMeta] = useState<Record<string, DisputeResolutionMeta | null>>({});
   const [proofModal, setProofModal] = useState<{
     invoice: InvoiceData;
     invoiceId: string;
@@ -400,6 +411,40 @@ const Dashboard: React.FC = () => {
     void loadAgentPolicyMeta(invoices);
   }, [sentInvoices, clientInvoices, loadAgentVerificationMeta, loadAgentPolicyMeta]);
 
+  const loadDisputeResolutionMeta = useCallback(async (invoices: InvoiceWithKey[]) => {
+    const disputeInvoices = invoices.filter(({ account: inv }) => Boolean(inv.disputeRaisedAt));
+    const missing = disputeInvoices.filter(({ account: inv }) => {
+      const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+      return !(key in disputeResolutionMeta);
+    });
+    if (missing.length === 0) return;
+
+    const token = await getAccessToken();
+    const loadedEntries = await Promise.all(missing.map(async ({ account: inv }) => {
+      const creatorWallet = inv.creator.toBase58();
+      const key = `${inv.invoiceId}:${creatorWallet}`;
+      try {
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId });
+        const res = await fetch(`/api/disputes?${params.toString()}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) return [key, null] as const;
+        const data = await res.json() as { dispute_case?: DisputeResolutionMeta | null };
+        return [key, data.dispute_case ?? null] as const;
+      } catch {
+        return [key, null] as const;
+      }
+    }));
+
+    setDisputeResolutionMeta(prev => ({ ...prev, ...Object.fromEntries(loadedEntries) }));
+  }, [disputeResolutionMeta, getAccessToken]);
+
+  useEffect(() => {
+    const invoices = [...sentInvoices, ...clientInvoices];
+    if (invoices.length === 0) return;
+    void loadDisputeResolutionMeta(invoices);
+  }, [sentInvoices, clientInvoices, loadDisputeResolutionMeta]);
+
   // ============================================================
   // HELPERS
   // ============================================================
@@ -444,6 +489,16 @@ const Dashboard: React.FC = () => {
     if (sol > 0) lines.push(formatTokenAmount(sol, TokenType.SOL));
     return lines.length > 0 ? lines : ['-'];
   };
+
+  const formatSharePercent = (bps: number | null | undefined) => {
+    const value = Number(bps ?? 0);
+    if (!Number.isFinite(value)) return '0%';
+    const percent = value / 100;
+    return `${percent.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+  };
+
+  const disputeExplorerUrl = (signature: string) =>
+    `https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`;
 
   const getReleaseable = (inv: InvoiceData) => {
     const paid = fromSmallestUnit(inv.amountPaid, inv.tokenType);
@@ -925,6 +980,52 @@ const Dashboard: React.FC = () => {
     return { label: 'Agent policy disabled', color: '#94A3B8' };
   };
 
+  const renderDisputeResolutionReceipt = (inv: InvoiceData, role: 'creator' | 'client') => {
+    const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
+    const dispute = disputeResolutionMeta[key];
+    if (!dispute || dispute.status !== 'resolved' || !dispute.onchain_resolved_at) return null;
+    const ownShare = role === 'creator' ? dispute.resolution_creator_bps : dispute.resolution_client_bps;
+    const counterpartyShare = role === 'creator' ? dispute.resolution_client_bps : dispute.resolution_creator_bps;
+    const counterpartyLabel = role === 'creator' ? 'client' : 'creator';
+    const decision = dispute.decision === 'split'
+      ? 'Split resolution'
+      : dispute.decision === role
+        ? 'Resolved in your favor'
+        : 'Dispute resolved';
+
+    return (
+      <div
+        className="rounded-lg p-3 mt-3"
+        style={{
+          backgroundColor: 'rgba(45,212,191,0.07)',
+          border: '1px solid rgba(45,212,191,0.24)',
+        }}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5EEAD4', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}>
+              {decision}
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+              Your wallet received {formatSharePercent(ownShare)}. The {counterpartyLabel} received {formatSharePercent(counterpartyShare)}.
+            </p>
+          </div>
+          {dispute.resolution_signature && (
+            <a
+              href={disputeExplorerUrl(dispute.resolution_signature)}
+              target="_blank"
+              rel="noreferrer"
+              className="trust-status trust-status-green"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Resolution tx
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderCreatorCard = (invoice: InvoiceWithKey) => {
     const inv = invoice.account;
     const creatorWallet = inv.creator.toBase58();
@@ -1145,6 +1246,7 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
+        {renderDisputeResolutionReceipt(inv, 'creator')}
       </div>
     );
   };
@@ -1308,6 +1410,7 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
+        {renderDisputeResolutionReceipt(inv, 'client')}
       </div>
     );
   };

@@ -224,6 +224,23 @@ function shortValue(value: unknown): string {
   return text;
 }
 
+function bpsToPercent(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, numeric / 100));
+}
+
+function percentToBps(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(Math.max(0, Math.min(100, numeric)) * 100);
+}
+
+function formatPercentShare(value: unknown): string {
+  const percent = bpsToPercent(value);
+  return `${percent.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+}
+
 function formatDate(value: unknown): string {
   if (!value) return '-';
   const date = new Date(String(value));
@@ -475,6 +492,11 @@ const AdminPage: React.FC = () => {
     ? rawActiveRows.filter(row => row.status === disputeStatusFilter)
     : rawActiveRows;
   const adminRole = overview?.admin?.role ?? null;
+  const creatorSharePercent = bpsToPercent(creatorShareBps);
+  const clientSharePercent = bpsToPercent(clientShareBps);
+  const selectedResolvedOnChain = Boolean(selectedDispute?.onchain_resolved_at);
+  const selectedResolutionSignature = selectedDispute?.resolution_signature ? String(selectedDispute.resolution_signature) : '';
+  const selectedVerdictSignature = selectedDispute?.verdict_hash_signature ? String(selectedDispute.verdict_hash_signature) : '';
 
   const selectSection = (sectionId: AdminSectionId) => {
     setActiveSectionId(sectionId);
@@ -540,7 +562,7 @@ const AdminPage: React.FC = () => {
     }
     const caseId = String(selectedDispute.id);
     if (creatorShareBps + clientShareBps !== 10000) {
-      setReconcileMessage('Creator and client basis points must total 10000.');
+      setReconcileMessage('Creator and client percentages must total 100%.');
       return;
     }
     setResolvingCaseId(caseId);
@@ -595,7 +617,7 @@ const AdminPage: React.FC = () => {
       return;
     }
     if (creatorShareBps + clientShareBps !== 10000) {
-      setReconcileMessage('Creator and client basis points must total 10000.');
+      setReconcileMessage('Creator and client percentages must total 100%.');
       return;
     }
 
@@ -1031,6 +1053,35 @@ const AdminPage: React.FC = () => {
           white-space: pre-wrap;
         }
 
+        .admin-resolution-receipt {
+          display: grid;
+          gap: 10px;
+          margin: 0 0 18px;
+          padding: 14px;
+          border-radius: 8px;
+          border: 1px solid rgba(45, 212, 191, 0.28);
+          background: rgba(45, 212, 191, 0.07);
+        }
+
+        .admin-resolution-links {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .admin-resolution-links a {
+          display: inline-flex;
+          align-items: center;
+          min-height: 32px;
+          padding: 0 10px;
+          border-radius: 8px;
+          border: 1px solid rgba(45, 212, 191, 0.32);
+          color: ${colors.teal};
+          font-family: "DM Sans", sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
         .admin-review-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1075,6 +1126,13 @@ const AdminPage: React.FC = () => {
         .admin-textarea {
           min-height: 110px;
           resize: vertical;
+        }
+
+        .admin-input:disabled,
+        .admin-select:disabled,
+        .admin-textarea:disabled {
+          cursor: not-allowed;
+          opacity: 0.68;
         }
 
         .admin-data-panel {
@@ -1330,8 +1388,10 @@ const AdminPage: React.FC = () => {
                         <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{shortValue(selectedDispute.recommendation_decision)}</p>
                       </div>
                       <div className="admin-review-metric">
-                        <p className="admin-field-label">Creator share</p>
-                        <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{shortValue(selectedDispute.recommendation_creator_bps)} bps</p>
+                        <p className="admin-field-label">Recommended split</p>
+                        <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>
+                          {formatPercentShare(selectedDispute.recommendation_creator_bps)} / {formatPercentShare(selectedDispute.recommendation_client_bps)}
+                        </p>
                       </div>
                       <div className="admin-review-metric">
                         <p className="admin-field-label">Confidence</p>
@@ -1350,6 +1410,34 @@ const AdminPage: React.FC = () => {
                         <p className="admin-stat-value" style={{ fontSize: '1.25rem' }}>{selectedDispute.onchain_resolved_at ? 'signed' : 'pending'}</p>
                       </div>
                     </div>
+                    {selectedResolvedOnChain && (
+                      <div className="admin-resolution-receipt">
+                        <p className="admin-field-label">Resolution receipt</p>
+                        <p className="admin-review-body">
+                          Funds moved on-chain. Creator received {formatPercentShare(selectedDispute.resolution_creator_bps)} and client received {formatPercentShare(selectedDispute.resolution_client_bps)}.
+                        </p>
+                        <div className="admin-resolution-links">
+                          {selectedResolutionSignature && (
+                            <a
+                              href={`https://explorer.solana.com/tx/${encodeURIComponent(selectedResolutionSignature)}?cluster=devnet`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Resolution tx
+                            </a>
+                          )}
+                          {selectedVerdictSignature && (
+                            <a
+                              href={`https://explorer.solana.com/tx/${encodeURIComponent(selectedVerdictSignature)}?cluster=devnet`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Verdict hash tx
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <p className="admin-field-label">Reasoning</p>
                     <p className="admin-review-body">{String(selectedDispute.recommendation_note || 'No recommendation has been generated yet.')}</p>
                     <div style={{ height: 16 }} />
@@ -1383,6 +1471,7 @@ const AdminPage: React.FC = () => {
                       <select
                         className="admin-select"
                         value={resolutionDecision}
+                        disabled={selectedResolvedOnChain}
                         onChange={event => {
                           const next = event.target.value as 'creator' | 'client' | 'split';
                           setResolutionDecision(next);
@@ -1405,15 +1494,17 @@ const AdminPage: React.FC = () => {
                     </label>
 
                     <label className="admin-form-stack">
-                      <span className="admin-field-label">Creator bps</span>
+                      <span className="admin-field-label">Creator percentage</span>
                       <input
                         className="admin-input"
                         type="number"
                         min={0}
-                        max={10000}
-                        value={creatorShareBps}
+                        max={100}
+                        step={1}
+                        value={creatorSharePercent}
+                        disabled={resolutionDecision !== 'split' || selectedResolvedOnChain}
                         onChange={event => {
-                          const next = Number(event.target.value);
+                          const next = percentToBps(event.target.value);
                           setCreatorShareBps(next);
                           setClientShareBps(10000 - next);
                         }}
@@ -1421,20 +1512,41 @@ const AdminPage: React.FC = () => {
                     </label>
 
                     <label className="admin-form-stack">
-                      <span className="admin-field-label">Client bps</span>
-                      <input className="admin-input" type="number" min={0} max={10000} value={clientShareBps} onChange={event => setClientShareBps(Number(event.target.value))} />
+                      <span className="admin-field-label">Client percentage</span>
+                      <input
+                        className="admin-input"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={clientSharePercent}
+                        disabled={resolutionDecision !== 'split' || selectedResolvedOnChain}
+                        onChange={event => {
+                          const next = percentToBps(event.target.value);
+                          setClientShareBps(next);
+                          setCreatorShareBps(10000 - next);
+                        }}
+                      />
                     </label>
+                    <p className="admin-muted-note">
+                      Split must total 100%. The contract still receives the exact internal values when the treasury wallet signs.
+                    </p>
 
                     <label className="admin-form-stack">
                       <span className="admin-field-label">Verdict note</span>
-                      <textarea className="admin-textarea" value={resolutionNote} onChange={event => setResolutionNote(event.target.value)} />
+                      <textarea
+                        className="admin-textarea"
+                        value={resolutionNote}
+                        disabled={selectedResolvedOnChain}
+                        onChange={event => setResolutionNote(event.target.value)}
+                      />
                     </label>
 
                     <button
                       type="button"
                       className="admin-primary-button"
                       onClick={resolveDisputeOffchain}
-                      disabled={resolvingCaseId === String(selectedDispute.id)}
+                      disabled={resolvingCaseId === String(selectedDispute.id) || selectedResolvedOnChain}
                     >
                       {resolvingCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
                       Save decision only
@@ -1443,12 +1555,12 @@ const AdminPage: React.FC = () => {
                       type="button"
                       className="admin-primary-button"
                       onClick={resolveDisputeOnChain}
-                      disabled={onChainCaseId === String(selectedDispute.id) || Boolean(selectedDispute.onchain_resolved_at)}
+                      disabled={onChainCaseId === String(selectedDispute.id) || selectedResolvedOnChain}
                     >
                       {onChainCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
                       Resolve and move funds
                     </button>
-                    <p className="admin-muted-note">"Resolve and move funds" saves the decision if needed, then asks the treasury wallet to sign the on-chain split.</p>
+                    <p className="admin-muted-note">"Resolve and move funds" saves the decision if needed, asks the treasury wallet to sign, then emails both parties after the on-chain transaction is recorded.</p>
                   </div>
                 </section>
               )}

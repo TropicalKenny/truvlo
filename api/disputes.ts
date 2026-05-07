@@ -8,10 +8,15 @@ import {
 } from './_shared.js';
 import { logAdminAction, requireAdmin } from './_admin.js';
 import { sendDisputeAdminAlerts } from './_admin-alerts.js';
+import { DEFAULT_FROM_EMAIL, readResendError } from './_email.js';
+import { resolveAppOrigin } from './_notify-client-origin.js';
 
 type DisputeDecision = 'creator' | 'client' | 'split';
 type DisputeSide = 'creator' | 'client' | 'admin';
 type RecommendationConfidence = 'low' | 'medium' | 'high';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
+const APP_ORIGIN = process.env.APP_ORIGIN;
 
 function parseDecision(value: unknown): DisputeDecision | null {
   return value === 'creator' || value === 'client' || value === 'split' ? value : null;
@@ -155,6 +160,168 @@ function buildDisputeRecommendation(input: {
     note: 'Truvlo recommends manual split review because there is not enough evidence for a confident creator or client outcome.',
     risks: 'Do not resolve until the admin has reviewed missing proof, client objections, and the original scope.',
   };
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatShare(bps: unknown): string {
+  const numeric = Number(bps ?? 0);
+  if (!Number.isFinite(numeric)) return '0%';
+  return `${(numeric / 100).toFixed(numeric % 100 === 0 ? 0 : 2)}%`;
+}
+
+function buildExplorerUrl(signature: string): string {
+  return `https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`;
+}
+
+function buildResolutionEmail(input: {
+  recipientRole: 'creator' | 'client';
+  invoiceId: string;
+  tokenType: string;
+  amount: string;
+  decision: string;
+  creatorShareBps: number;
+  clientShareBps: number;
+  resolutionSignature: string;
+  verdictHashSignature: string;
+  dashboardUrl: string;
+}) {
+  const recipientShare = input.recipientRole === 'creator'
+    ? input.creatorShareBps
+    : input.clientShareBps;
+  const counterpartyShare = input.recipientRole === 'creator'
+    ? input.clientShareBps
+    : input.creatorShareBps;
+  const headline = input.decision === 'split'
+    ? 'Dispute resolved with a split'
+    : input.decision === input.recipientRole
+      ? 'Dispute resolved in your favor'
+      : 'Dispute resolved';
+  const shareLabel = input.recipientRole === 'creator' ? 'Creator share' : 'Client share';
+  const otherShareLabel = input.recipientRole === 'creator' ? 'Client share' : 'Creator share';
+  const explorerUrl = buildExplorerUrl(input.resolutionSignature);
+  const verdictUrl = buildExplorerUrl(input.verdictHashSignature);
+
+  return `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:32px;">
+    <div style="background:#0D1117;border-radius:16px;padding:28px;border:1px solid rgba(255,255,255,0.08);">
+      <div style="font-size:20px;font-weight:700;color:#F8FAFC;margin-bottom:16px;">Truvlo</div>
+      <h1 style="margin:0 0 8px;font-size:22px;color:#F8FAFC;">${escapeHtml(headline)}</h1>
+      <p style="margin:0 0 20px;color:#94A3B8;line-height:1.6;">
+        The dispute for invoice <strong style="color:#F8FAFC;">${escapeHtml(input.invoiceId)}</strong> has been resolved on devnet.
+        Funds were moved by the on-chain resolution transaction.
+      </p>
+      <div style="background:#161B22;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;">Invoice</div>
+        <div style="color:#F8FAFC;font-family:monospace;margin-top:4px;">${escapeHtml(input.invoiceId)}</div>
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Amount</div>
+        <div style="color:#F8FAFC;font-size:22px;font-weight:700;margin-top:4px;">${escapeHtml(input.amount)} ${escapeHtml(input.tokenType)}</div>
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Outcome</div>
+        <div style="color:#F8FAFC;margin-top:4px;text-transform:capitalize;">${escapeHtml(input.decision)}</div>
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">${escapeHtml(shareLabel)}</div>
+        <div style="color:#F8FAFC;margin-top:4px;">${formatShare(recipientShare)}</div>
+        <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">${escapeHtml(otherShareLabel)}</div>
+        <div style="color:#94A3B8;margin-top:4px;">${formatShare(counterpartyShare)}</div>
+      </div>
+      <div style="background:#1C2128;border-left:3px solid #2DD4BF;border-radius:10px;padding:14px 16px;margin-bottom:20px;">
+        <div style="color:#F8FAFC;font-size:13px;font-weight:600;margin-bottom:4px;">Resolution proof</div>
+        <div style="color:#94A3B8;font-size:13px;line-height:1.6;">
+          Resolution transaction:
+          <a href="${explorerUrl}" style="color:#2DD4BF;word-break:break-all;">${escapeHtml(input.resolutionSignature)}</a><br>
+          Verdict hash transaction:
+          <a href="${verdictUrl}" style="color:#2DD4BF;word-break:break-all;">${escapeHtml(input.verdictHashSignature)}</a>
+        </div>
+      </div>
+      <a href="${escapeHtml(input.dashboardUrl)}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Open Dashboard</a>
+    </div>
+  </div>
+</body>
+</html>`.trim();
+}
+
+async function sendDisputeResolutionEmails(input: {
+  req: VercelRequest;
+  disputeCase: Record<string, unknown>;
+}) {
+  if (!RESEND_API_KEY) return;
+
+  const invoiceId = String(input.disputeCase.invoice_id ?? '');
+  const creatorWallet = String(input.disputeCase.creator_wallet ?? '');
+  const resolutionSignature = String(input.disputeCase.resolution_signature ?? '');
+  const verdictHashSignature = String(input.disputeCase.verdict_hash_signature ?? '');
+  if (!invoiceId || !creatorWallet || !resolutionSignature || !verdictHashSignature) return;
+
+  const { data: invoiceMeta, error } = await supabase
+    .from('invoice_meta')
+    .select('creator_email, client_email, token_type, amount')
+    .eq('invoice_id', invoiceId)
+    .eq('creator_wallet', creatorWallet)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Dispute resolution email metadata lookup failed:', error);
+    return;
+  }
+
+  const appOrigin = resolveAppOrigin({
+    envOrigin: APP_ORIGIN,
+    vercelUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL,
+    headers: input.req.headers,
+  });
+  const dashboardUrl = appOrigin ? `${appOrigin}/dashboard` : 'https://truvlo.io/dashboard';
+
+  const decision = String(input.disputeCase.decision ?? 'split');
+  const tokenType = String(invoiceMeta?.token_type ?? '');
+  const amount = String(invoiceMeta?.amount ?? '');
+  const creatorShareBps = Number(input.disputeCase.resolution_creator_bps ?? 0);
+  const clientShareBps = Number(input.disputeCase.resolution_client_bps ?? 0);
+
+  const recipients = [
+    { role: 'creator' as const, email: invoiceMeta?.creator_email },
+    { role: 'client' as const, email: invoiceMeta?.client_email },
+  ].filter(row => typeof row.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email));
+
+  await Promise.all(recipients.map(async recipient => {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `Truvlo <${FROM_EMAIL}>`,
+        to: [recipient.email],
+        subject: `Dispute resolved - ${invoiceId}`,
+        html: buildResolutionEmail({
+          recipientRole: recipient.role,
+          invoiceId,
+          tokenType,
+          amount,
+          decision,
+          creatorShareBps,
+          clientShareBps,
+          resolutionSignature,
+          verdictHashSignature,
+          dashboardUrl,
+        }),
+      }),
+    });
+
+    if (!response.ok) {
+      const resendError = await readResendError(response);
+      console.error(`Resend error (dispute resolution ${recipient.role}):`, resendError);
+    }
+  }));
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -582,6 +749,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           resolution_signature: resolutionSignature,
         }).catch(logError => console.error('Admin audit log error:', logError));
       }
+      await sendDisputeResolutionEmails({ req, disputeCase: data as Record<string, unknown> })
+        .catch(emailError => console.error('Dispute resolution email send failed:', emailError));
       return res.status(200).json({ success: true, dispute_case: data });
     }
 

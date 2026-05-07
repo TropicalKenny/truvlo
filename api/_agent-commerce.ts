@@ -126,7 +126,9 @@ export async function handleAgentVerifications(req: VercelRequest, res: VercelRe
       .eq('creator_wallet', normalizedCreatorWallet)
       .maybeSingle();
     if (metaError) return res.status(500).json({ error: 'Failed to load invoice metadata' });
-    if (!invoiceMeta) return res.status(404).json({ error: 'Invoice metadata not found' });
+    if (!invoiceMeta) {
+      return res.status(200).json({ invoice_meta: null, agent_verification: null });
+    }
 
     const { data: verification, error } = await supabase
       .from('agent_verifications')

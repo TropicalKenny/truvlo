@@ -152,15 +152,6 @@ export class EscrowPaySDK {
     return this.initialized;
   }
 
-  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(`rpc_timeout_${ms}`)), ms)
-      ),
-    ]);
-  }
-
   getInitError(): string | null {
     return this.initError;
   }
@@ -646,26 +637,6 @@ export class EscrowPaySDK {
       if (!(await this.testConnection())) {
         return { success: false, error: "Network unavailable" };
       }
-      try {
-        const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
-        if (invoiceAccessor) {
-          const allInvoices = await this.withTimeout(invoiceAccessor.all(), 8_000);
-          if (Array.isArray(allInvoices)) {
-            const filtered = allInvoices.filter((inv: any) => {
-              try {
-                return inv?.account?.creator?.toString() === targetCreator.toString();
-              } catch { return false; }
-            });
-            const mapped = filtered.map((inv: any) => {
-              const parsed = this.parseInvoiceData(inv.account);
-              return { publicKey: inv.publicKey, account: parsed as InvoiceData };
-            }).filter((inv: any) => inv.account !== null);
-            return { success: true, data: mapped };
-          }
-        }
-      } catch (anchorError) {
-        console.log('Anchor fetchAll failed, trying direct RPC:', anchorError);
-      }
       const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
         filters: [
           { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
@@ -700,40 +671,6 @@ export class EscrowPaySDK {
     try {
       if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
       const targetStr = targetClient.toString();
-      try {
-        const invoiceAccessor = (this.program.account as any).invoice || (this.program.account as any).Invoice;
-        if (invoiceAccessor) {
-          const allInvoices = await this.withTimeout(invoiceAccessor.all(), 8_000);
-          if (Array.isArray(allInvoices)) {
-            const filtered = allInvoices.filter((inv: any) => {
-              try {
-                const clientField = inv?.account?.client;
-                if (!clientField) return false;
-                let clientKey: string;
-                if (typeof clientField === 'string') {
-                  clientKey = clientField;
-                } else if (clientField.toBase58) {
-                  clientKey = clientField.toBase58();
-                } else if (clientField.toString) {
-                  clientKey = clientField.toString();
-                } else if (clientField.key) {
-                  clientKey = clientField.key.toString();
-                } else {
-                  clientKey = String(clientField);
-                }
-                return clientKey === targetStr;
-              } catch { return false; }
-            });
-            const mapped = filtered.map((inv: any) => {
-              const parsed = this.parseInvoiceData(inv.account);
-              return { publicKey: inv.publicKey, account: parsed as InvoiceData };
-            }).filter((inv: any) => inv.account !== null);
-            return { success: true, data: mapped };
-          }
-        }
-      } catch (anchorError) {
-        console.log('Anchor fetchAll failed for client invoices, trying RPC fallback:', anchorError);
-      }
       const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
         filters: [
           { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },

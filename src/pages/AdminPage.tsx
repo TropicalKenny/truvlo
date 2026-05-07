@@ -43,6 +43,7 @@ type AdminOverview = {
 };
 
 type AdminSectionId = 'invoices' | 'profiles' | 'wallets' | 'disputes' | 'failed_emails' | 'referral_rewards' | 'payout_requests';
+type DisputeStatusFilter = 'open' | 'under_review' | 'resolved';
 
 type AdminSection = {
   id: AdminSectionId;
@@ -210,6 +211,12 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: '0.07em',
 };
 
+const disputeStatusFilters: Array<{ id: DisputeStatusFilter; label: string }> = [
+  { id: 'open', label: 'Open' },
+  { id: 'under_review', label: 'In review' },
+  { id: 'resolved', label: 'Resolved' },
+];
+
 function shortValue(value: unknown): string {
   if (value == null || value === '') return '-';
   const text = String(value);
@@ -342,6 +349,7 @@ const AdminPage: React.FC = () => {
   const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
   const [recommendationCaseId, setRecommendationCaseId] = useState<string | null>(null);
   const [selectedDispute, setSelectedDispute] = useState<Record<string, unknown> | null>(null);
+  const [disputeStatusFilter, setDisputeStatusFilter] = useState<DisputeStatusFilter>('open');
   const [resolutionDecision, setResolutionDecision] = useState<'creator' | 'client' | 'split'>('split');
   const [creatorShareBps, setCreatorShareBps] = useState(5000);
   const [clientShareBps, setClientShareBps] = useState(5000);
@@ -457,7 +465,15 @@ const AdminPage: React.FC = () => {
     ? adminSections.filter(section => overview.allowed_sections?.includes(section.id))
     : adminSections;
   const activeSection = visibleSections.find(section => section.id === activeSectionId) ?? visibleSections[0] ?? adminSections[0];
-  const activeRows = overview?.[activeSection.dataKey] ?? [];
+  const rawActiveRows = overview?.[activeSection.dataKey] ?? [];
+  const disputeRows = overview?.disputes ?? [];
+  const disputeStatusCounts = disputeStatusFilters.reduce<Record<DisputeStatusFilter, number>>((counts, filter) => {
+    counts[filter.id] = disputeRows.filter(row => row.status === filter.id).length;
+    return counts;
+  }, { open: 0, under_review: 0, resolved: 0 });
+  const activeRows = activeSection.id === 'disputes'
+    ? rawActiveRows.filter(row => row.status === disputeStatusFilter)
+    : rawActiveRows;
   const adminRole = overview?.admin?.role ?? null;
 
   const selectSection = (sectionId: AdminSectionId) => {
@@ -481,6 +497,11 @@ const AdminPage: React.FC = () => {
     setCreatorShareBps(Number.isFinite(creatorBps) ? creatorBps : 5000);
     setClientShareBps(Number.isFinite(clientBps) ? clientBps : 5000);
     setResolutionNote(String(row.recommendation_note ?? ''));
+  };
+
+  const selectDisputeStatusFilter = (filter: DisputeStatusFilter) => {
+    setDisputeStatusFilter(filter);
+    setSelectedDispute(null);
   };
 
   const reconcileDisputes = async () => {
@@ -910,6 +931,56 @@ const AdminPage: React.FC = () => {
           border-color: rgba(45, 212, 191, 0.42);
         }
 
+        .admin-dispute-queue-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 0 0 14px;
+        }
+
+        .admin-dispute-queue-tab {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 34px;
+          padding: 0 12px;
+          border-radius: 8px;
+          border: 1px solid ${colors.border};
+          background: ${colors.surfaceSoft};
+          color: ${colors.muted};
+          font-family: "DM Sans", sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+          transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+        }
+
+        .admin-dispute-queue-tab:hover {
+          color: ${colors.text};
+          border-color: rgba(148, 163, 184, 0.28);
+        }
+
+        .admin-dispute-queue-tab-active {
+          color: ${colors.text};
+          background: rgba(45, 212, 191, 0.08);
+          border-color: rgba(45, 212, 191, 0.42);
+        }
+
+        .admin-dispute-queue-count {
+          min-width: 22px;
+          height: 22px;
+          padding: 0 7px;
+          border-radius: 999px;
+          background: rgba(148, 163, 184, 0.10);
+          border: 1px solid rgba(148, 163, 184, 0.14);
+          color: inherit;
+          font-family: "JetBrains Mono", monospace;
+          font-size: 11px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
         .admin-stat-icon {
           width: 32px;
           height: 32px;
@@ -1215,9 +1286,32 @@ const AdminPage: React.FC = () => {
               </div>
             )}
 
+            {activeSection.id === 'disputes' && (
+              <div className="admin-dispute-queue-tabs" role="tablist" aria-label="Dispute status">
+                {disputeStatusFilters.map(filter => {
+                  const active = disputeStatusFilter === filter.id;
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={`admin-dispute-queue-tab ${active ? 'admin-dispute-queue-tab-active' : ''}`}
+                      onClick={() => selectDisputeStatusFilter(filter.id)}
+                    >
+                      {filter.label}
+                      <span className="admin-dispute-queue-count">{disputeStatusCounts[filter.id]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="admin-data-stack">
               <DataPanel
-                title={activeSection.title}
+                title={activeSection.id === 'disputes'
+                  ? `${activeSection.title} - ${disputeStatusFilters.find(filter => filter.id === disputeStatusFilter)?.label ?? 'Open'}`
+                  : activeSection.title}
                 rows={activeRows}
                 columns={activeSection.columns}
                 actionLabel={activeSection.id === 'disputes' && adminRole === 'owner' ? 'Review' : undefined}

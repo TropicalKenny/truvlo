@@ -46,13 +46,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .maybeSingle();
 
     if (error) return res.status(500).json({ error: 'Failed to load invoice metadata' });
-    if (!data) return res.status(404).json({ error: 'Invoice metadata not found' });
+    if (!data) {
+      return res.status(200).json({
+        sender_name: null,
+        description: null,
+        token_type: null,
+        amount: null,
+        found: false,
+      });
+    }
 
     return res.status(200).json({
       sender_name: data.sender_name,
       description: data.description,
       token_type: data.token_type,
       amount: data.amount,
+      found: true,
     });
   }
 

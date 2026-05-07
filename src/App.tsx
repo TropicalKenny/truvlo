@@ -23,6 +23,7 @@ const WalletPage             = lazy(() => import('./pages/WalletPage'));
 const CombinedProfilePage    = lazy(() => import('./pages/CombinedProfilePage'));
 const OnboardingPage         = lazy(() => import('./pages/OnboardingPage'));
 const AdminPage              = lazy(() => import('./pages/AdminPage'));
+const DisputeEvidencePage    = lazy(() => import('./pages/DisputeEvidencePage'));
 
 const App = () => {
   const endpoint = useMemo(() => getSolanaRpcUrl(), []);
@@ -43,6 +44,7 @@ const App = () => {
                 <Route path="/onboarding" element={<OnboardingGate onboardingPage><OnboardingPage /></OnboardingGate>} />
                 <Route path="/dashboard" element={<OnboardingGate><DashboardPage /></OnboardingGate>} />
                 <Route path="/approve/:invoiceId/:creator" element={<ApprovePage />} />
+                <Route path="/disputes/:invoiceId/:creator/evidence" element={<DisputeEvidencePage />} />
                 <Route path="/account" element={<OnboardingGate><AccountPage /></OnboardingGate>} />
                 {/* /profile/account/:slug must come before /profile/:wallet */}
                 <Route path="/profile/account/:slug" element={<CombinedProfilePage />} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
@@ -41,8 +41,11 @@ interface AgentVerificationMeta {
 }
 
 interface AgentPolicyMeta {
+  invoice_id?: string;
+  creator_wallet?: string;
   status: 'active' | 'disabled' | 'expired';
   agent_wallet: string;
+  client_wallet?: string | null;
 }
 
 interface DisputeResolutionMeta {
@@ -138,6 +141,7 @@ const DarkBadge = ({
 // ============================================================
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
   const { profile } = useAuthProfile();
@@ -231,7 +235,7 @@ const Dashboard: React.FC = () => {
       return;
     }
     isFetching.current = true;
-    setLoading(true);
+    setLoading(!hasLoadedOnce.current);
     setFetchError(null);
     try {
       const fetchTimeout = new Promise<never>((_, reject) =>
@@ -296,7 +300,38 @@ const Dashboard: React.FC = () => {
       }
 
       if (clientResult.success && clientResult.data) {
-        const sorted = sort(clientResult.data);
+        let clientData = clientResult.data;
+        try {
+          const token = await getAccessToken();
+          const policyRes = await fetch('/api/create-invoice-meta?agentEndpoint=agent-policies&mine=1', {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const policyData = policyRes.ok
+            ? await policyRes.json() as { agent_policies?: AgentPolicyMeta[] }
+            : { agent_policies: [] };
+          const policies = policyData.agent_policies ?? [];
+          const policyKeys = new Set(policies.map(policy => `${policy.invoice_id}:${policy.creator_wallet}`));
+          const agentWallets = Array.from(new Set(policies
+            .filter(policy => policy.status === 'active' && policy.agent_wallet)
+            .map(policy => policy.agent_wallet)));
+          const agentResults = await Promise.all(agentWallets.map(async agentWallet => {
+            try {
+              return await sdk.fetchInvoicesByClient(new PublicKey(agentWallet));
+            } catch {
+              return null;
+            }
+          }));
+          const agentInvoices = agentResults.flatMap(result => result?.success && result.data ? result.data : [])
+            .filter(({ account: inv }) => policyKeys.has(`${inv.invoiceId}:${inv.creator.toBase58()}`));
+          const merged = new Map<string, InvoiceWithKey>();
+          for (const invoice of [...clientData, ...agentInvoices]) {
+            merged.set(`${invoice.account.invoiceId}:${invoice.account.creator.toBase58()}`, invoice);
+          }
+          clientData = Array.from(merged.values());
+        } catch {
+          // Agent-backed history is additive; direct wallet history should still render if this lookup fails.
+        }
+        const sorted = sort(clientData);
         checkAndNotify(sorted, 'client');
         setClientInvoices(sorted);
       }
@@ -316,7 +351,7 @@ const Dashboard: React.FC = () => {
       lastFetchedAt.current = Date.now();
       if (showRefreshSpinner) setRefreshing(false);
     }
-  }, [sdk, connected]);
+  }, [sdk, connected, getAccessToken]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
   useEffect(() => {
@@ -850,6 +885,7 @@ const Dashboard: React.FC = () => {
         toast({ title: 'Dispute raised', description: 'Funds frozen. Truvlo will review the case.' });
         addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();
+        navigate(`/disputes/${encodeURIComponent(inv.invoiceId)}/${encodeURIComponent(inv.creator.toBase58())}/evidence`);
       } else {
         toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -905,7 +941,8 @@ const Dashboard: React.FC = () => {
     return Array.from(byInvoice.values());
   }, [sentInvoices, clientInvoices]);
   const disputeCount = disputedInvoices.length;
-  const activeDisputeSample = disputedInvoices[0]?.account.invoiceId;
+  const activeDispute = disputedInvoices[0]?.account;
+  const activeDisputeSample = activeDispute?.invoiceId;
 
   const clientStats = {
     total: clientInvoices.length,
@@ -1046,8 +1083,18 @@ const Dashboard: React.FC = () => {
     const releaseRequested = !!inv.completionRequestedAt;
     const releaseReady = isReleaseReady(inv);
     const secondsLeft = getSecondsRemaining(inv);
+    const rawAgentReview = agentVerificationMeta[`${inv.invoiceId}:${creatorWallet}`];
+    const agentPolicyRecord = agentPolicyMeta[`${inv.invoiceId}:${creatorWallet}`];
+    const agentPaid = agentPolicyRecord?.status === 'active';
+    const canSubmitProof = agentPaid
+      && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid)
+      && !isDisputed
+      && !releaseRequested
+      && !inv.clientApproved
+      && rawAgentReview?.verification_status !== 'passed'
+      && rawAgentReview?.recommended_action !== 'approve';
     const canRequest = (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid)
-      && !isDisputed && !releaseRequested && releaseable > 0;
+      && !agentPaid && !isDisputed && !releaseRequested && releaseable > 0;
 
     const leftBorderColor = isDisputed ? statusColors.amber
       : inv.status === InvoiceStatus.Unpaid ? statusColors.orange
@@ -1160,7 +1207,7 @@ const Dashboard: React.FC = () => {
               <Copy className="h-3.5 w-3.5" />Copy Link
             </button>
 
-            {agentReview && (
+            {canSubmitProof && (
               <button
                 onClick={() => openProofModal(inv, creatorWallet)}
                 disabled={submittingProof === inv.invoiceId}
@@ -1649,11 +1696,13 @@ const Dashboard: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => setSentFilter('disputed')}
+            onClick={() => activeDispute
+              ? navigate(`/disputes/${encodeURIComponent(activeDispute.invoiceId)}/${encodeURIComponent(activeDispute.creator.toBase58())}/evidence`)
+              : setSentFilter('disputed')}
             className="trust-button-secondary px-3 py-2 text-xs"
             style={{ color: '#FCD34D', borderColor: 'rgba(245,158,11,0.35)' }}
           >
-            View disputes
+            Submit evidence
           </button>
         </div>
       )}
@@ -2047,8 +2096,8 @@ const Dashboard: React.FC = () => {
                 }}
               >
                 {submittingProof === proofModal.invoiceId
-                  ? <><Loader2 className="h-4 w-4 animate-spin" />Submitting...</>
-                  : <><FileText className="h-4 w-4" />Submit proof</>}
+                  ? <><Loader2 className="h-4 w-4 animate-spin" />Requesting...</>
+                  : <><SendHorizonal className="h-4 w-4" />Request approval</>}
               </button>
             </div>
           </div>

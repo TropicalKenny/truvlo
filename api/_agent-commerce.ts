@@ -322,6 +322,20 @@ async function loadActiveAgentPolicy(input: {
 
 export async function handleAgentPolicies(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
+    const mine = req.query.mine === '1' || req.query.mine === 'true';
+    if (mine) {
+      const userId = await requireUserId(req);
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const { data, error } = await supabase
+        .from('agent_policies')
+        .select('invoice_id, creator_wallet, client_wallet, agent_wallet, max_amount, token_type, can_pay, can_approve_release, can_raise_dispute, approval_rule, status, expires_at, updated_at')
+        .eq('client_privy_id', userId)
+        .order('updated_at', { ascending: false });
+      if (error) return res.status(500).json({ error: 'Failed to load Truvlo Agent policies' });
+      return res.status(200).json({ agent_policies: data ?? [] });
+    }
+
     const invoiceId = typeof req.query.invoiceId === 'string' ? req.query.invoiceId.trim() : '';
     const creatorWallet = typeof req.query.creatorWallet === 'string' ? req.query.creatorWallet.trim() : '';
     if (!invoiceId || !creatorWallet) return res.status(400).json({ error: 'Missing required fields' });
@@ -397,6 +411,14 @@ export async function handleAgentPolicies(req: VercelRequest, res: VercelRespons
     .single();
   if (error) return res.status(500).json({ error: error.message });
 
+  await supabase
+    .from('invoice_meta')
+    .update({
+      client_privy_id: clientPrivyId,
+    })
+    .eq('invoice_id', invoiceId)
+    .eq('creator_wallet', normalizedCreatorWallet);
+
   return res.status(200).json({ success: true, agent_policy: data });
 }
 
@@ -447,8 +469,9 @@ export async function handleDevnetAgentActions(req: VercelRequest, res: VercelRe
     .maybeSingle();
   if (verificationError) return res.status(500).json({ error: verificationError.message });
 
+  let activePolicy: AgentPolicyRow | undefined;
   if (action === 'pay_invoice' || action === 'approve_release' || action === 'raise_dispute') {
-    const { error: policyError } = await loadActiveAgentPolicy({
+    const { policy, error: policyError } = await loadActiveAgentPolicy({
       invoiceId,
       creatorWallet: normalizedCreatorWallet,
       agentWallet,
@@ -458,6 +481,7 @@ export async function handleDevnetAgentActions(req: VercelRequest, res: VercelRe
       clientCommandUserId,
     });
     if (policyError) return res.status(policyError.status).json({ error: policyError.message });
+    activePolicy = policy;
   }
 
   if (action === 'request_release' && verification?.verification_status !== 'passed') return res.status(409).json({ error: 'Agent release request requires passed verification' });
@@ -487,7 +511,10 @@ export async function handleDevnetAgentActions(req: VercelRequest, res: VercelRe
   if (action === 'pay_invoice') {
     await supabase
       .from('invoice_meta')
-      .update({ client_wallet: agentWallet })
+      .update({
+        client_wallet: agentWallet,
+        client_privy_id: activePolicy?.client_privy_id ?? null,
+      })
       .eq('invoice_id', invoiceId)
       .eq('creator_wallet', normalizedCreatorWallet);
 

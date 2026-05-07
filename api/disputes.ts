@@ -402,10 +402,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const normalizedOpener = normalizeSolanaAddress(openedByWallet);
 
-      if (!(await walletBelongsToUser(supabase, userId, normalizedOpener))) {
-        return res.status(403).json({ error: 'Opened-by wallet does not belong to the authenticated user' });
-      }
-
       // FIX: Verify opener is a party to this invoice; derive role server-side.
       const { data: invoiceMeta, error: metaError } = await supabase
         .from('invoice_meta')
@@ -417,12 +413,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!invoiceMeta) return res.status(404).json({ error: 'Invoice not found' });
 
       let derivedRole: 'creator' | 'client';
+      let openerIsAuthorized = await walletBelongsToUser(supabase, userId, normalizedOpener);
       if (invoiceMeta.creator_wallet === normalizedOpener) {
         derivedRole = 'creator';
       } else if (invoiceMeta.client_wallet === normalizedOpener) {
         derivedRole = 'client';
       } else {
-        return res.status(403).json({ error: 'Wallet is not a party to this invoice' });
+        const { data: policy } = await supabase
+          .from('agent_policies')
+          .select('client_privy_id, agent_wallet, status')
+          .eq('invoice_id', invoiceId)
+          .eq('creator_wallet', invoiceMeta.creator_wallet)
+          .eq('agent_wallet', normalizedOpener)
+          .maybeSingle();
+        if (policy?.status === 'active' && policy.client_privy_id === userId) {
+          openerIsAuthorized = true;
+          derivedRole = 'client';
+        } else {
+          return res.status(403).json({ error: 'Wallet is not a party to this invoice' });
+        }
+      }
+
+      if (!openerIsAuthorized) {
+        return res.status(403).json({ error: 'Opened-by wallet does not belong to the authenticated user' });
       }
 
       const evidenceDeadlineAt = new Date(
@@ -525,7 +538,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         derivedSide = 'admin';
       } else if (normalizedSubmitter === disputeCase.creator_wallet) {
         derivedSide = 'creator';
-      } else if (normalizedSubmitter === disputeCase.client_wallet) {
+      } else if (normalizedSubmitter === disputeCase.client_wallet || disputeCase.client_privy_id === userId) {
         derivedSide = 'client';
       } else {
         return res.status(403).json({ error: 'Wallet is not a party to this dispute' });

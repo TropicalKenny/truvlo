@@ -140,9 +140,13 @@ const ApproveRelease: React.FC = () => {
   useEffect(() => {
     if (!urlValid || !invoiceId || !creator) return;
     const params = new URLSearchParams({ invoiceId, creatorWallet: creator });
+    const verificationParams = new URLSearchParams(params);
+    verificationParams.set('agentEndpoint', 'agent-verifications');
+    const policyParams = new URLSearchParams(params);
+    policyParams.set('agentEndpoint', 'agent-policies');
     Promise.all([
-      fetch(`/api/agent-verifications?${params.toString()}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
-      fetch(`/api/agent-policies?${params.toString()}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
+      fetch(`/api/create-invoice-meta?${verificationParams.toString()}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
+      fetch(`/api/create-invoice-meta?${policyParams.toString()}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
     ]).then(([verificationData, policyData]: [
       { agent_verification?: AgentVerification | null } | null,
       { agent_policy?: AgentPolicy | null } | null,

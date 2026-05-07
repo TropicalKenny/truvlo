@@ -144,7 +144,7 @@ const InvoicePayment: React.FC = () => {
       try {
         const creatorPubkey = new PublicKey(urlParams.creator!);
         const metadataUrl = `/api/create-invoice-meta?invoiceId=${encodeURIComponent(urlParams.invoiceId!)}&creatorWallet=${encodeURIComponent(urlParams.creator!)}`;
-        const policyUrl = `/api/agent-policies?invoiceId=${encodeURIComponent(urlParams.invoiceId!)}&creatorWallet=${encodeURIComponent(urlParams.creator!)}`;
+        const policyUrl = `/api/create-invoice-meta?agentEndpoint=agent-policies&invoiceId=${encodeURIComponent(urlParams.invoiceId!)}&creatorWallet=${encodeURIComponent(urlParams.creator!)}`;
         const [result, price, metaRes, policyRes] = await Promise.all([
           readOnlySdk.fetchInvoice(urlParams.invoiceId!, creatorPubkey),
           fetch('/api/sol-price')
@@ -337,7 +337,7 @@ const InvoicePayment: React.FC = () => {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
-      const policyResponse = await fetch('/api/agent-policies', {
+      const policyResponse = await fetch('/api/create-invoice-meta?agentEndpoint=agent-policies', {
         method: 'POST',
         headers,
         body: JSON.stringify({

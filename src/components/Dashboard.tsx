@@ -356,8 +356,8 @@ const Dashboard: React.FC = () => {
       const creatorWallet = inv.creator.toBase58();
       const key = `${inv.invoiceId}:${creatorWallet}`;
       try {
-        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet });
-        const res = await fetch(`/api/agent-verifications?${params.toString()}`);
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet, agentEndpoint: 'agent-verifications' });
+        const res = await fetch(`/api/create-invoice-meta?${params.toString()}`);
         if (!res.ok) return [key, null] as const;
         const data = await res.json() as { agent_verification?: AgentVerificationMeta | null };
         return [key, data.agent_verification ?? null] as const;
@@ -380,8 +380,8 @@ const Dashboard: React.FC = () => {
       const creatorWallet = inv.creator.toBase58();
       const key = `${inv.invoiceId}:${creatorWallet}`;
       try {
-        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet });
-        const res = await fetch(`/api/agent-policies?${params.toString()}`);
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet, agentEndpoint: 'agent-policies' });
+        const res = await fetch(`/api/create-invoice-meta?${params.toString()}`);
         if (!res.ok) return [key, null] as const;
         const data = await res.json() as { agent_policy?: AgentPolicyMeta | null };
         return [key, data.agent_policy ?? null] as const;
@@ -600,8 +600,8 @@ const Dashboard: React.FC = () => {
     const cached = agentPolicyMeta[key];
     if (cached) return cached;
 
-    const params = new URLSearchParams({ invoiceId, creatorWallet });
-    const res = await fetch(`/api/agent-policies?${params.toString()}`);
+    const params = new URLSearchParams({ invoiceId, creatorWallet, agentEndpoint: 'agent-policies' });
+    const res = await fetch(`/api/create-invoice-meta?${params.toString()}`);
     if (!res.ok) return null;
     const data = await res.json() as { agent_policy?: AgentPolicyMeta | null };
     const policy = data.agent_policy ?? null;
@@ -667,7 +667,7 @@ const Dashboard: React.FC = () => {
     setSubmittingProof(proofModal.invoiceId);
     try {
       const token = await getAccessToken();
-      const response = await fetch('/api/agent-verifications', {
+      const response = await fetch('/api/create-invoice-meta?agentEndpoint=agent-verifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

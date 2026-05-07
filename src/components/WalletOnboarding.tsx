@@ -171,10 +171,10 @@ const WalletOnboarding: React.FC = () => {
                 </div>
                 <div>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', color: '#F8FAFC', marginBottom: '4px' }}>
-                    Use your Truvlo wallet
+                    Create secure Truvlo wallet
                   </p>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B' }}>
-                    This wallet is linked to invoices, withdrawals, and reputation.
+                    No private key entry required. Linked to invoices, withdrawals, and reputation.
                   </p>
                 </div>
               </button>
@@ -200,10 +200,10 @@ const WalletOnboarding: React.FC = () => {
                 </div>
                 <div>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', color: '#F8FAFC', marginBottom: '4px' }}>
-                    Import an existing wallet
+                    Advanced import
                   </p>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B' }}>
-                    Use your own wallet via private key or seed phrase
+                    Only use this if you already control a wallet and understand the key handling risk.
                   </p>
                 </div>
               </button>
@@ -219,8 +219,14 @@ const WalletOnboarding: React.FC = () => {
             </button>
 
             <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.25rem', color: '#F8FAFC', letterSpacing: '-0.01em', marginBottom: '20px' }}>
-              Import wallet
+              Advanced import
             </h2>
+
+            <div style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.22)', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5, color: '#FCD34D' }}>
+                Private keys and seed phrases control the wallet. Truvlo does not need them for normal payments; create a secure Truvlo wallet unless you are intentionally importing an existing wallet.
+              </p>
+            </div>
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: '4px', backgroundColor: '#1C2128', borderRadius: '8px', padding: '3px', marginBottom: '20px' }}>
@@ -305,7 +311,7 @@ const WalletOnboarding: React.FC = () => {
               }}
             >
               {loading && <Loader2 size={15} className="animate-spin" />}
-              {loading ? 'Importing…' : 'Import Wallet'}
+              {loading ? 'Importing...' : 'Import existing wallet'}
             </button>
           </>
         )}

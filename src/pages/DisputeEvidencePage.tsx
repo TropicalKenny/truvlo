@@ -38,6 +38,18 @@ const cardStyle: React.CSSProperties = {
 
 const shortWallet = (address: string) => `${address.slice(0, 6)}...${address.slice(-6)}`;
 
+const formatEvidenceDeadline = (deadline?: string | null) => {
+  if (!deadline) return 'Open';
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) return 'Open';
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
 const DisputeEvidencePage: React.FC = () => {
   const { invoiceId, creator } = useParams<{ invoiceId: string; creator: string }>();
   const navigate = useNavigate();
@@ -78,7 +90,7 @@ const DisputeEvidencePage: React.FC = () => {
       setError(null);
       try {
         const token = await getAccessToken();
-        const params = new URLSearchParams({ invoiceId });
+        const params = new URLSearchParams({ invoiceId, creatorWallet: validCreator });
         const res = await fetch(`/api/disputes?${params.toString()}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -199,6 +211,12 @@ const DisputeEvidencePage: React.FC = () => {
                     <p className="text-sm capitalize" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>{disputeCase.status.replace(/_/g, ' ')}</p>
                   </div>
                   <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+                    <p className="trust-label mb-1">Evidence due</p>
+                    <p className="text-sm" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
+                      {formatEvidenceDeadline(disputeCase.evidence_deadline_at)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
                     <p className="trust-label mb-1">Creator</p>
                     <p className="trust-mono text-xs" style={{ color: '#CBD5E1' }}>{shortWallet(disputeCase.creator_wallet)}</p>
                   </div>
@@ -226,6 +244,7 @@ const DisputeEvidencePage: React.FC = () => {
                       value={evidenceUrl}
                       onChange={event => setEvidenceUrl(event.target.value)}
                       placeholder="https://..."
+                      maxLength={2048}
                     />
                   </label>
                   <label className="block">
@@ -235,6 +254,7 @@ const DisputeEvidencePage: React.FC = () => {
                       value={note}
                       onChange={event => setNote(event.target.value)}
                       placeholder="Explain what happened and what this evidence proves."
+                      maxLength={4000}
                     />
                   </label>
                   <button

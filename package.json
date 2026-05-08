@@ -8,6 +8,7 @@
     "dev:full": "vercel dev",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node tests/run-all.mjs",
     "verify:dispute-qa": "node scripts/verify-dispute-qa.mjs",
     "verify:goal": "node scripts/verify-goal-readiness.mjs",
     "preview": "vite preview",

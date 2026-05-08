@@ -17,9 +17,31 @@ type RecommendationConfidence = 'low' | 'medium' | 'high';
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || DEFAULT_FROM_EMAIL;
 const APP_ORIGIN = process.env.APP_ORIGIN;
+const MAX_EVIDENCE_DEADLINE_HOURS = 168;
+const MAX_EVIDENCE_URL_LENGTH = 2048;
+const MAX_EVIDENCE_NOTE_LENGTH = 4000;
+const ALLOWED_EVIDENCE_TYPES = new Set(['deliverable_link', 'screenshot', 'transaction', 'conversation', 'other']);
 
 function parseDecision(value: unknown): DisputeDecision | null {
   return value === 'creator' || value === 'client' || value === 'split' ? value : null;
+}
+
+function normalizeOptionalText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLength);
+}
+
+function normalizeEvidenceUrl(value: unknown): string | null {
+  const url = normalizeOptionalText(value, MAX_EVIDENCE_URL_LENGTH);
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
 }
 
 function getAdminPrivyIds(): string[] {
@@ -338,15 +360,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ─────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     const invoiceId = typeof req.query.invoiceId === 'string' ? req.query.invoiceId : null;
+    const creatorWallet = typeof req.query.creatorWallet === 'string' ? req.query.creatorWallet : null;
     if (!invoiceId) {
       return res.status(400).json({ error: 'invoiceId is required' });
     }
+    if (creatorWallet && !isValidSolanaAddress(creatorWallet)) {
+      return res.status(400).json({ error: 'Invalid creator wallet' });
+    }
 
-    const { data: disputeCase, error } = await supabase
+    let disputeQuery = supabase
       .from('dispute_cases')
       .select('*')
-      .eq('invoice_id', invoiceId)
-      .maybeSingle();
+      .eq('invoice_id', invoiceId);
+    if (creatorWallet) {
+      disputeQuery = disputeQuery.eq('creator_wallet', normalizeSolanaAddress(creatorWallet));
+    }
+    const { data: disputeCase, error } = await disputeQuery.maybeSingle();
 
     if (error) return res.status(500).json({ error: error.message });
     if (!disputeCase) return res.status(404).json({ error: 'Dispute case not found' });
@@ -402,10 +431,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const normalizedOpener = normalizeSolanaAddress(openedByWallet);
 
-      if (!(await walletBelongsToUser(supabase, userId, normalizedOpener))) {
-        return res.status(403).json({ error: 'Opened-by wallet does not belong to the authenticated user' });
-      }
-
       // FIX: Verify opener is a party to this invoice; derive role server-side.
       const { data: invoiceMeta, error: metaError } = await supabase
         .from('invoice_meta')
@@ -417,17 +442,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!invoiceMeta) return res.status(404).json({ error: 'Invoice not found' });
 
       let derivedRole: 'creator' | 'client';
+      let openerIsAuthorized = await walletBelongsToUser(supabase, userId, normalizedOpener);
       if (invoiceMeta.creator_wallet === normalizedOpener) {
         derivedRole = 'creator';
       } else if (invoiceMeta.client_wallet === normalizedOpener) {
         derivedRole = 'client';
       } else {
-        return res.status(403).json({ error: 'Wallet is not a party to this invoice' });
+        const { data: policy } = await supabase
+          .from('agent_policies')
+          .select('client_privy_id, agent_wallet, status')
+          .eq('invoice_id', invoiceId)
+          .eq('creator_wallet', invoiceMeta.creator_wallet)
+          .eq('agent_wallet', normalizedOpener)
+          .maybeSingle();
+        if (policy?.status === 'active' && policy.client_privy_id === userId) {
+          openerIsAuthorized = true;
+          derivedRole = 'client';
+        } else {
+          return res.status(403).json({ error: 'Wallet is not a party to this invoice' });
+        }
       }
 
-      const evidenceDeadlineAt = new Date(
-        Date.now() + Math.max(24, evidenceDeadlineHours) * 60 * 60 * 1000
-      ).toISOString();
+      if (!openerIsAuthorized) {
+        return res.status(403).json({ error: 'Opened-by wallet does not belong to the authenticated user' });
+      }
+
+      const deadlineHours = Number.isFinite(evidenceDeadlineHours)
+        ? Math.min(MAX_EVIDENCE_DEADLINE_HOURS, Math.max(24, evidenceDeadlineHours))
+        : 72;
+      const evidenceDeadlineAt = new Date(Date.now() + deadlineHours * 60 * 60 * 1000).toISOString();
 
       // FIX: Use insert instead of upsert so an existing dispute cannot be overwritten.
       const { data: disputeCase, error } = await supabase
@@ -500,8 +543,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!caseId || !submittedByWallet || !evidenceType) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
+      if (!ALLOWED_EVIDENCE_TYPES.has(evidenceType)) {
+        return res.status(400).json({ error: 'Invalid evidence type' });
+      }
       if (!isValidSolanaAddress(submittedByWallet)) {
         return res.status(400).json({ error: 'Invalid wallet address' });
+      }
+      const normalizedEvidenceUrl = normalizeEvidenceUrl(evidenceUrl);
+      const normalizedNote = normalizeOptionalText(note, MAX_EVIDENCE_NOTE_LENGTH);
+      if (evidenceUrl && !normalizedEvidenceUrl) {
+        return res.status(400).json({ error: 'Evidence link must be a valid http or https URL' });
+      }
+      if (!normalizedEvidenceUrl && !normalizedNote) {
+        return res.status(400).json({ error: 'Add a note or evidence link before submitting' });
       }
 
       const normalizedSubmitter = normalizeSolanaAddress(submittedByWallet);
@@ -525,7 +579,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         derivedSide = 'admin';
       } else if (normalizedSubmitter === disputeCase.creator_wallet) {
         derivedSide = 'creator';
-      } else if (normalizedSubmitter === disputeCase.client_wallet) {
+      } else if (normalizedSubmitter === disputeCase.client_wallet || disputeCase.client_privy_id === userId) {
         derivedSide = 'client';
       } else {
         return res.status(403).json({ error: 'Wallet is not a party to this dispute' });
@@ -539,8 +593,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           submitted_by_wallet: normalizedSubmitter,
           side: derivedSide,          // server-derived, not caller-supplied
           evidence_type: evidenceType,
-          evidence_url: evidenceUrl || null,
-          note: note || null,
+          evidence_url: normalizedEvidenceUrl,
+          note: normalizedNote,
         })
         .select('*')
         .single();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useSignAndSendTransaction } from '@privy-io/react-auth/solana';
@@ -41,13 +41,17 @@ interface AgentVerificationMeta {
 }
 
 interface AgentPolicyMeta {
+  invoice_id?: string;
+  creator_wallet?: string;
   status: 'active' | 'disabled' | 'expired';
   agent_wallet: string;
+  client_wallet?: string | null;
 }
 
 interface DisputeResolutionMeta {
   status?: string | null;
   decision?: 'creator' | 'client' | 'split' | null;
+  evidence_deadline_at?: string | null;
   resolution_creator_bps?: number | null;
   resolution_client_bps?: number | null;
   resolution_signature?: string | null;
@@ -138,6 +142,7 @@ const DarkBadge = ({
 // ============================================================
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const { connection } = useConnection();
   const { authenticated, getAccessToken } = usePrivy();
   const { profile } = useAuthProfile();
@@ -231,7 +236,7 @@ const Dashboard: React.FC = () => {
       return;
     }
     isFetching.current = true;
-    setLoading(true);
+    setLoading(!hasLoadedOnce.current);
     setFetchError(null);
     try {
       const fetchTimeout = new Promise<never>((_, reject) =>
@@ -296,7 +301,38 @@ const Dashboard: React.FC = () => {
       }
 
       if (clientResult.success && clientResult.data) {
-        const sorted = sort(clientResult.data);
+        let clientData = clientResult.data;
+        try {
+          const token = await getAccessToken();
+          const policyRes = await fetch('/api/create-invoice-meta?agentEndpoint=agent-policies&mine=1', {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          const policyData = policyRes.ok
+            ? await policyRes.json() as { agent_policies?: AgentPolicyMeta[] }
+            : { agent_policies: [] };
+          const policies = policyData.agent_policies ?? [];
+          const policyKeys = new Set(policies.map(policy => `${policy.invoice_id}:${policy.creator_wallet}`));
+          const agentWallets = Array.from(new Set(policies
+            .filter(policy => policy.status === 'active' && policy.agent_wallet)
+            .map(policy => policy.agent_wallet)));
+          const agentResults = await Promise.all(agentWallets.map(async agentWallet => {
+            try {
+              return await sdk.fetchInvoicesByClient(new PublicKey(agentWallet));
+            } catch {
+              return null;
+            }
+          }));
+          const agentInvoices = agentResults.flatMap(result => result?.success && result.data ? result.data : [])
+            .filter(({ account: inv }) => policyKeys.has(`${inv.invoiceId}:${inv.creator.toBase58()}`));
+          const merged = new Map<string, InvoiceWithKey>();
+          for (const invoice of [...clientData, ...agentInvoices]) {
+            merged.set(`${invoice.account.invoiceId}:${invoice.account.creator.toBase58()}`, invoice);
+          }
+          clientData = Array.from(merged.values());
+        } catch {
+          // Agent-backed history is additive; direct wallet history should still render if this lookup fails.
+        }
+        const sorted = sort(clientData);
         checkAndNotify(sorted, 'client');
         setClientInvoices(sorted);
       }
@@ -316,7 +352,7 @@ const Dashboard: React.FC = () => {
       lastFetchedAt.current = Date.now();
       if (showRefreshSpinner) setRefreshing(false);
     }
-  }, [sdk, connected]);
+  }, [sdk, connected, getAccessToken]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
   useEffect(() => {
@@ -424,7 +460,7 @@ const Dashboard: React.FC = () => {
       const creatorWallet = inv.creator.toBase58();
       const key = `${inv.invoiceId}:${creatorWallet}`;
       try {
-        const params = new URLSearchParams({ invoiceId: inv.invoiceId });
+        const params = new URLSearchParams({ invoiceId: inv.invoiceId, creatorWallet });
         const res = await fetch(`/api/disputes?${params.toString()}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -850,6 +886,7 @@ const Dashboard: React.FC = () => {
         toast({ title: 'Dispute raised', description: 'Funds frozen. Truvlo will review the case.' });
         addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
         lastFetchedAt.current = 0; await fetchAll();
+        navigate(`/disputes/${encodeURIComponent(inv.invoiceId)}/${encodeURIComponent(inv.creator.toBase58())}/evidence`);
       } else {
         toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -905,7 +942,8 @@ const Dashboard: React.FC = () => {
     return Array.from(byInvoice.values());
   }, [sentInvoices, clientInvoices]);
   const disputeCount = disputedInvoices.length;
-  const activeDisputeSample = disputedInvoices[0]?.account.invoiceId;
+  const activeDispute = disputedInvoices[0]?.account;
+  const activeDisputeSample = activeDispute?.invoiceId;
 
   const clientStats = {
     total: clientInvoices.length,
@@ -980,6 +1018,39 @@ const Dashboard: React.FC = () => {
     return { label: 'Agent policy disabled', color: '#94A3B8' };
   };
 
+  const getAgentPolicyRecord = (invoiceId: string, creatorWallet: string) =>
+    agentPolicyMeta[`${invoiceId}:${creatorWallet}`] ?? null;
+
+  const getDisputeRecord = (invoiceId: string, creatorWallet: string) =>
+    disputeResolutionMeta[`${invoiceId}:${creatorWallet}`] ?? null;
+
+  const isInvoicePaidByAgent = (inv: InvoiceData, policy: AgentPolicyMeta | null | undefined) =>
+    policy?.status === 'active' && Boolean(inv.client && inv.client.toBase58() === policy.agent_wallet);
+
+  const formatCaseStatus = (status?: string | null) =>
+    status ? status.replace(/_/g, ' ') : 'Evidence review';
+
+  const formatEvidenceDue = (deadline?: string | null) => {
+    if (!deadline) return null;
+    const date = new Date(deadline);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const openEvidencePage = (inv: InvoiceData) => {
+    navigate(`/disputes/${encodeURIComponent(inv.invoiceId)}/${encodeURIComponent(inv.creator.toBase58())}/evidence`);
+  };
+
+  const openInvoicePage = (inv: InvoiceData) => {
+    const url = `${window.location.origin}/invoice/${encodeURIComponent(inv.invoiceId)}/${encodeURIComponent(inv.creator.toBase58())}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const renderDisputeResolutionReceipt = (inv: InvoiceData, role: 'creator' | 'client') => {
     const key = `${inv.invoiceId}:${inv.creator.toBase58()}`;
     const dispute = disputeResolutionMeta[key];
@@ -1046,8 +1117,24 @@ const Dashboard: React.FC = () => {
     const releaseRequested = !!inv.completionRequestedAt;
     const releaseReady = isReleaseReady(inv);
     const secondsLeft = getSecondsRemaining(inv);
+    const rawAgentReview = agentVerificationMeta[`${inv.invoiceId}:${creatorWallet}`];
+    const agentPolicyRecord = getAgentPolicyRecord(inv.invoiceId, creatorWallet);
+    const disputeRecord = getDisputeRecord(inv.invoiceId, creatorWallet);
+    const evidenceDue = formatEvidenceDue(disputeRecord?.evidence_deadline_at);
+    const agentPaid = isInvoicePaidByAgent(inv, agentPolicyRecord);
+    const canSubmitProof = agentPaid
+      && (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid)
+      && !isDisputed
+      && !releaseRequested
+      && !inv.clientApproved
+      && rawAgentReview?.verification_status !== 'passed'
+      && rawAgentReview?.recommended_action !== 'approve';
+    const proofSubmitted = agentPaid
+      && !canSubmitProof
+      && !isDisputed
+      && (rawAgentReview?.verification_status === 'passed' || rawAgentReview?.recommended_action === 'approve');
     const canRequest = (inv.status === InvoiceStatus.PartiallyPaid || inv.status === InvoiceStatus.FullyPaid)
-      && !isDisputed && !releaseRequested && releaseable > 0;
+      && !agentPaid && !isDisputed && !releaseRequested && releaseable > 0;
 
     const leftBorderColor = isDisputed ? statusColors.amber
       : inv.status === InvoiceStatus.Unpaid ? statusColors.orange
@@ -1084,9 +1171,18 @@ const Dashboard: React.FC = () => {
                 Next: {formatAmount(currentInstallment, inv.tokenType)} ({currentBps !== null ? currentBps / 100 : 0}%) - installment {scheduleIdx + 1} of {schedule.length}
               </p>
             )}
-            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen - dispute under review</p>}
+            {isDisputed && (
+              <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>
+                Funds frozen - {evidenceDue ? `evidence due ${evidenceDue}` : 'submit evidence for review'}
+              </p>
+            )}
+            {agentPaid && !isDisputed && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#5EEAD4', fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />Paid by Truvlo Agent on client's behalf
+              </p>
+            )}
             {releaseRequested && !isDisputed && !releaseReady && (
-              <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Withdrawal requested - {formatCountdown(secondsLeft)}</p>
+              <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Client approval pending - {formatCountdown(secondsLeft)}</p>
             )}
             {releaseRequested && !isDisputed && releaseReady && (
               <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>
@@ -1141,6 +1237,12 @@ const Dashboard: React.FC = () => {
             <span className={`trust-status ${inv.tokenType === TokenType.USDC ? 'trust-status-green' : 'trust-status-blue'}`}>
               {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
             </span>
+            {agentPaid && <span className="trust-status trust-status-blue"><Bot className="h-3 w-3" />Agent paid</span>}
+            {isDisputed && (
+              <span className="trust-status trust-status-amber">
+                <Clock className="h-3 w-3" />{evidenceDue ? 'Evidence due' : formatCaseStatus(disputeRecord?.status)}
+              </span>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 items-start lg:items-end flex-shrink-0">
@@ -1160,7 +1262,7 @@ const Dashboard: React.FC = () => {
               <Copy className="h-3.5 w-3.5" />Copy Link
             </button>
 
-            {agentReview && (
+            {canSubmitProof && (
               <button
                 onClick={() => openProofModal(inv, creatorWallet)}
                 disabled={submittingProof === inv.invoiceId}
@@ -1174,8 +1276,37 @@ const Dashboard: React.FC = () => {
                 }}
               >
                 {submittingProof === inv.invoiceId
-                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Submitting...</>
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Requesting...</>
                   : <><FileText className="h-3.5 w-3.5" />Submit proof</>}
+              </button>
+            )}
+
+            {proofSubmitted && !releaseRequested && (
+              <div
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
+                style={{
+                  backgroundColor: 'rgba(59,130,246,0.1)',
+                  color: '#93C5FD',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >
+                <Check className="h-3.5 w-3.5" />Proof submitted
+              </div>
+            )}
+
+            {isDisputed && (
+              <button
+                onClick={() => openEvidencePage(inv)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150"
+                style={{
+                  backgroundColor: 'rgba(245,158,11,0.1)',
+                  border: '1px solid rgba(245,158,11,0.32)',
+                  color: '#FCD34D',
+                  fontFamily: '"DM Sans", sans-serif',
+                  cursor: 'pointer',
+                }}
+              >
+                <FileText className="h-3.5 w-3.5" />Submit evidence
               </button>
             )}
 
@@ -1241,7 +1372,7 @@ const Dashboard: React.FC = () => {
                   fontFamily: '"DM Sans", sans-serif',
                 }}
               >
-                <Clock className="h-3.5 w-3.5" />Awaiting client
+                <Clock className="h-3.5 w-3.5" />Client approval pending
               </div>
             )}
           </div>
@@ -1268,6 +1399,10 @@ const Dashboard: React.FC = () => {
     const creatorName = clientInvoiceMeta[`${inv.invoiceId}:${creatorWallet}`]?.sender_name;
     const agentReview = getAgentReviewStatus(inv.invoiceId, creatorWallet);
     const agentPolicy = getAgentPolicyStatus(inv.invoiceId, creatorWallet);
+    const agentPolicyRecord = getAgentPolicyRecord(inv.invoiceId, creatorWallet);
+    const agentPaid = isInvoicePaidByAgent(inv, agentPolicyRecord);
+    const disputeRecord = getDisputeRecord(inv.invoiceId, creatorWallet);
+    const evidenceDue = formatEvidenceDue(disputeRecord?.evidence_deadline_at);
 
     const leftBorderColor = isDisputed ? statusColors.amber
       : needsAction ? statusColors.blue
@@ -1302,8 +1437,17 @@ const Dashboard: React.FC = () => {
                 Installment {scheduleIdx + 1} of {schedule.length} - {formatAmount(released, inv.tokenType)} withdrawn of {formatAmount(paid, inv.tokenType)}
               </p>
             )}
-            {isDisputed && <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>Funds frozen - dispute under review</p>}
-            {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Creator requested withdrawal - {formatCountdown(secondsLeft)}</p>}
+            {isDisputed && (
+              <p className="text-xs mt-1" style={{ color: '#FCD34D' }}>
+                Funds frozen - {evidenceDue ? `evidence due ${evidenceDue}` : 'submit evidence for review'}
+              </p>
+            )}
+            {agentPaid && !isDisputed && (
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#5EEAD4', fontFamily: '"DM Sans", sans-serif' }}>
+                <Bot className="h-3 w-3" />Paid by Truvlo Agent on your behalf
+              </p>
+            )}
+            {needsAction && <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>Client approval pending - {formatCountdown(secondsLeft)}</p>}
             {clientApproved && !isDisputed && <p className="text-xs mt-1" style={{ color: '#4ADE80' }}>You approved this withdrawal</p>}
             {agentReview && (
               <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: agentReview.color, fontFamily: '"DM Sans", sans-serif' }}>
@@ -1353,11 +1497,17 @@ const Dashboard: React.FC = () => {
             <span className={`trust-status ${inv.tokenType === TokenType.USDC ? 'trust-status-green' : 'trust-status-blue'}`}>
               {inv.tokenType === TokenType.USDC ? 'USDC' : 'SOL'}
             </span>
+            {agentPaid && <span className="trust-status trust-status-blue"><Bot className="h-3 w-3" />Agent paid</span>}
+            {isDisputed && (
+              <span className="trust-status trust-status-amber">
+                <Clock className="h-3 w-3" />{evidenceDue ? 'Evidence due' : formatCaseStatus(disputeRecord?.status)}
+              </span>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 items-start lg:items-end flex-shrink-0">
             <button
-              onClick={() => window.open(`${window.location.origin}/invoice/${inv.invoiceId}/${inv.creator.toBase58()}`, '_blank')}
+              onClick={() => openInvoicePage(inv)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150"
               style={{
                 backgroundColor: 'transparent',
@@ -1407,6 +1557,21 @@ const Dashboard: React.FC = () => {
                     : <><AlertTriangle className="h-3.5 w-3.5" />Dispute</>}
                 </button>
               </div>
+            )}
+            {isDisputed && (
+              <button
+                onClick={() => openEvidencePage(inv)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150"
+                style={{
+                  backgroundColor: 'rgba(245,158,11,0.1)',
+                  border: '1px solid rgba(245,158,11,0.32)',
+                  color: '#FCD34D',
+                  fontFamily: '"DM Sans", sans-serif',
+                  cursor: 'pointer',
+                }}
+              >
+                <FileText className="h-3.5 w-3.5" />Submit evidence
+              </button>
             )}
           </div>
         </div>
@@ -1468,6 +1633,15 @@ const Dashboard: React.FC = () => {
     whiteSpace: 'nowrap',
     minHeight: '34px',
   });
+
+  const activeDashboardCreator = activeDashboardAccount?.creator.toBase58() ?? null;
+  const activeDashboardAgentPaid = activeDashboardAccount && activeDashboardCreator
+    ? isInvoicePaidByAgent(activeDashboardAccount, getAgentPolicyRecord(activeDashboardAccount.invoiceId, activeDashboardCreator))
+    : false;
+  const activeDashboardDispute = activeDashboardAccount && activeDashboardCreator
+    ? getDisputeRecord(activeDashboardAccount.invoiceId, activeDashboardCreator)
+    : null;
+  const activeDashboardEvidenceDue = formatEvidenceDue(activeDashboardDispute?.evidence_deadline_at);
 
   // ============================================================
   // RENDER
@@ -1578,15 +1752,15 @@ const Dashboard: React.FC = () => {
           {/* Refresh */}
           <button
             onClick={() => void fetchAll(true)}
-            disabled={loading || refreshing}
+            disabled={refreshing}
             className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors duration-150 disabled:opacity-50"
             style={{
               backgroundColor: 'rgba(148,163,184,0.04)',
               border: '1px solid var(--tl-border)',
-              cursor: loading || refreshing ? 'default' : 'pointer',
+              cursor: refreshing ? 'default' : 'pointer',
               color: 'var(--tl-muted)',
             }}
-            onMouseEnter={e => !(loading || refreshing) && (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
+            onMouseEnter={e => !refreshing && (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)')}
             onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -1649,11 +1823,13 @@ const Dashboard: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => setSentFilter('disputed')}
+            onClick={() => activeDispute
+              ? navigate(`/disputes/${encodeURIComponent(activeDispute.invoiceId)}/${encodeURIComponent(activeDispute.creator.toBase58())}/evidence`)
+              : setSentFilter('disputed')}
             className="trust-button-secondary px-3 py-2 text-xs"
             style={{ color: '#FCD34D', borderColor: 'rgba(245,158,11,0.35)' }}
           >
-            View disputes
+            Submit evidence
           </button>
         </div>
       )}
@@ -1896,6 +2072,7 @@ const Dashboard: React.FC = () => {
                 </span>
                 {activeDashboardAccount.status === InvoiceStatus.Disputed && <span className="trust-status trust-status-amber">Disputed</span>}
                 {activeDashboardAccount.status === InvoiceStatus.Released && <span className="trust-status trust-status-green">Withdrawn</span>}
+                {activeDashboardAgentPaid && <span className="trust-status trust-status-blue">Agent paid</span>}
               </div>
             </div>
 
@@ -1918,6 +2095,24 @@ const Dashboard: React.FC = () => {
                 <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Paid</span>
                 <span style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>{formatAmount(activeDashboardAccount.amountPaid, activeDashboardAccount.tokenType)}</span>
               </div>
+              <div className="flex justify-between gap-3 text-xs">
+                <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Payment source</span>
+                <span style={{ color: activeDashboardAgentPaid ? '#5EEAD4' : 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                  {activeDashboardAgentPaid ? 'Truvlo Agent' : 'Client wallet'}
+                </span>
+              </div>
+              {activeDashboardAccount.status === InvoiceStatus.Disputed && (
+                <>
+                  <div className="flex justify-between gap-3 text-xs">
+                    <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Case status</span>
+                    <span className="capitalize" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>{formatCaseStatus(activeDashboardDispute?.status)}</span>
+                  </div>
+                  <div className="flex justify-between gap-3 text-xs">
+                    <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Evidence due</span>
+                    <span style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>{activeDashboardEvidenceDue ?? 'Open'}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="border-t pt-4" style={{ borderColor: 'rgba(148,163,184,0.12)' }}>
@@ -1954,13 +2149,13 @@ const Dashboard: React.FC = () => {
                   className="text-lg font-semibold"
                   style={{ color: '#F8FAFC', fontFamily: '"Space Grotesk", sans-serif' }}
                 >
-                  Submit proof
+                  Request approval
                 </p>
                 <p
                   className="mt-2 text-sm leading-6"
                   style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}
                 >
-                  Add the deliverable and evidence. Truvlo updates the agent recommendation, while release still requires approval.
+                  Add proof of delivery. Truvlo checks the evidence, then requests client approval before funds can move.
                 </p>
               </div>
               <button
@@ -2047,8 +2242,8 @@ const Dashboard: React.FC = () => {
                 }}
               >
                 {submittingProof === proofModal.invoiceId
-                  ? <><Loader2 className="h-4 w-4 animate-spin" />Submitting...</>
-                  : <><FileText className="h-4 w-4" />Submit proof</>}
+                  ? <><Loader2 className="h-4 w-4 animate-spin" />Requesting...</>
+                  : <><SendHorizonal className="h-4 w-4" />Request approval</>}
               </button>
             </div>
           </div>

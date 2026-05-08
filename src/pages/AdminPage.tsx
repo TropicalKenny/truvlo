@@ -1560,7 +1560,7 @@ const AdminPage: React.FC = () => {
                       {onChainCaseId === String(selectedDispute.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
                       Resolve and move funds
                     </button>
-                    <p className="admin-muted-note">"Resolve and move funds" saves the decision if needed, asks the treasury wallet to sign, then emails both parties after the on-chain transaction is recorded.</p>
+                    <p className="admin-muted-note">"Resolve and move funds" saves the decision if needed, asks the treasury wallet to sign, then emails both parties after the on-chain transaction is recorded. This supports USDC or SOL escrow resolutions.</p>
                   </div>
                 </section>
               )}

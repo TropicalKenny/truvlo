@@ -47,7 +47,7 @@ assert.match(dashboardSource, /agentVerificationMeta/, 'dashboard should load ag
 assert.match(dashboardSource, /Agent review pending|Looks complete|Needs review|Risk flagged/, 'dashboard should show agent review status labels');
 assert.match(dashboardSource, /Submit proof/, 'dashboard should let creators submit proof for agent-assisted invoices');
 assert.match(dashboardSource, /handleSubmitProof/, 'dashboard should wire proof submission to an action handler');
-assert.match(dashboardSource, /\/api\/agent-verifications/, 'dashboard proof submission should use the verification API');
+assert.match(dashboardSource, /agentEndpoint=agent-verifications/, 'dashboard proof submission should use the verification API');
 assert.match(dashboardSource, /deliverableUrl/, 'dashboard proof submission should capture a deliverable URL');
 assert.match(dashboardSource, /proofText/, 'dashboard proof submission should capture proof text');
 assert.match(dashboardSource, /submittedByWallet/, 'dashboard proof submission should identify the submitting wallet');

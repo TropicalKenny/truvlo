@@ -12,8 +12,8 @@ const migrationSource = await readFile('supabase/migrations/20260501_agent_polic
 assert.match(invoicePaymentSource, /Use Truvlo Agent/, 'invoice page should render the managed agent panel');
 assert.match(invoicePaymentSource, /handleEnableAgentPolicy/, 'invoice page should enable a client agent policy');
 assert.match(invoicePaymentSource, /authenticated[\s\S]*login\(\)/, 'enabling the agent should require client login');
-assert.match(invoicePaymentSource, /\/api\/agent-policies/, 'invoice page should create and fetch agent policies');
-assert.match(invoicePaymentSource, /\/api\/devnet-agent-actions/, 'invoice page should trigger devnet agent payment after policy creation');
+assert.match(invoicePaymentSource, /agentEndpoint=agent-policies/, 'invoice page should create and fetch agent policies');
+assert.match(invoicePaymentSource, /fetch\('\/api\/devnet-agent-actions'/, 'invoice page should trigger devnet agent payment after policy creation');
 assert.match(invoicePaymentSource, /invoice-only/, 'agent panel should explain invoice-only scope');
 assert.match(invoicePaymentSource, /verification passes/, 'agent panel should explain the approval rule');
 assert.match(invoicePaymentSource, /automatically approve release/, 'agent panel should explain approval is policy-driven after proof');

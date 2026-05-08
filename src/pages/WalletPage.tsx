@@ -800,12 +800,18 @@ const WalletPage: React.FC = () => {
           </form>
         </div>
 
-        {/* ── Import Wallet ─────────────────────────────────────────────────── */}
+        {/* ── Advanced Import ─────────────────────────────────────────────────── */}
         <div style={sectionCard}>
-          <p style={{ ...sectionTitle, marginBottom: '6px' }}>Import Wallet</p>
+          <p style={{ ...sectionTitle, marginBottom: '6px' }}>Advanced import</p>
           <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', color: '#64748B', marginBottom: '16px' }}>
-            Add an existing wallet to your account by importing it.
+            Most clients should use a secure Truvlo wallet or connected wallet. Import only if you intentionally want to link an existing wallet by private key or seed phrase.
           </p>
+
+          <div style={{ backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.22)', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
+            <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5, color: '#FCD34D' }}>
+              Private keys and seed phrases control the wallet. Truvlo does not need them for normal payment flows; use import only for wallets you already control and trust.
+            </p>
+          </div>
 
           <div style={{ display: 'flex', gap: '4px', backgroundColor: '#1C2128', borderRadius: '8px', padding: '3px', marginBottom: '16px' }}>
             {(['privateKey', 'seedPhrase'] as const).map(t => (
@@ -890,7 +896,7 @@ const WalletPage: React.FC = () => {
               }}
             >
               {importing && <Loader2 size={15} className="animate-spin" />}
-              {importing ? 'Importing…' : 'Import Wallet'}
+              {importing ? 'Importing...' : 'Import existing wallet'}
             </button>
           </form>
         </div>

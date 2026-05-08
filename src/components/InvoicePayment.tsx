@@ -22,7 +22,7 @@ type PageState =
   | { type: 'loading' }
   | { type: 'error'; message: string }
   | { type: 'invoice_loaded'; invoice: InvoiceData }
-  | { type: 'payment_success'; invoice: InvoiceData; paidAmount: number; txSignature: string };
+  | { type: 'payment_success'; invoice: InvoiceData; paidAmount: number; txSignature: string; paidByAgent: boolean };
 
 interface Installment {
   percentage: number;
@@ -280,6 +280,7 @@ const InvoicePayment: React.FC = () => {
         invoice: updated.success && updated.data ? updated.data : invoice,
         paidAmount: breakdown.amount,
         txSignature: payResult.data?.signature || '',
+        paidByAgent: false,
       });
       const token = await getAccessToken();
       fetch('/api/notify-creator', {
@@ -374,6 +375,7 @@ const InvoicePayment: React.FC = () => {
         invoice: updated?.success && updated.data ? updated.data : invoice,
         paidAmount: breakdown.amount,
         txSignature: payData.signature || '',
+        paidByAgent: true,
       });
       toast({ title: 'Truvlo Agent paid this invoice', description: 'Funds are now locked in escrow on devnet.' });
     } catch (error) {
@@ -436,7 +438,7 @@ const InvoicePayment: React.FC = () => {
 
   // ── SUCCESS ──────────────────────────────────────────────────────
   if (pageState.type === 'payment_success') {
-    const { invoice, paidAmount, txSignature } = pageState;
+    const { invoice, paidAmount, txSignature, paidByAgent } = pageState;
     return (
       <div style={cardStyle}>
         <div className="p-10 flex flex-col items-center gap-4 text-center">
@@ -453,12 +455,18 @@ const InvoicePayment: React.FC = () => {
             </h2>
             <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', marginBottom: '24px' }}>
               <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{formatAmount(paidAmount, invoice.tokenType)}</span> deposited into escrow.
+              {paidByAgent && (
+                <span style={{ display: 'block', marginTop: '8px', color: '#5EEAD4', fontWeight: 600 }}>
+                  Paid by Truvlo Agent on your behalf.
+                </span>
+              )}
             </p>
           </div>
 
           <div className="w-full rounded-lg p-4 text-left space-y-2.5" style={{ backgroundColor: '#1C2128' }}>
             {[
               { label: 'Amount paid', value: formatAmount(paidAmount, invoice.tokenType) },
+              { label: 'Payment source', value: paidByAgent ? 'Truvlo Agent' : 'Connected wallet', highlight: paidByAgent },
               { label: 'Installments', value: String(installments.length) },
               { label: 'Status', value: 'In escrow', highlight: true },
             ].map(({ label, value, highlight }) => (
@@ -489,7 +497,9 @@ const InvoicePayment: React.FC = () => {
           >
             <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#38BDF8' }} />
             <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
-              Funds are secured on-chain. The creator can only withdraw according to the schedule you set. Use this same wallet to approve releases or raise a dispute later.
+              {paidByAgent
+                ? 'Truvlo Agent paid escrow under your invoice-only policy. Return to Truvlo to review proof, approve release, or submit evidence if there is a dispute.'
+                : 'Funds are secured on-chain. The creator can only withdraw according to the schedule you set. Use this same wallet to approve releases or raise a dispute later.'}
             </p>
           </div>
 
@@ -707,7 +717,7 @@ const InvoicePayment: React.FC = () => {
                     }}
                   >
                     {agentBusy
-                      ? <><Loader2 className="h-4 w-4 animate-spin" />Agent working...</>
+                      ? <><Loader2 className="h-4 w-4 animate-spin" />Agent payment pending...</>
                       : agentPolicy?.status === 'active'
                         ? <><Check className="h-4 w-4" />Truvlo Agent enabled</>
                         : authenticated
@@ -910,7 +920,9 @@ const InvoicePayment: React.FC = () => {
             <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', lineHeight: 1.5 }}>
               {invoice.status === InvoiceStatus.Released
                 ? 'Funds have been withdrawn by the creator.'
-                : 'This invoice has been fully paid. Awaiting withdrawal.'}
+                : agentPolicy?.status === 'active'
+                  ? 'Paid by Truvlo Agent on your behalf. Awaiting proof review and client approval.'
+                  : 'This invoice has been fully paid. Awaiting withdrawal.'}
             </p>
           </div>
         )}

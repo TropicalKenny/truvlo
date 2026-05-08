@@ -248,6 +248,7 @@ const ApproveRelease: React.FC = () => {
             openedByWallet: agentPolicy?.agent_wallet ?? '',
           }),
         }).catch(error => console.error('Dispute case recording failed:', error));
+        navigate(`/disputes/${encodeURIComponent(invoiceId ?? '')}/${encodeURIComponent(creator ?? '')}/evidence`);
         fetch('/api/notify-creator', {
           method: 'POST',
           headers: {
@@ -333,6 +334,7 @@ const ApproveRelease: React.FC = () => {
             openedByWallet: publicKey?.toBase58() ?? '',
           }),
         }).catch(error => console.error('Dispute case recording failed:', error));
+        navigate(`/disputes/${encodeURIComponent(invoiceId ?? '')}/${encodeURIComponent(creator ?? '')}/evidence`);
         fetch('/api/notify-creator', {
           method: 'POST',
           headers: {

@@ -34,7 +34,7 @@ const App = () => {
         <AuthProfileProvider>
           <NotificationProvider>
             <ReferralBootstrap />
-            <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0D1117' }} />}>
+            <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--tl-bg-soft)' }} />}>
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/pay/:invoiceId/:creator" element={<PaymentPage />} />

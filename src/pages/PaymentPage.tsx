@@ -60,7 +60,7 @@ class PaymentErrorBoundary extends React.Component<
               style={{
                 fontFamily: '"JetBrains Mono", monospace',
                 color: '#64748B',
-                backgroundColor: '#1C2128',
+                backgroundColor: 'var(--tl-surface-3)',
               }}
             >
               {this.state.error.message}

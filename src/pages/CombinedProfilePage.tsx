@@ -91,7 +91,7 @@ const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - score / 1000);
-  const color = score >= 800 ? '#2DD4BF' : score >= 500 ? '#38BDF8' : score >= 200 ? '#F59E0B' : '#EF4444';
+  const color = score >= 800 ? 'var(--tl-brand)' : score >= 500 ? 'var(--tl-info)' : score >= 200 ? '#F59E0B' : '#EF4444';
   return (
     <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
@@ -114,11 +114,11 @@ const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
 };
 
 const StatCard = ({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) => (
-  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}>
+  <div className="rounded-xl p-5 flex flex-col gap-1" style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)' }}>
     <p className="text-xs uppercase tracking-widest" style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}>
       {label}
     </p>
-    <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '2rem', color: accent ? '#2DD4BF' : '#F8FAFC', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+    <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '2rem', color: accent ? 'var(--tl-brand)' : '#F8FAFC', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
       {value}
     </p>
     {sub && <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>{sub}</p>}
@@ -132,7 +132,7 @@ const BreakdownRow = ({ label, pts, max, negative }: { label: string; pts: numbe
     </span>
     <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
       <div className="h-full rounded-full"
-        style={{ width: `${(Math.abs(pts) / max) * 100}%`, backgroundColor: negative ? '#EF4444' : '#2DD4BF', transition: 'width 0.8s ease' }} />
+        style={{ width: `${(Math.abs(pts) / max) * 100}%`, backgroundColor: negative ? '#EF4444' : 'var(--tl-brand)', transition: 'width 0.8s ease' }} />
     </div>
     <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '12px', color: negative ? '#EF4444' : '#F8FAFC', minWidth: '56px', textAlign: 'right', flexShrink: 0 }}>
       {negative ? '−' : '+'}{Math.abs(pts)} / {max}
@@ -266,11 +266,11 @@ const CombinedProfilePage: React.FC = () => {
   // ── loading ──────────────────────────────────────────────────
   if (loadState === 'loading') {
     return (
-      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+      <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--tl-bg-soft)' }}>
         <Header />
         <main className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#2DD4BF' }} />
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--tl-brand)' }} />
             <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>Loading combined reputation...</p>
           </div>
         </main>
@@ -282,10 +282,10 @@ const CombinedProfilePage: React.FC = () => {
   // ── error ────────────────────────────────────────────────────
   if (loadState === 'error') {
     return (
-      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+      <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--tl-bg-soft)' }}>
         <Header />
         <main className="flex-1 flex items-center justify-center px-4">
-          <div className="rounded-xl p-10 text-center" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', maxWidth: '400px', width: '100%' }}>
+          <div className="rounded-xl p-10 text-center" style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)', maxWidth: '400px', width: '100%' }}>
             <AlertCircle className="h-10 w-10 mx-auto mb-4" style={{ color: '#EF4444' }} />
             <h3 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '1.125rem', color: '#F8FAFC', marginBottom: '8px' }}>
               Profile not found
@@ -307,7 +307,7 @@ const CombinedProfilePage: React.FC = () => {
   const completionRate = totalSent > 0 ? Math.round((cleanCompletions / totalSent) * 100) : null;
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--tl-bg-soft)' }}>
       <Header />
       <main className="flex-1 w-full px-4 sm:px-6 py-12">
         <div style={{ maxWidth: '720px', margin: '0 auto' }}>
@@ -337,9 +337,9 @@ const CombinedProfilePage: React.FC = () => {
               }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-all duration-150 flex-shrink-0"
               style={{
-                backgroundColor: copied ? 'rgba(45,212,191,0.1)' : 'transparent',
-                border: copied ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.1)',
-                color: copied ? '#2DD4BF' : '#94A3B8',
+                backgroundColor: copied ? 'rgba(var(--tl-brand-rgb), 0.1)' : 'transparent',
+                border: copied ? '1px solid rgba(var(--tl-brand-rgb), 0.3)' : '1px solid rgba(255,255,255,0.1)',
+                color: copied ? 'var(--tl-brand)' : '#94A3B8',
                 fontFamily: '"DM Sans", sans-serif', cursor: 'pointer',
               }}
             >
@@ -349,7 +349,7 @@ const CombinedProfilePage: React.FC = () => {
 
           {/* ── No activity ── */}
           {!hasActivity && (
-            <div className="rounded-xl p-12 text-center mb-8" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="rounded-xl p-12 text-center mb-8" style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
                 No on-chain escrow activity found for these wallets yet.
               </p>
@@ -361,7 +361,7 @@ const CombinedProfilePage: React.FC = () => {
               {/* ── Reputation score ── */}
               <div
                 className="rounded-xl p-8 mb-6 flex flex-col md:flex-row items-center gap-8"
-                style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderLeft: '4px solid #2DD4BF' }}
+                style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)', borderLeft: '4px solid var(--tl-brand)' }}
               >
                 <ScoreRing score={score.total} />
                 <div className="flex-1 text-center md:text-left">
@@ -383,14 +383,14 @@ const CombinedProfilePage: React.FC = () => {
                   <div className="flex flex-wrap gap-2 justify-center md:justify-start">
                     {cleanCompletions > 0 && (
                       <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: 'rgba(45,212,191,0.1)', color: '#2DD4BF', fontFamily: '"DM Sans", sans-serif' }}>
+                        style={{ backgroundColor: 'rgba(var(--tl-brand-rgb), 0.1)', color: 'var(--tl-brand)', fontFamily: '"DM Sans", sans-serif' }}>
                         <Shield className="h-3 w-3" />
                         {cleanCompletions} clean completion{cleanCompletions !== 1 ? 's' : ''}
                       </span>
                     )}
                     {longestStreak >= 3 && (
                       <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: 'rgba(56,189,248,0.1)', color: '#38BDF8', fontFamily: '"DM Sans", sans-serif' }}>
+                        style={{ backgroundColor: 'rgba(var(--tl-info-rgb), 0.1)', color: 'var(--tl-info)', fontFamily: '"DM Sans", sans-serif' }}>
                         <Zap className="h-3 w-3" />
                         {longestStreak} streak
                       </span>
@@ -413,7 +413,7 @@ const CombinedProfilePage: React.FC = () => {
 
               {/* ── Breakdown ── */}
               {showBreakdown && (
-                <div className="rounded-xl p-6 mb-6 space-y-3" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="rounded-xl p-6 mb-6 space-y-3" style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.06)' }}>
                   <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 500, fontSize: '13px', color: '#F8FAFC', marginBottom: '16px' }}>
                     How the score is calculated
                   </p>
@@ -426,7 +426,7 @@ const CombinedProfilePage: React.FC = () => {
                   )}
                   <div className="flex justify-between pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                     <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#94A3B8' }}>Total</span>
-                    <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '13px', color: '#2DD4BF' }}>
+                    <span style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '13px', color: 'var(--tl-brand)' }}>
                       {score.total} / 1000
                     </span>
                   </div>
@@ -467,7 +467,7 @@ const CombinedProfilePage: React.FC = () => {
           )}
 
           {/* ── Linked wallets ── */}
-          <div className="rounded-xl p-6 mb-4" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="rounded-xl p-6 mb-4" style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 600, fontSize: '0.9rem', color: '#F8FAFC', marginBottom: '4px' }}>
               Verified wallets
             </p>
@@ -476,14 +476,14 @@ const CombinedProfilePage: React.FC = () => {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {walletAddresses.map(addr => (
-                <div key={addr} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', backgroundColor: '#1C2128', borderRadius: '8px', padding: '10px 14px' }}>
+                <div key={addr} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', backgroundColor: 'var(--tl-surface-3)', borderRadius: '8px', padding: '10px 14px' }}>
                   <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '12px', color: '#94A3B8', wordBreak: 'break-all', flex: 1 }}>
                     {addr}
                   </span>
                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                     <Link
                       to={`/profile/${addr}`}
-                      style={{ display: 'flex', alignItems: 'center', gap: '4px', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#2DD4BF', textDecoration: 'none' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: 'var(--tl-brand)', textDecoration: 'none' }}
                     >
                       <ExternalLink size={12} />
                       View profile
@@ -495,9 +495,9 @@ const CombinedProfilePage: React.FC = () => {
           </div>
 
           {/* ── Verification footer ── */}
-          <div className="rounded-xl p-5 flex items-start gap-4" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}>
-              <Shield className="h-4 w-4" style={{ color: '#2DD4BF' }} />
+          <div className="rounded-xl p-5 flex items-start gap-4" style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: 'rgba(var(--tl-brand-rgb), 0.1)' }}>
+              <Shield className="h-4 w-4" style={{ color: 'var(--tl-brand)' }} />
             </div>
             <div>
               <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 500, fontSize: '13px', color: '#F8FAFC', marginBottom: '4px' }}>

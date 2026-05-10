@@ -181,7 +181,7 @@ const DisputeEvidencePage: React.FC = () => {
           <div className="p-6 sm:p-7 space-y-5">
             {loading ? (
               <div className="flex justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin" style={{ color: '#2DD4BF' }} />
+                <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--tl-brand)' }} />
               </div>
             ) : !authenticated ? (
               <div className="space-y-4 text-center">
@@ -202,25 +202,25 @@ const DisputeEvidencePage: React.FC = () => {
             ) : disputeCase ? (
               <>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+                  <div className="rounded-lg p-3.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
                     <p className="trust-label mb-1">Invoice</p>
                     <p className="trust-mono text-xs" style={{ color: '#CBD5E1' }}>{disputeCase.invoice_id}</p>
                   </div>
-                  <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+                  <div className="rounded-lg p-3.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
                     <p className="trust-label mb-1">Status</p>
                     <p className="text-sm capitalize" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>{disputeCase.status.replace(/_/g, ' ')}</p>
                   </div>
-                  <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+                  <div className="rounded-lg p-3.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
                     <p className="trust-label mb-1">Evidence due</p>
                     <p className="text-sm" style={{ color: '#FCD34D', fontFamily: '"DM Sans", sans-serif' }}>
                       {formatEvidenceDeadline(disputeCase.evidence_deadline_at)}
                     </p>
                   </div>
-                  <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+                  <div className="rounded-lg p-3.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
                     <p className="trust-label mb-1">Creator</p>
                     <p className="trust-mono text-xs" style={{ color: '#CBD5E1' }}>{shortWallet(disputeCase.creator_wallet)}</p>
                   </div>
-                  <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+                  <div className="rounded-lg p-3.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
                     <p className="trust-label mb-1">Client</p>
                     <p className="trust-mono text-xs" style={{ color: '#CBD5E1' }}>{disputeCase.client_wallet ? shortWallet(disputeCase.client_wallet) : 'Unassigned'}</p>
                   </div>
@@ -274,7 +274,7 @@ const DisputeEvidencePage: React.FC = () => {
                     </div>
                   ) : (
                     evidence.map(row => (
-                      <div key={row.id} className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div key={row.id} className="rounded-lg p-3.5" style={{ backgroundColor: 'var(--tl-surface-3)', border: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-sm capitalize" style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontWeight: 600 }}>
                             {row.side} - {row.evidence_type.replace(/_/g, ' ')}
@@ -283,7 +283,7 @@ const DisputeEvidencePage: React.FC = () => {
                         </div>
                         {row.note && <p className="mt-2 text-sm" style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', lineHeight: 1.5 }}>{row.note}</p>}
                         {row.evidence_url && (
-                          <a href={row.evidence_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs" style={{ color: '#5EEAD4', fontFamily: '"DM Sans", sans-serif' }}>
+                          <a href={row.evidence_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs" style={{ color: 'var(--tl-brand-bright)', fontFamily: '"DM Sans", sans-serif' }}>
                             Open evidence <ExternalLink className="h-3 w-3" />
                           </a>
                         )}

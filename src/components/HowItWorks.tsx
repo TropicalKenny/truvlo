@@ -5,19 +5,19 @@ const steps = [
   {
     number: '01',
     title: 'Create invoice',
-    description: 'Add scope, amount, token, and client email. Truvlo creates the on-chain escrow record and a shareable payment link.',
+    description: 'Add scope, amount, token, and client email. Truvlo creates a programmable escrow record and shareable payment link.',
     icon: FileText,
   },
   {
     number: '02',
-    title: 'Client pays',
-    description: 'The client pays with USDC or SOL. Funds move into escrow and both sides can see the payment state.',
+    title: 'Client or agent pays',
+    description: 'The client or scoped devnet agent pays with USDC or SOL. Funds move into escrow and both sides can see the payment state.',
     icon: LockKeyhole,
   },
   {
     number: '03',
-    title: 'Review and approve',
-    description: 'When work is ready, request release. The client approves, raises a dispute, or the timeout path applies.',
+    title: 'Submit proof and review',
+    description: 'When work is ready, submit proof. Approval can follow the agreed workflow, or a dispute can move to human-reviewed evidence handling.',
     icon: CheckCircle2,
   },
   {
@@ -43,14 +43,14 @@ const HowItWorks: React.FC = () => {
                 letterSpacing: '-0.03em',
               }}
             >
-              A clear ledger from invoice to withdrawal
+              From invoice to verifiable outcome
             </h2>
             <p
               className="mt-4 text-base leading-7"
               style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}
             >
-              Truvlo keeps fund movement on-chain while invoice context, emails, approvals,
-              referrals, and disputes stay in the product workflow where both sides can understand them.
+              Truvlo keeps escrow movement on-chain while scope, proof, approvals,
+              and disputes stay readable for humans, agents, and reviewers.
             </p>
           </div>
 

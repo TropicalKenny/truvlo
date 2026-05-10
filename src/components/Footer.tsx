@@ -9,7 +9,7 @@ const Footer: React.FC = () => {
           <div>
             <TruvloLogo size="sm" />
             <p className="mt-2 text-sm" style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>
-              On-chain escrow invoices with managed review when work goes sideways.
+              Programmable escrow for AI agents, freelancers, and cross-border internet work.
             </p>
           </div>
         </div>

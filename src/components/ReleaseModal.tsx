@@ -34,7 +34,7 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
       <DialogContent
         className="sm:max-w-md border"
         style={{
-          backgroundColor: '#161B22',
+          backgroundColor: 'var(--tl-surface-2)',
           borderColor: 'rgba(255,255,255,0.08)',
         }}
       >
@@ -47,7 +47,7 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
               color: '#F8FAFC',
             }}
           >
-            <ArrowUpRight className="h-5 w-5" style={{ color: '#2DD4BF' }} />
+            <ArrowUpRight className="h-5 w-5" style={{ color: 'var(--tl-brand)' }} />
             Withdraw to Wallet
           </DialogTitle>
           <DialogDescription
@@ -64,7 +64,7 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
         {/* Amount display */}
         <div
           className="rounded-lg p-5 text-center my-2"
-          style={{ backgroundColor: '#1C2128' }}
+          style={{ backgroundColor: 'var(--tl-surface-3)' }}
         >
           {isInstallmentLabel ? (
             <>
@@ -107,7 +107,7 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
                   fontFamily: '"Space Grotesk", sans-serif',
                   fontWeight: 700,
                   fontSize: '2rem',
-                  color: '#2DD4BF',
+                  color: 'var(--tl-brand)',
                   letterSpacing: '-0.02em',
                 }}
               >
@@ -147,8 +147,8 @@ const ReleaseModal: React.FC<ReleaseModalProps> = ({
             disabled={isReleasing}
             className="flex-1 font-medium transition-opacity duration-150 hover:opacity-90"
             style={{
-              backgroundColor: '#2DD4BF',
-              color: '#0D1117',
+              backgroundColor: 'var(--tl-brand)',
+              color: 'var(--tl-bg-soft)',
               fontFamily: '"DM Sans", sans-serif',
               border: 'none',
             }}

@@ -153,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             <td style="padding:20px 32px;border-top:1px solid rgba(255,255,255,0.08);">
               <p style="margin:0;font-size:12px;color:#64748B;line-height:1.6;">
                 You received this because your email was provided when this invoice was created.
-                Truvlo is a smart contract escrow platform on Solana. Your funds are always in your control.
+                Truvlo records escrow payment state on Solana devnet and supports release or human-reviewed dispute workflows from the invoice page.
               </p>
             </td>
           </tr>

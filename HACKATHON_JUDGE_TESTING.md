@@ -2,7 +2,7 @@
 
 ## What Truvlo Demonstrates
 
-Truvlo is a Solana escrow invoicing platform for global freelancers. A creator creates an invoice, a client funds escrow, the creator submits proof, the client approves release, and disputed work moves through evidence review before admin resolution.
+Truvlo is escrow infrastructure for agentic commerce on Solana devnet. It provides programmable escrow for AI agents, freelancers, and cross-border internet work: a creator creates an invoice, a client or scoped agent funds escrow, the creator submits proof, and disputed work moves through human-reviewed evidence handling before final resolution.
 
 The agent flow is invoice-scoped. Truvlo Agent can pay a specific invoice and request approval only under the invoice rules. It is not a general wallet controller and it does not require the client to paste a private key.
 

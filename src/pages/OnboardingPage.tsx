@@ -28,7 +28,7 @@ const labelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  backgroundColor: '#1C2128',
+  backgroundColor: 'var(--tl-surface-3)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '8px',
   color: '#F8FAFC',
@@ -174,13 +174,13 @@ const OnboardingPage: React.FC = () => {
 
   if (!ready || !authenticated) {
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#0D1117' }}>
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--tl-bg-soft)' }}>
         <Header />
         <main className="max-w-md mx-auto px-6 py-16">
           <button
             type="button"
             onClick={() => login()}
-            style={{ width: '100%', backgroundColor: '#2DD4BF', color: '#0D1117', border: 'none', borderRadius: '8px', padding: '12px 0', fontFamily: '"DM Sans", sans-serif', fontWeight: 700 }}
+            style={{ width: '100%', backgroundColor: 'var(--tl-brand)', color: 'var(--tl-bg-soft)', border: 'none', borderRadius: '8px', padding: '12px 0', fontFamily: '"DM Sans", sans-serif', fontWeight: 700 }}
           >
             Login to continue
           </button>
@@ -190,7 +190,7 @@ const OnboardingPage: React.FC = () => {
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#0D1117' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--tl-bg-soft)' }}>
       <Header />
       <main className="max-w-xl mx-auto px-5 py-10 sm:py-14">
         <div style={{ marginBottom: '28px' }}>
@@ -200,7 +200,7 @@ const OnboardingPage: React.FC = () => {
           </h1>
         </div>
 
-        <section style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '24px' }}>
+        <section style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '24px' }}>
           {step === 'profile' && (
             <div className="space-y-5">
               <div>
@@ -216,7 +216,7 @@ const OnboardingPage: React.FC = () => {
                 type="button"
                 disabled={saving}
                 onClick={async () => { if (await saveProfile(false)) setStep('wallet'); }}
-                style={{ width: '100%', backgroundColor: '#2DD4BF', color: '#0D1117', border: 'none', borderRadius: '8px', padding: '12px 0', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
+                style={{ width: '100%', backgroundColor: 'var(--tl-brand)', color: 'var(--tl-bg-soft)', border: 'none', borderRadius: '8px', padding: '12px 0', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}
               >
                 {saving ? 'Saving...' : 'Continue'}
               </button>
@@ -239,9 +239,9 @@ const OnboardingPage: React.FC = () => {
                 type="button"
                 disabled={saving}
                 onClick={continueWithTruvloWallet}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: '10px', padding: '16px', color: '#F8FAFC', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.65 : 1, textAlign: 'left' }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'rgba(var(--tl-brand-rgb), 0.08)', border: '1px solid rgba(var(--tl-brand-rgb), 0.2)', borderRadius: '10px', padding: '16px', color: '#F8FAFC', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.65 : 1, textAlign: 'left' }}
               >
-                <Wallet size={20} style={{ color: '#2DD4BF', flexShrink: 0 }} />
+                <Wallet size={20} style={{ color: 'var(--tl-brand)', flexShrink: 0 }} />
                 <span>
                   <span style={{ display: 'block', fontFamily: '"DM Sans", sans-serif', fontWeight: 700 }}>Use your Truvlo wallet</span>
                   <span style={{ display: 'block', fontFamily: '"JetBrains Mono", monospace', color: '#64748B', fontSize: '12px', marginTop: '3px' }}>
@@ -252,9 +252,9 @@ const OnboardingPage: React.FC = () => {
 
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '18px' }}>
                 <p style={{ ...labelStyle, marginBottom: '10px' }}>Import an existing wallet</p>
-                <div style={{ display: 'flex', gap: '4px', backgroundColor: '#1C2128', borderRadius: '8px', padding: '3px', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--tl-surface-3)', borderRadius: '8px', padding: '3px', marginBottom: '14px' }}>
                   {(['privateKey', 'seedPhrase'] as const).map(mode => (
-                    <button key={mode} type="button" onClick={() => { setImportMode(mode); setImportError(''); }} style={{ flex: 1, border: 'none', borderRadius: '6px', padding: '8px 0', backgroundColor: importMode === mode ? '#161B22' : 'transparent', color: importMode === mode ? '#F8FAFC' : '#64748B', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer' }}>
+                    <button key={mode} type="button" onClick={() => { setImportMode(mode); setImportError(''); }} style={{ flex: 1, border: 'none', borderRadius: '6px', padding: '8px 0', backgroundColor: importMode === mode ? 'var(--tl-surface-2)' : 'transparent', color: importMode === mode ? '#F8FAFC' : '#64748B', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer' }}>
                       {mode === 'privateKey' ? 'Private key' : 'Seed phrase'}
                     </button>
                   ))}
@@ -284,11 +284,11 @@ const OnboardingPage: React.FC = () => {
                 'After the work is done, the client approves release or raises a dispute.',
               ].map(item => (
                 <div key={item} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <Check size={18} style={{ color: '#2DD4BF', marginTop: '2px', flexShrink: 0 }} />
+                  <Check size={18} style={{ color: 'var(--tl-brand)', marginTop: '2px', flexShrink: 0 }} />
                   <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#F8FAFC', fontSize: '14px', lineHeight: 1.6 }}>{item}</p>
                 </div>
               ))}
-              <button type="button" disabled={saving} onClick={finishOnboarding} style={{ width: '100%', backgroundColor: '#2DD4BF', color: '#0D1117', border: 'none', borderRadius: '8px', padding: '12px 0', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              <button type="button" disabled={saving} onClick={finishOnboarding} style={{ width: '100%', backgroundColor: 'var(--tl-brand)', color: 'var(--tl-bg-soft)', border: 'none', borderRadius: '8px', padding: '12px 0', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
                 {saving ? <Loader2 size={16} className="inline animate-spin" /> : 'Open dashboard'}
               </button>
             </div>

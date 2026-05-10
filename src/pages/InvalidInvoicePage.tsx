@@ -8,12 +8,12 @@ const InvalidInvoicePage: React.FC = () => {
   const { invoiceId } = useParams<{ invoiceId: string }>();
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#0D1117' }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--tl-bg-soft)' }}>
       <Header />
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-12">
         <div
           className="max-w-md mx-auto rounded-xl p-10 text-center"
-          style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+          style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)' }}
         >
           <AlertCircle className="h-10 w-10 mx-auto mb-5" style={{ color: '#EF4444' }} />
 
@@ -41,7 +41,7 @@ const InvalidInvoicePage: React.FC = () => {
             )}
           </p>
 
-          <div className="rounded-lg p-4 text-left mb-7" style={{ backgroundColor: '#1C2128' }}>
+          <div className="rounded-lg p-4 text-left mb-7" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
             <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '6px' }}>
               Expected format
             </p>

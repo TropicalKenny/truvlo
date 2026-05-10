@@ -26,18 +26,18 @@ for (const status of ['Created', 'In escrow', 'Requested', 'Approved', 'Withdraw
 
 assert.match(hero, /statusClass/, 'hero lifecycle should use semantic status classes');
 assert.match(hero, /trust-status \$\{item\.statusClass\}/, 'hero should render lifecycle status classes dynamically');
-assert.match(hero, /Escrow invoices clients can trust/, 'hero should keep the accepted headline');
+assert.match(hero, /Escrow infrastructure for agentic commerce/, 'hero should keep the accepted agentic commerce headline');
 assert.match(
   hero,
-  /Real invoice states, client approvals, and managed dispute records in one ledger/,
-  'hero should state the Trust Ledger framing',
+  /Programmable escrow, verifiable outcomes, and agent-assisted workflows in one trust ledger/,
+  'hero should state the agentic commerce Trust Ledger framing',
 );
 assert.doesNotMatch(hero, /View demo|Play/, 'hero should not imply a demo video exists');
 assert.match(hero, /View dashboard/, 'hero secondary CTA should use truthful product wording');
 
 assert.match(features, /ledgerRules/, 'features should be a ledger rules surface, not a generic card grid');
 assert.match(features, /grid-cols-\[1\.15fr_0\.7fr_1\.35fr_1\.35fr\]/, 'features should use table-like ledger columns on desktop');
-assert.match(features, /No hidden arbitration promise/, 'features should avoid claiming decentralized arbitration');
+assert.match(features, /No autonomous arbitration promise/, 'features should avoid claiming autonomous or decentralized arbitration');
 
 assert.match(dashboard, /trust-dashboard-grid/, 'dashboard should keep the Trust Ledger dashboard grid');
 assert.match(dashboard, /trust-ledger-row/, 'dashboard invoices should render as ledger rows');

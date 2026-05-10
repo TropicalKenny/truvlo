@@ -357,7 +357,7 @@ const ApproveRelease: React.FC = () => {
     return (
       <div style={cardStyle}>
         <div className="flex flex-col items-center gap-4 py-8">
-          <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#2DD4BF' }} />
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--tl-brand)' }} />
           <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
             Loading invoice...
           </p>
@@ -595,10 +595,10 @@ const ApproveRelease: React.FC = () => {
       {agentPolicy?.status === 'active' && (
         <div
           className="rounded-lg p-3.5 mb-5"
-          style={{ backgroundColor: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)' }}
+          style={{ backgroundColor: 'rgba(var(--tl-brand-rgb), 0.08)', border: '1px solid rgba(var(--tl-brand-rgb), 0.2)' }}
         >
           <div className="flex items-center gap-2 mb-2">
-            <Bot className="h-4 w-4" style={{ color: '#5EEAD4' }} />
+            <Bot className="h-4 w-4" style={{ color: 'var(--tl-brand-bright)' }} />
             <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: 600 }}>
               Truvlo Agent is acting for the client
             </p>
@@ -616,7 +616,7 @@ const ApproveRelease: React.FC = () => {
       {secondsLeft > 0 && !isDisputed && !alreadyApproved && (
         <div
           className="rounded-lg p-3.5 flex items-center gap-3 mb-5"
-          style={{ backgroundColor: '#1C2128' }}
+          style={{ backgroundColor: 'var(--tl-surface-3)' }}
         >
           <Clock className="h-4 w-4 flex-shrink-0" style={{ color: '#94A3B8' }} />
           <div>
@@ -663,7 +663,7 @@ const ApproveRelease: React.FC = () => {
             <div className="space-y-3">
               <div
                 className="rounded-lg p-3.5 text-center"
-                style={{ backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.08)' }}
+                style={{ backgroundColor: 'var(--tl-surface-3)', border: '1px solid rgba(255,255,255,0.08)' }}
               >
                 <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: 600 }}>
                   Continue as client to approve or dispute
@@ -677,8 +677,8 @@ const ApproveRelease: React.FC = () => {
                 onClick={() => login()}
                 className="w-full rounded-lg py-3.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
                 style={{
-                  backgroundColor: '#2DD4BF',
-                  color: '#0D1117',
+                  backgroundColor: 'var(--tl-brand)',
+                  color: 'var(--tl-bg-soft)',
                   fontFamily: '"DM Sans", sans-serif',
                   border: 'none',
                   cursor: 'pointer',
@@ -705,8 +705,8 @@ const ApproveRelease: React.FC = () => {
             disabled={approving || disputing || !canActAsClient}
             className="w-full flex items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
             style={{
-              backgroundColor: '#2DD4BF',
-              color: '#0D1117',
+              backgroundColor: 'var(--tl-brand)',
+              color: 'var(--tl-bg-soft)',
               fontFamily: '"DM Sans", sans-serif',
               border: 'none',
               cursor: approving || !canActAsClient ? 'default' : 'pointer',

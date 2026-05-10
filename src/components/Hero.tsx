@@ -12,10 +12,10 @@ const lifecycle = [
 ];
 
 const proofPoints = [
-  { label: 'USDC & SOL', detail: 'Stable payments', icon: LockKeyhole },
-  { label: 'On-chain escrow', detail: 'Transparent state', icon: ShieldCheck },
-  { label: 'Client approval', detail: 'Release with confidence', icon: CheckCircle2 },
-  { label: 'Managed disputes', detail: 'Clear review process', icon: Clock3 },
+  { label: 'Programmable escrow', detail: 'USDC and SOL rails', icon: LockKeyhole },
+  { label: 'Verifiable outcomes', detail: 'Proof before release', icon: ShieldCheck },
+  { label: 'Agent-assisted workflows', detail: 'Scoped devnet actions', icon: CheckCircle2 },
+  { label: 'Human-reviewed disputes', detail: 'Evidence stays visible', icon: Clock3 },
 ];
 
 const Hero: React.FC = () => {
@@ -42,14 +42,15 @@ const Hero: React.FC = () => {
                 letterSpacing: '-0.035em',
               }}
             >
-              Escrow invoices clients can trust
+              Escrow infrastructure for agentic commerce.
             </h1>
             <p
               className="mt-6 max-w-xl text-base sm:text-lg leading-8"
               style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}
             >
-              On-chain escrow for USDC and SOL invoices. Client approval, managed disputes,
-              and a clear payment record for global freelancers and teams.
+              Programmable escrow for AI agents, freelancers, and cross-border internet work.
+              Create USDC or SOL invoices, fund on-chain escrow, and settle work through
+              programmable release and human-reviewed dispute workflows.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
@@ -95,7 +96,7 @@ const Hero: React.FC = () => {
                   {index < lifecycle.length - 1 && (
                     <span
                       className="absolute left-[13px] top-7 bottom-0 w-px"
-                      style={{ backgroundColor: 'rgba(20, 200, 186, 0.45)' }}
+                      style={{ backgroundColor: 'rgba(var(--tl-brand-rgb), 0.45)' }}
                     />
                   )}
                   <span
@@ -149,7 +150,7 @@ const Hero: React.FC = () => {
 
         <div className="mt-10 border-t pt-8" style={{ borderColor: 'rgba(148, 163, 184, 0.1)' }}>
           <p className="text-center text-sm" style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>
-            Real invoice states, client approvals, and managed dispute records in one ledger.
+            Programmable escrow, verifiable outcomes, and agent-assisted workflows in one trust ledger.
           </p>
         </div>
       </div>

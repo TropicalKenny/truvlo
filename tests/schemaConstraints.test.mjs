@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const migration = await readFile('supabase/migrations/20260507_dispute_agent_hardening.sql', 'utf8');
+const lockdownMigration = await readFile('supabase/migrations/20260508_lock_down_service_role_tables.sql', 'utf8');
 const disputesApi = await readFile('api/disputes.ts', 'utf8');
 const dashboard = await readFile('src/components/Dashboard.tsx', 'utf8');
 
@@ -13,6 +14,12 @@ assert.match(migration, /dispute_evidence_note_length_check[\s\S]*length\(note\)
 assert.match(migration, /dispute_evidence_not_empty_check/, 'migration should require evidence URL or note');
 assert.match(migration, /create unique index agent_policies_invoice_creator_client_key[\s\S]*on agent_policies \(invoice_id, creator_wallet, client_privy_id\)/, 'migration should document agent policy scope by invoice creator and client');
 assert.match(migration, /agent_policies_agent_wallet_idx/, 'migration should index agent wallet status lookups');
+assert.match(lockdownMigration, /revoke execute on function public\.rls_auto_enable\(\) from public/, 'lockdown migration should revoke public execution of rls_auto_enable');
+assert.match(lockdownMigration, /revoke execute on function public\.rls_auto_enable\(\) from anon/, 'lockdown migration should revoke anon execution of rls_auto_enable');
+assert.match(lockdownMigration, /revoke execute on function public\.rls_auto_enable\(\) from authenticated/, 'lockdown migration should revoke authenticated execution of rls_auto_enable');
+assert.match(lockdownMigration, /direct_client_access_disabled/, 'lockdown migration should make service-role-only RLS tables explicit');
+assert.match(lockdownMigration, /to anon, authenticated using \(false\) with check \(false\)/, 'lockdown policies should deny direct client access');
+assert.match(lockdownMigration, /Truvlo service-role-only table/, 'lockdown migration should document service-role-only table intent');
 
 assert.match(disputesApi, /\.eq\('creator_wallet', normalizeSolanaAddress\(creatorWallet\)\)/, 'API should use the composite dispute lookup');
 assert.match(dashboard, /isInvoicePaidByAgent/, 'UI should not rely on policy existence alone after schema hardening');

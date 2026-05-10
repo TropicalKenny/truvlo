@@ -18,7 +18,7 @@ const labelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  backgroundColor: '#1C2128',
+  backgroundColor: 'var(--tl-surface-3)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '8px',
   color: '#F8FAFC',
@@ -45,8 +45,8 @@ const DarkInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
       {...props}
       style={{
         ...inputStyle,
-        borderColor: focused ? 'rgba(45,212,191,0.3)' : 'rgba(255,255,255,0.08)',
-        boxShadow: focused ? '0 0 0 3px rgba(45,212,191,0.08)' : 'none',
+        borderColor: focused ? 'rgba(var(--tl-brand-rgb), 0.3)' : 'rgba(255,255,255,0.08)',
+        boxShadow: focused ? '0 0 0 3px rgba(var(--tl-brand-rgb), 0.08)' : 'none',
       }}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -173,7 +173,7 @@ const ProfileSettingsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#0D1117' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--tl-bg-soft)' }}>
       <Header />
       <div
         className="max-w-lg mx-auto px-6"
@@ -200,7 +200,7 @@ const ProfileSettingsPage: React.FC = () => {
         {/* Card */}
         <div
           style={{
-            backgroundColor: '#161B22',
+            backgroundColor: 'var(--tl-surface-2)',
             border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: '12px',
             padding: '24px',
@@ -259,12 +259,12 @@ const ProfileSettingsPage: React.FC = () => {
                         cursor: 'pointer',
                         transition: 'all 150ms ease',
                         border: defaultToken === t
-                          ? '1px solid rgba(45,212,191,0.4)'
+                          ? '1px solid rgba(var(--tl-brand-rgb), 0.4)'
                           : '1px solid rgba(255,255,255,0.08)',
                         backgroundColor: defaultToken === t
-                          ? 'rgba(45,212,191,0.1)'
-                          : '#1C2128',
-                        color: defaultToken === t ? '#2DD4BF' : '#94A3B8',
+                          ? 'rgba(var(--tl-brand-rgb), 0.1)'
+                          : 'var(--tl-surface-3)',
+                        color: defaultToken === t ? 'var(--tl-brand)' : '#94A3B8',
                       }}
                     >
                       {t}
@@ -311,8 +311,8 @@ const ProfileSettingsPage: React.FC = () => {
                       padding: '0 14px',
                       borderRadius: '8px',
                       border: '1px solid rgba(255,255,255,0.08)',
-                      backgroundColor: copiedReferralCode ? 'rgba(45,212,191,0.12)' : '#1C2128',
-                      color: copiedReferralCode ? '#2DD4BF' : '#F8FAFC',
+                      backgroundColor: copiedReferralCode ? 'rgba(var(--tl-brand-rgb), 0.12)' : 'var(--tl-surface-3)',
+                      color: copiedReferralCode ? 'var(--tl-brand)' : '#F8FAFC',
                       fontFamily: '"DM Sans", sans-serif',
                       fontSize: '13px',
                       cursor: referralCode ? 'pointer' : 'default',
@@ -350,8 +350,8 @@ const ProfileSettingsPage: React.FC = () => {
               onClick={handleSave}
               disabled={saving}
               style={{
-                backgroundColor: '#2DD4BF',
-                color: '#0D1117',
+                backgroundColor: 'var(--tl-brand)',
+                color: 'var(--tl-bg-soft)',
                 border: 'none',
                 borderRadius: '8px',
                 fontFamily: '"DM Sans", sans-serif',

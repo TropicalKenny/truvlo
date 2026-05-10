@@ -36,7 +36,7 @@ function getErrorMessage(error: unknown): string {
 // Shared input style
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  backgroundColor: '#1C2128',
+  backgroundColor: 'var(--tl-surface-3)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '8px',
   color: '#F8FAFC',
@@ -90,8 +90,8 @@ const DarkInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
       {...props}
       style={{
         ...inputStyle,
-        borderColor: focused ? 'rgba(45,212,191,0.3)' : 'rgba(255,255,255,0.08)',
-        boxShadow: focused ? '0 0 0 3px rgba(45,212,191,0.08)' : 'none',
+        borderColor: focused ? 'rgba(var(--tl-brand-rgb), 0.3)' : 'rgba(255,255,255,0.08)',
+        boxShadow: focused ? '0 0 0 3px rgba(var(--tl-brand-rgb), 0.08)' : 'none',
       }}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -106,8 +106,8 @@ const DarkTextarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) 
       {...props}
       style={{
         ...textareaStyle,
-        borderColor: focused ? 'rgba(45,212,191,0.3)' : 'rgba(255,255,255,0.08)',
-        boxShadow: focused ? '0 0 0 3px rgba(45,212,191,0.08)' : 'none',
+        borderColor: focused ? 'rgba(var(--tl-brand-rgb), 0.3)' : 'rgba(255,255,255,0.08)',
+        boxShadow: focused ? '0 0 0 3px rgba(var(--tl-brand-rgb), 0.08)' : 'none',
       }}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -321,7 +321,7 @@ const CreateInvoiceForm: React.FC = () => {
     return (
       <div
         className="w-full rounded-xl p-12 text-center"
-        style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+        style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)' }}
       >
         <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif' }}>
           Connect to continue — then create your first escrow invoice.
@@ -335,14 +335,14 @@ const CreateInvoiceForm: React.FC = () => {
     return (
       <div
         className="w-full rounded-xl p-8"
-        style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+        style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)' }}
       >
         <div className="text-center mb-7">
           <div
             className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
-            style={{ backgroundColor: 'rgba(45,212,191,0.1)' }}
+            style={{ backgroundColor: 'rgba(var(--tl-brand-rgb), 0.1)' }}
           >
-            <Check className="h-7 w-7" style={{ color: '#2DD4BF' }} />
+            <Check className="h-7 w-7" style={{ color: 'var(--tl-brand)' }} />
           </div>
           <h3
             style={{
@@ -363,7 +363,7 @@ const CreateInvoiceForm: React.FC = () => {
 
         <div className="space-y-4">
           {/* Invoice ID */}
-          <div className="rounded-lg p-4" style={{ backgroundColor: '#1C2128' }}>
+          <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
             <p style={labelStyle}>Invoice ID</p>
             <p
               style={{
@@ -378,7 +378,7 @@ const CreateInvoiceForm: React.FC = () => {
           </div>
 
           {/* Payment link */}
-          <div className="rounded-lg p-4" style={{ backgroundColor: '#1C2128' }}>
+          <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
             <p style={labelStyle}>Payment Link</p>
             <p
               className="break-all mb-3"
@@ -395,8 +395,8 @@ const CreateInvoiceForm: React.FC = () => {
               onClick={handleCopy}
               className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
               style={{
-                backgroundColor: '#2DD4BF',
-                color: '#0D1117',
+                backgroundColor: 'var(--tl-brand)',
+                color: 'var(--tl-bg-soft)',
                 fontFamily: '"DM Sans", sans-serif',
                 border: 'none',
                 cursor: 'pointer',
@@ -448,8 +448,8 @@ const CreateInvoiceForm: React.FC = () => {
             onClick={() => navigate('/dashboard')}
             className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
             style={{
-              backgroundColor: '#2DD4BF',
-              color: '#0D1117',
+              backgroundColor: 'var(--tl-brand)',
+              color: 'var(--tl-bg-soft)',
               fontFamily: '"DM Sans", sans-serif',
               border: 'none',
               cursor: 'pointer',
@@ -466,7 +466,7 @@ const CreateInvoiceForm: React.FC = () => {
   return (
     <div
       className="w-full rounded-xl p-8"
-      style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}
+      style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)' }}
     >
       {/* Header */}
       <div className="mb-7">
@@ -502,9 +502,9 @@ const CreateInvoiceForm: React.FC = () => {
                   onClick={() => setTokenType(t)}
                   className="px-5 py-2 rounded-lg text-sm font-medium transition-all duration-150"
                   style={{
-                    backgroundColor: active ? 'rgba(45,212,191,0.1)' : '#1C2128',
-                    border: active ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.08)',
-                    color: active ? '#2DD4BF' : '#94A3B8',
+                    backgroundColor: active ? 'rgba(var(--tl-brand-rgb), 0.1)' : 'var(--tl-surface-3)',
+                    border: active ? '1px solid rgba(var(--tl-brand-rgb), 0.3)' : '1px solid rgba(255,255,255,0.08)',
+                    color: active ? 'var(--tl-brand)' : '#94A3B8',
                     fontFamily: '"DM Sans", sans-serif',
                     cursor: 'pointer',
                   }}
@@ -585,13 +585,13 @@ const CreateInvoiceForm: React.FC = () => {
         <div
           className="rounded-lg p-4"
           style={{
-            backgroundColor: '#1C2128',
-            border: agentMode ? '1px solid rgba(45,212,191,0.28)' : '1px solid rgba(255,255,255,0.08)',
+            backgroundColor: 'var(--tl-surface-3)',
+            border: agentMode ? '1px solid rgba(var(--tl-brand-rgb), 0.28)' : '1px solid rgba(255,255,255,0.08)',
           }}
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
-              <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: agentMode ? '#2DD4BF' : '#64748B' }} />
+              <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: agentMode ? 'var(--tl-brand)' : '#64748B' }} />
               <div>
                 <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: 600 }}>
                   Agent-assisted escrow
@@ -616,9 +616,9 @@ const CreateInvoiceForm: React.FC = () => {
               }}
               className="px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity duration-150 hover:opacity-90"
               style={{
-                backgroundColor: agentMode ? '#2DD4BF' : 'transparent',
-                border: agentMode ? '1px solid #2DD4BF' : '1px solid rgba(255,255,255,0.12)',
-                color: agentMode ? '#0D1117' : '#94A3B8',
+                backgroundColor: agentMode ? 'var(--tl-brand)' : 'transparent',
+                border: agentMode ? '1px solid var(--tl-brand)' : '1px solid rgba(255,255,255,0.12)',
+                color: agentMode ? 'var(--tl-bg-soft)' : '#94A3B8',
                 fontFamily: '"DM Sans", sans-serif',
                 cursor: 'pointer',
               }}
@@ -678,7 +678,7 @@ const CreateInvoiceForm: React.FC = () => {
         {/* Fee info */}
         <div
           className="rounded-lg p-3.5"
-          style={{ backgroundColor: '#1C2128' }}
+          style={{ backgroundColor: 'var(--tl-surface-3)' }}
         >
           <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
             You receive 100% of the invoice amount. Your client pays a 1% platform fee (flat $2 below $200).
@@ -691,8 +691,8 @@ const CreateInvoiceForm: React.FC = () => {
           disabled={isCreating}
           className="w-full flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-60"
           style={{
-            backgroundColor: '#2DD4BF',
-            color: '#0D1117',
+            backgroundColor: 'var(--tl-brand)',
+            color: 'var(--tl-bg-soft)',
             fontFamily: '"DM Sans", sans-serif',
             border: 'none',
             cursor: isCreating ? 'default' : 'pointer',

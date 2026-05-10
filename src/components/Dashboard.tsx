@@ -1013,7 +1013,7 @@ const Dashboard: React.FC = () => {
   const getAgentPolicyStatus = (invoiceId: string, creatorWallet: string) => {
     const policy = agentPolicyMeta[`${invoiceId}:${creatorWallet}`];
     if (!policy) return null;
-    if (policy.status === 'active') return { label: 'Truvlo Agent enabled', color: '#5EEAD4' };
+    if (policy.status === 'active') return { label: 'Truvlo Agent enabled', color: 'var(--tl-brand-bright)' };
     if (policy.status === 'expired') return { label: 'Agent policy expired', color: '#FCD34D' };
     return { label: 'Agent policy disabled', color: '#94A3B8' };
   };
@@ -1068,13 +1068,13 @@ const Dashboard: React.FC = () => {
       <div
         className="rounded-lg p-3 mt-3"
         style={{
-          backgroundColor: 'rgba(45,212,191,0.07)',
-          border: '1px solid rgba(45,212,191,0.24)',
+          backgroundColor: 'rgba(var(--tl-brand-rgb), 0.07)',
+          border: '1px solid rgba(var(--tl-brand-rgb), 0.24)',
         }}
       >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5EEAD4', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}>
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--tl-brand-bright)', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.08em' }}>
               {decision}
             </p>
             <p className="text-xs mt-1" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
@@ -1177,7 +1177,7 @@ const Dashboard: React.FC = () => {
               </p>
             )}
             {agentPaid && !isDisputed && (
-              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#5EEAD4', fontFamily: '"DM Sans", sans-serif' }}>
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: 'var(--tl-brand-bright)', fontFamily: '"DM Sans", sans-serif' }}>
                 <Bot className="h-3 w-3" />Paid by Truvlo Agent on client's behalf
               </p>
             )}
@@ -1268,9 +1268,9 @@ const Dashboard: React.FC = () => {
                 disabled={submittingProof === inv.invoiceId}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors duration-150 disabled:opacity-50"
                 style={{
-                  backgroundColor: 'rgba(45,212,191,0.1)',
-                  border: '1px solid rgba(45,212,191,0.28)',
-                  color: '#5EEAD4',
+                  backgroundColor: 'rgba(var(--tl-brand-rgb), 0.1)',
+                  border: '1px solid rgba(var(--tl-brand-rgb), 0.28)',
+                  color: 'var(--tl-brand-bright)',
                   fontFamily: '"DM Sans", sans-serif',
                   cursor: submittingProof === inv.invoiceId ? 'default' : 'pointer',
                 }}
@@ -1350,8 +1350,8 @@ const Dashboard: React.FC = () => {
                   disabled={releasing === inv.invoiceId}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
                   style={{
-                    backgroundColor: '#2DD4BF',
-                    color: '#0D1117',
+                    backgroundColor: 'var(--tl-brand)',
+                    color: 'var(--tl-bg-soft)',
                     fontFamily: '"DM Sans", sans-serif',
                     border: 'none',
                     cursor: releasing === inv.invoiceId ? 'default' : 'pointer',
@@ -1443,7 +1443,7 @@ const Dashboard: React.FC = () => {
               </p>
             )}
             {agentPaid && !isDisputed && (
-              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#5EEAD4', fontFamily: '"DM Sans", sans-serif' }}>
+              <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: 'var(--tl-brand-bright)', fontFamily: '"DM Sans", sans-serif' }}>
                 <Bot className="h-3 w-3" />Paid by Truvlo Agent on your behalf
               </p>
             )}
@@ -1530,7 +1530,7 @@ const Dashboard: React.FC = () => {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
                   style={{
                     backgroundColor: '#22C55E',
-                    color: '#0D1117',
+                    color: 'var(--tl-bg-soft)',
                     fontFamily: '"DM Sans", sans-serif',
                     border: 'none',
                     cursor: approving === inv.invoiceId ? 'default' : 'pointer',
@@ -1591,7 +1591,7 @@ const Dashboard: React.FC = () => {
         <Link
           to="/create"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-opacity duration-150 hover:opacity-90"
-          style={{ backgroundColor: '#2DD4BF', color: '#0D1117', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
+          style={{ backgroundColor: 'var(--tl-brand)', color: 'var(--tl-bg-soft)', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}
         >
           <Plus className="h-4 w-4" />Create Invoice
         </Link>
@@ -1695,7 +1695,7 @@ const Dashboard: React.FC = () => {
             className="rounded-xl px-4 py-3 mb-3 flex items-center justify-between gap-3"
             style={{
                   backgroundColor: 'var(--tl-teal-soft)',
-                  border: '1px solid rgba(20,200,186,0.22)',
+                  border: '1px solid rgba(var(--tl-brand-rgb), 0.22)',
             }}
           >
             <div>
@@ -1737,14 +1737,14 @@ const Dashboard: React.FC = () => {
                 {unreadCount > 0 && (
                   <span
                     className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-medium"
-                    style={{ backgroundColor: '#2DD4BF', color: '#0D1117' }}
+                    style={{ backgroundColor: 'var(--tl-brand)', color: 'var(--tl-bg-soft)' }}
                   >
                     {unreadCount}
                   </span>
                 )}
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="end" style={{ backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <PopoverContent className="w-80 p-0" align="end" style={{ backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <NotificationList onViewAll={() => { setNotifOpen(false); setShowHistory(true); }} />
             </PopoverContent>
           </Popover>
@@ -1894,7 +1894,7 @@ const Dashboard: React.FC = () => {
             </TabsList>
             <TabsContent value={sentFilter} className="mt-3">
               {loading && !hasLoadedOnce.current ? (
-                <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
+                <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--tl-brand)' }} /></div>
               ) : filteredSent.length === 0 ? (
                 <EmptyState message="No invoices yet." showCreate />
               ) : (
@@ -1944,7 +1944,7 @@ const Dashboard: React.FC = () => {
             </TabsList>
             <TabsContent value={receivedFilter} className="mt-3">
               {loading && !hasLoadedOnce.current ? (
-                <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
+                <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--tl-brand)' }} /></div>
               ) : filteredReceived.length === 0 ? (
                 <EmptyState message="No paid invoices yet. Once a client pays, it appears here." />
               ) : (
@@ -1989,7 +1989,7 @@ const Dashboard: React.FC = () => {
               onClick={() => setClientSection('action')}
               className="relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
               style={{
-                backgroundColor: clientSection === 'action' ? '#161B22' : 'transparent',
+                backgroundColor: clientSection === 'action' ? 'var(--tl-surface-2)' : 'transparent',
                 border: clientSection === 'action' ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(255,255,255,0.06)',
                 color: clientSection === 'action' ? '#F8FAFC' : '#94A3B8',
                 fontFamily: '"DM Sans", sans-serif',
@@ -2010,7 +2010,7 @@ const Dashboard: React.FC = () => {
               onClick={() => setClientSection('history')}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150"
               style={{
-                backgroundColor: clientSection === 'history' ? '#161B22' : 'transparent',
+                backgroundColor: clientSection === 'history' ? 'var(--tl-surface-2)' : 'transparent',
                 border: clientSection === 'history' ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(255,255,255,0.06)',
                 color: clientSection === 'history' ? '#F8FAFC' : '#94A3B8',
                 fontFamily: '"DM Sans", sans-serif',
@@ -2022,7 +2022,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           {loading && !hasLoadedOnce.current ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: '#2DD4BF' }} /></div>
+            <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--tl-brand)' }} /></div>
           ) : clientSection === 'action' ? (
             awaitingAction.length === 0 ? (
               <EmptyState message="No invoices awaiting your approval right now." />
@@ -2097,7 +2097,7 @@ const Dashboard: React.FC = () => {
               </div>
               <div className="flex justify-between gap-3 text-xs">
                 <span style={{ color: 'var(--tl-dim)', fontFamily: '"DM Sans", sans-serif' }}>Payment source</span>
-                <span style={{ color: activeDashboardAgentPaid ? '#5EEAD4' : 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
+                <span style={{ color: activeDashboardAgentPaid ? 'var(--tl-brand-bright)' : 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
                   {activeDashboardAgentPaid ? 'Truvlo Agent' : 'Client wallet'}
                 </span>
               </div>
@@ -2139,7 +2139,7 @@ const Dashboard: React.FC = () => {
             className="w-full max-w-lg rounded-lg p-5"
             style={{
               backgroundColor: '#111820',
-              border: '1px solid rgba(45,212,191,0.24)',
+              border: '1px solid rgba(var(--tl-brand-rgb), 0.24)',
               boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
             }}
           >
@@ -2235,8 +2235,8 @@ const Dashboard: React.FC = () => {
                 disabled={submittingProof === proofModal.invoiceId}
                 className="flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
                 style={{
-                  backgroundColor: '#2DD4BF',
-                  color: '#0D1117',
+                  backgroundColor: 'var(--tl-brand)',
+                  color: 'var(--tl-bg-soft)',
                   border: 'none',
                   fontFamily: '"DM Sans", sans-serif',
                 }}

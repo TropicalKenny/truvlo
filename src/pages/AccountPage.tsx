@@ -57,7 +57,7 @@ interface TelegramConnectAttempt {
 }
 
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#161B22',
+  backgroundColor: 'var(--tl-surface-2)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '16px',
 };
@@ -220,7 +220,7 @@ const AccountPage: React.FC = () => {
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#0D1117' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--tl-bg-soft)' }}>
       <Header />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-12">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-8">
@@ -237,7 +237,7 @@ const AccountPage: React.FC = () => {
             <Link
               to="/settings"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium"
-              style={{ backgroundColor: 'rgba(45,212,191,0.12)', color: '#2DD4BF', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
+              style={{ backgroundColor: 'rgba(var(--tl-brand-rgb), 0.12)', color: 'var(--tl-brand)', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
             >
               Profile settings
             </Link>
@@ -290,7 +290,7 @@ const AccountPage: React.FC = () => {
                       : 'Not connected'}
                   </p>
                 </div>
-                <MessageCircle className="h-5 w-5" style={{ color: '#2DD4BF' }} />
+                <MessageCircle className="h-5 w-5" style={{ color: 'var(--tl-brand)' }} />
               </div>
               <p className="mt-3" style={{ fontFamily: '"DM Sans", sans-serif', color: '#94A3B8', fontSize: '13px', lineHeight: 1.55 }}>
                 Get fast invoice, proof, and Truvlo Agent review alerts. Approval and disputes still happen inside Truvlo.
@@ -301,8 +301,8 @@ const AccountPage: React.FC = () => {
                 disabled={telegramBusy || telegramLink?.configured === false}
                 className="mt-4 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                 style={{
-                  backgroundColor: telegramLink?.telegram_link ? 'rgba(255,255,255,0.04)' : 'rgba(45,212,191,0.12)',
-                  color: telegramLink?.telegram_link ? '#F8FAFC' : '#2DD4BF',
+                  backgroundColor: telegramLink?.telegram_link ? 'rgba(255,255,255,0.04)' : 'rgba(var(--tl-brand-rgb), 0.12)',
+                  color: telegramLink?.telegram_link ? '#F8FAFC' : 'var(--tl-brand)',
                   border: '1px solid rgba(255,255,255,0.08)',
                   fontFamily: '"DM Sans", sans-serif',
                   cursor: telegramBusy || telegramLink?.configured === false ? 'default' : 'pointer',
@@ -322,7 +322,7 @@ const AccountPage: React.FC = () => {
                   <p style={{ fontFamily: '"DM Sans", sans-serif', color: '#CBD5E1', fontSize: '12px', lineHeight: 1.5 }}>
                     If Telegram sends only /start, copy and send the full line below:
                   </p>
-                  <code className="mt-3 block w-full rounded-md px-3 py-3 text-sm" style={{ backgroundColor: '#0D1117', color: '#F8FAFC', border: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap', overflowX: 'auto' }}>
+                  <code className="mt-3 block w-full rounded-md px-3 py-3 text-sm" style={{ backgroundColor: 'var(--tl-bg-soft)', color: '#F8FAFC', border: '1px solid rgba(255,255,255,0.08)', whiteSpace: 'nowrap', overflowX: 'auto' }}>
                       /start {telegramConnectAttempt.code}
                   </code>
                   <div className="mt-3 grid grid-cols-2 gap-2">
@@ -338,7 +338,7 @@ const AccountPage: React.FC = () => {
                     <a
                       href={telegramConnectAttempt.deep_link}
                       className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm"
-                      style={{ backgroundColor: 'rgba(45,212,191,0.12)', color: '#2DD4BF', border: '1px solid rgba(45,212,191,0.3)', textDecoration: 'none' }}
+                      style={{ backgroundColor: 'rgba(var(--tl-brand-rgb), 0.12)', color: 'var(--tl-brand)', border: '1px solid rgba(var(--tl-brand-rgb), 0.3)', textDecoration: 'none' }}
                     >
                       <ExternalLink className="h-4 w-4" />
                       Open bot
@@ -369,8 +369,8 @@ const AccountPage: React.FC = () => {
                   }}
                   className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
                   style={{
-                    backgroundColor: copiedCode ? 'rgba(45,212,191,0.12)' : 'rgba(255,255,255,0.04)',
-                    color: copiedCode ? '#2DD4BF' : '#F8FAFC',
+                    backgroundColor: copiedCode ? 'rgba(var(--tl-brand-rgb), 0.12)' : 'rgba(255,255,255,0.04)',
+                    color: copiedCode ? 'var(--tl-brand)' : '#F8FAFC',
                     border: '1px solid rgba(255,255,255,0.08)',
                     cursor: profile?.referral_code ? 'pointer' : 'default',
                     fontFamily: '"DM Sans", sans-serif',
@@ -385,7 +385,7 @@ const AccountPage: React.FC = () => {
                 <div>
                   <p style={labelStyle}>Invite link</p>
                   <div className="mt-2 flex gap-2">
-                    <div className="flex-1 rounded-xl px-3 py-3" style={{ backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="flex-1 rounded-xl px-3 py-3" style={{ backgroundColor: 'var(--tl-surface-3)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <p style={{ fontFamily: '"JetBrains Mono", monospace', color: '#F8FAFC', fontSize: '13px', wordBreak: 'break-all' }}>
                         {inviteLink || 'Your link appears after code generation'}
                       </p>
@@ -402,8 +402,8 @@ const AccountPage: React.FC = () => {
                       }}
                       className="px-3 rounded-xl text-sm font-medium"
                       style={{
-                        backgroundColor: copiedInvite ? 'rgba(45,212,191,0.12)' : 'rgba(255,255,255,0.04)',
-                        color: copiedInvite ? '#2DD4BF' : '#F8FAFC',
+                        backgroundColor: copiedInvite ? 'rgba(var(--tl-brand-rgb), 0.12)' : 'rgba(255,255,255,0.04)',
+                        color: copiedInvite ? 'var(--tl-brand)' : '#F8FAFC',
                         border: '1px solid rgba(255,255,255,0.08)',
                         fontFamily: '"DM Sans", sans-serif',
                       }}
@@ -457,14 +457,14 @@ const AccountPage: React.FC = () => {
                         key={wallet.address}
                         className="flex items-center justify-between rounded-xl px-3 py-2.5"
                         style={{
-                          backgroundColor: active ? 'rgba(45,212,191,0.06)' : '#1C2128',
-                          border: `1px solid ${active ? 'rgba(45,212,191,0.18)' : 'rgba(255,255,255,0.06)'}`,
+                          backgroundColor: active ? 'rgba(var(--tl-brand-rgb), 0.06)' : 'var(--tl-surface-3)',
+                          border: `1px solid ${active ? 'rgba(var(--tl-brand-rgb), 0.18)' : 'rgba(255,255,255,0.06)'}`,
                         }}
                       >
                         <p style={{ fontFamily: '"JetBrains Mono", monospace', color: '#F8FAFC', fontSize: '13px' }}>
                           {`${wallet.address.slice(0, 6)}...${wallet.address.slice(-6)}`}
                         </p>
-                        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: active ? '#2DD4BF' : '#64748B' }}>
+                        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: active ? 'var(--tl-brand)' : '#64748B' }}>
                           {active ? 'Active' : 'Linked'}
                         </span>
                       </div>
@@ -493,8 +493,8 @@ const AccountPage: React.FC = () => {
                     }}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
                     style={{
-                      backgroundColor: copiedReputation ? 'rgba(45,212,191,0.12)' : 'rgba(255,255,255,0.04)',
-                      color: copiedReputation ? '#2DD4BF' : '#F8FAFC',
+                      backgroundColor: copiedReputation ? 'rgba(var(--tl-brand-rgb), 0.12)' : 'rgba(255,255,255,0.04)',
+                      color: copiedReputation ? 'var(--tl-brand)' : '#F8FAFC',
                       border: '1px solid rgba(255,255,255,0.08)',
                       fontFamily: '"DM Sans", sans-serif',
                     }}
@@ -515,7 +515,7 @@ const AccountPage: React.FC = () => {
                     <Link
                       to={`/profile/account/${profile.profile_slug}`}
                       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
-                      style={{ backgroundColor: '#2DD4BF', color: '#0D1117', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
+                      style={{ backgroundColor: 'var(--tl-brand)', color: 'var(--tl-bg-soft)', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
                     >
                       Open reputation page
                       <ArrowRight className="h-4 w-4" />
@@ -524,7 +524,7 @@ const AccountPage: React.FC = () => {
                     <Link
                       to="/wallet"
                       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
-                      style={{ backgroundColor: '#2DD4BF', color: '#0D1117', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
+                      style={{ backgroundColor: 'var(--tl-brand)', color: 'var(--tl-bg-soft)', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}
                     >
                       Register a wallet
                       <ArrowRight className="h-4 w-4" />
@@ -542,7 +542,7 @@ const AccountPage: React.FC = () => {
                   <p style={labelStyle}>Rewards</p>
                   <p style={{ ...valueStyle, fontSize: '1.4rem', marginTop: '4px' }}>Payout queue</p>
                 </div>
-                <span className="rounded-full px-3 py-1 text-xs" style={{ backgroundColor: 'rgba(45,212,191,0.12)', color: '#2DD4BF', fontFamily: '"DM Sans", sans-serif' }}>
+                <span className="rounded-full px-3 py-1 text-xs" style={{ backgroundColor: 'rgba(var(--tl-brand-rgb), 0.12)', color: 'var(--tl-brand)', fontFamily: '"DM Sans", sans-serif' }}>
                   Manual cycle
                 </span>
               </div>
@@ -558,7 +558,7 @@ const AccountPage: React.FC = () => {
                     const bucket = summary[tokenType];
                     const total = bucket.matured + bucket.requestable;
                     return (
-                      <div key={tokenType} className="rounded-xl p-3" style={{ backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div key={tokenType} className="rounded-xl p-3" style={{ backgroundColor: 'var(--tl-surface-3)', border: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center justify-between">
                           <p style={labelStyle}>{tokenType}</p>
                           <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC' }}>{formatTokenAmountValue(total, tokenType)}</p>
@@ -570,7 +570,7 @@ const AccountPage: React.FC = () => {
                     );
                   })}
 
-                  <div className="rounded-xl p-3" style={{ backgroundColor: '#1C2128', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="rounded-xl p-3" style={{ backgroundColor: 'var(--tl-surface-3)', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <p style={labelStyle}>Latest request</p>
                     <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, color: '#F8FAFC', marginTop: '4px' }}>
                       {latestPayout ? `${latestPayout.token_type} · ${latestPayout.status}` : 'No request yet'}

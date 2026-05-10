@@ -7,18 +7,20 @@ interface TruvloLogoProps {
 
 const TruvloLogo: React.FC<TruvloLogoProps> = ({ size = 'md', className = '' }) => {
   const sizeClasses = {
-    sm: 'text-lg',
-    md: 'text-xl',
+    sm: 'text-base',
+    md: 'text-lg',
     lg: 'text-4xl',
   };
 
   return (
     <span
-      className={`font-space font-bold tracking-tight leading-none ${sizeClasses[size]} ${className}`}
-      style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700 }}
+      aria-label="Truvlo"
+      className={`font-space font-bold leading-none ${sizeClasses[size]} ${className}`}
+      style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, letterSpacing: 0 }}
     >
-      <span style={{ color: '#2DD4BF' }}>T</span>
-      <span style={{ color: '#F8FAFC' }}>ruvlo</span>
+      <span style={{ color: 'var(--tl-text)' }}>TRU</span>
+      <span style={{ color: 'var(--tl-brand)' }}>V</span>
+      <span style={{ color: 'var(--tl-text)' }}>LO</span>
     </span>
   );
 };

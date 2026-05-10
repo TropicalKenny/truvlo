@@ -36,7 +36,7 @@ const OnboardingGate: React.FC<OnboardingGateProps> = ({ children, onboardingPag
     && !setupPromptDismissed;
 
   if (!ready || checkingProfile) {
-    return <div style={{ minHeight: '100vh', backgroundColor: '#0D1117' }} />;
+    return <div style={{ minHeight: '100vh', backgroundColor: 'var(--tl-bg-soft)' }} />;
   }
 
   if (authenticated && onboardingComplete && onboardingPage) {
@@ -58,7 +58,7 @@ const OnboardingGate: React.FC<OnboardingGateProps> = ({ children, onboardingPag
             width: 'min(560px, calc(100vw - 32px))',
             zIndex: 60,
             borderRadius: 8,
-            border: '1px solid rgba(45, 212, 191, 0.28)',
+            border: '1px solid rgba(var(--tl-brand-rgb), 0.28)',
             background: 'rgba(13, 17, 23, 0.96)',
             boxShadow: '0 18px 44px rgba(0, 0, 0, 0.35)',
             padding: '14px 16px',
@@ -82,8 +82,8 @@ const OnboardingGate: React.FC<OnboardingGateProps> = ({ children, onboardingPag
               state={{ from: location.pathname }}
               style={{
                 borderRadius: 8,
-                background: '#2DD4BF',
-                color: '#0D1117',
+                background: 'var(--tl-brand)',
+                color: 'var(--tl-bg-soft)',
                 fontFamily: '"DM Sans", sans-serif',
                 fontSize: 12,
                 fontWeight: 800,

@@ -43,7 +43,7 @@ const labelStyle: React.CSSProperties = {
 
 const inputBaseStyle: React.CSSProperties = {
   width: '100%',
-  backgroundColor: '#1C2128',
+  backgroundColor: 'var(--tl-surface-3)',
   borderRadius: '8px',
   color: '#F8FAFC',
   fontFamily: '"DM Sans", sans-serif',
@@ -62,8 +62,8 @@ const DarkInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
       {...props}
       style={{
         ...inputBaseStyle,
-        border: `1px solid ${focused ? 'rgba(45,212,191,0.3)' : 'rgba(255,255,255,0.08)'}`,
-        boxShadow: focused ? '0 0 0 3px rgba(45,212,191,0.08)' : 'none',
+        border: `1px solid ${focused ? 'rgba(var(--tl-brand-rgb), 0.3)' : 'rgba(255,255,255,0.08)'}`,
+        boxShadow: focused ? '0 0 0 3px rgba(var(--tl-brand-rgb), 0.08)' : 'none',
       }}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -72,7 +72,7 @@ const DarkInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
 };
 
 const sectionCard: React.CSSProperties = {
-  backgroundColor: '#161B22',
+  backgroundColor: 'var(--tl-surface-2)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '12px',
   padding: '20px 16px',
@@ -225,7 +225,7 @@ const WalletPage: React.FC = () => {
   // Early return after all hooks
   if (!ready || !authenticated) {
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#0D1117', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--tl-bg-soft)', display: 'flex', flexDirection: 'column' }}>
         <Header />
         <main style={{ flex: 1, maxWidth: '560px', margin: '0 auto', width: '100%', padding: '48px 16px' }}>
           <div className="rounded-xl p-8 text-center" style={sectionCard}>
@@ -240,8 +240,8 @@ const WalletPage: React.FC = () => {
               disabled={!ready}
               onClick={() => login()}
               style={{
-                backgroundColor: '#2DD4BF',
-                color: '#0D1117',
+                backgroundColor: 'var(--tl-brand)',
+                color: 'var(--tl-bg-soft)',
                 border: 'none',
                 borderRadius: '8px',
                 fontFamily: '"DM Sans", sans-serif',
@@ -397,7 +397,7 @@ const WalletPage: React.FC = () => {
 
   // ─── render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#0D1117', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--tl-bg-soft)', display: 'flex', flexDirection: 'column' }}>
       <Header />
       <main style={{ flex: 1, maxWidth: '560px', margin: '0 auto', width: '100%', padding: '32px 16px 80px' }}>
 
@@ -439,8 +439,8 @@ const WalletPage: React.FC = () => {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    backgroundColor: isActive ? 'rgba(45,212,191,0.05)' : '#1C2128',
-                    border: `1px solid ${isActive ? 'rgba(45,212,191,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                    backgroundColor: isActive ? 'rgba(var(--tl-brand-rgb), 0.05)' : 'var(--tl-surface-3)',
+                    border: `1px solid ${isActive ? 'rgba(var(--tl-brand-rgb), 0.2)' : 'rgba(255,255,255,0.06)'}`,
                     borderRadius: '8px',
                     padding: '10px 12px',
                     minWidth: 0,
@@ -449,7 +449,7 @@ const WalletPage: React.FC = () => {
                   {/* Status dot */}
                   <div style={{
                     width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0,
-                    backgroundColor: isActive ? '#2DD4BF' : '#334155',
+                    backgroundColor: isActive ? 'var(--tl-brand)' : '#334155',
                   }} />
 
                   {/* Address — truncated, takes remaining space */}
@@ -470,8 +470,8 @@ const WalletPage: React.FC = () => {
                   {isActive && (
                     <span style={{
                       fontFamily: '"DM Sans", sans-serif', fontSize: '11px', fontWeight: 600,
-                      color: '#2DD4BF', backgroundColor: 'rgba(45,212,191,0.1)',
-                      border: '1px solid rgba(45,212,191,0.2)', borderRadius: '4px',
+                      color: 'var(--tl-brand)', backgroundColor: 'rgba(var(--tl-brand-rgb), 0.1)',
+                      border: '1px solid rgba(var(--tl-brand-rgb), 0.2)', borderRadius: '4px',
                       padding: '2px 7px', flexShrink: 0,
                     }}>
                       Active
@@ -543,7 +543,7 @@ const WalletPage: React.FC = () => {
               { label: 'USDC', value: usdcBalance },
             ] as const).map(({ label, value }) => (
               <div key={label} style={{
-                backgroundColor: '#1C2128',
+                backgroundColor: 'var(--tl-surface-3)',
                 borderRadius: '10px',
                 padding: '16px 14px',
                 minWidth: 0,
@@ -581,7 +581,7 @@ const WalletPage: React.FC = () => {
 
           {/* Address row — single line, truncated, never wraps */}
           <div style={{
-            backgroundColor: '#1C2128',
+            backgroundColor: 'var(--tl-surface-3)',
             borderRadius: '8px',
             padding: '11px 12px',
             display: 'flex',
@@ -608,7 +608,7 @@ const WalletPage: React.FC = () => {
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: addressCopied ? '#2DD4BF' : '#64748B',
+                color: addressCopied ? 'var(--tl-brand)' : '#64748B',
                 flexShrink: 0,
                 padding: '4px',
                 display: 'flex',
@@ -649,7 +649,7 @@ const WalletPage: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '12px',
-              backgroundColor: '#1C2128',
+              backgroundColor: 'var(--tl-surface-3)',
               border: '1px solid rgba(255,255,255,0.06)',
               borderRadius: '8px',
               padding: '12px 14px',
@@ -668,8 +668,8 @@ const WalletPage: React.FC = () => {
                 style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
                   fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500,
-                  color: '#2DD4BF', backgroundColor: 'rgba(45,212,191,0.08)',
-                  border: '1px solid rgba(45,212,191,0.2)', borderRadius: '6px',
+                  color: 'var(--tl-brand)', backgroundColor: 'rgba(var(--tl-brand-rgb), 0.08)',
+                  border: '1px solid rgba(var(--tl-brand-rgb), 0.2)', borderRadius: '6px',
                   padding: '6px 12px', cursor: activeWallet ? 'pointer' : 'not-allowed',
                   opacity: activeWallet ? 1 : 0.5, flexShrink: 0,
                   whiteSpace: 'nowrap',
@@ -685,7 +685,7 @@ const WalletPage: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '12px',
-              backgroundColor: '#1C2128',
+              backgroundColor: 'var(--tl-surface-3)',
               border: '1px solid rgba(255,255,255,0.06)',
               borderRadius: '8px',
               padding: '12px 14px',
@@ -732,9 +732,9 @@ const WalletPage: React.FC = () => {
                     style={{
                       padding: '8px 20px',
                       borderRadius: '8px',
-                      border: sendToken === t ? '1px solid rgba(45,212,191,0.3)' : '1px solid rgba(255,255,255,0.08)',
-                      backgroundColor: sendToken === t ? 'rgba(45,212,191,0.1)' : '#1C2128',
-                      color: sendToken === t ? '#2DD4BF' : '#94A3B8',
+                      border: sendToken === t ? '1px solid rgba(var(--tl-brand-rgb), 0.3)' : '1px solid rgba(255,255,255,0.08)',
+                      backgroundColor: sendToken === t ? 'rgba(var(--tl-brand-rgb), 0.1)' : 'var(--tl-surface-3)',
+                      color: sendToken === t ? 'var(--tl-brand)' : '#94A3B8',
                       fontFamily: '"DM Sans", sans-serif',
                       fontSize: '13px',
                       fontWeight: 500,
@@ -778,8 +778,8 @@ const WalletPage: React.FC = () => {
               type="submit"
               disabled={sending || !publicKey}
               style={{
-                backgroundColor: '#2DD4BF',
-                color: '#0D1117',
+                backgroundColor: 'var(--tl-brand)',
+                color: 'var(--tl-bg-soft)',
                 border: 'none',
                 borderRadius: '8px',
                 fontFamily: '"DM Sans", sans-serif',
@@ -813,7 +813,7 @@ const WalletPage: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '4px', backgroundColor: '#1C2128', borderRadius: '8px', padding: '3px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--tl-surface-3)', borderRadius: '8px', padding: '3px', marginBottom: '16px' }}>
             {(['privateKey', 'seedPhrase'] as const).map(t => (
               <button
                 key={t}
@@ -828,7 +828,7 @@ const WalletPage: React.FC = () => {
                   fontFamily: '"DM Sans", sans-serif',
                   fontSize: '13px',
                   fontWeight: 500,
-                  backgroundColor: importTab === t ? '#161B22' : 'transparent',
+                  backgroundColor: importTab === t ? 'var(--tl-surface-2)' : 'transparent',
                   color: importTab === t ? '#F8FAFC' : '#64748B',
                   transition: 'all 150ms ease',
                 }}
@@ -911,7 +911,7 @@ const WalletPage: React.FC = () => {
           zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
         }}>
           <div style={{
-            backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)',
+            backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '380px',
           }}>
             <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: '1.1rem', color: '#F8FAFC', marginBottom: '12px' }}>
@@ -952,7 +952,7 @@ const WalletPage: React.FC = () => {
           zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
         }}>
           <div style={{
-            backgroundColor: '#161B22', border: '1px solid rgba(255,255,255,0.08)',
+            backgroundColor: 'var(--tl-surface-2)', border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '400px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
@@ -973,7 +973,7 @@ const WalletPage: React.FC = () => {
               </button>
               <button
                 onClick={handleCopyCombinedLink}
-                style={{ flex: 1, padding: '10px 0', borderRadius: '8px', border: 'none', backgroundColor: '#2DD4BF', color: '#0D1117', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                style={{ flex: 1, padding: '10px 0', borderRadius: '8px', border: 'none', backgroundColor: 'var(--tl-brand)', color: 'var(--tl-bg-soft)', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
               >
                 <Copy size={14} /> Share anyway
               </button>

@@ -11,7 +11,7 @@ const NotFound = () => {
   return (
     <div
       className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: '#0D1117' }}
+      style={{ backgroundColor: 'var(--tl-bg-soft)' }}
     >
       <div className="text-center">
         <p

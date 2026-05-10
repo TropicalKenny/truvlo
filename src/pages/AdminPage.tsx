@@ -790,8 +790,8 @@ const AdminPage: React.FC = () => {
           padding: 0 10px;
           margin-top: 14px;
           border-radius: 999px;
-          border: 1px solid rgba(45, 212, 191, 0.32);
-          background: rgba(45, 212, 191, 0.08);
+          border: 1px solid rgba(var(--tl-brand-rgb), 0.32);
+          background: rgba(var(--tl-brand-rgb), 0.08);
           color: ${colors.teal};
           font-family: "DM Sans", sans-serif;
           font-size: 12px;
@@ -824,8 +824,8 @@ const AdminPage: React.FC = () => {
           min-height: 32px;
           padding: 0 10px;
           border-radius: 8px;
-          border: 1px solid rgba(45, 212, 191, 0.34);
-          background: rgba(45, 212, 191, 0.08);
+          border: 1px solid rgba(var(--tl-brand-rgb), 0.34);
+          background: rgba(var(--tl-brand-rgb), 0.08);
           color: ${colors.teal};
           font-family: "DM Sans", sans-serif;
           font-size: 12px;
@@ -896,7 +896,7 @@ const AdminPage: React.FC = () => {
         }
 
         .admin-stat-card:hover {
-          border-color: rgba(45, 212, 191, 0.34);
+          border-color: rgba(var(--tl-brand-rgb), 0.34);
           background: #17202A;
         }
 
@@ -905,9 +905,9 @@ const AdminPage: React.FC = () => {
         }
 
         .admin-stat-card-active {
-          border-color: rgba(45, 212, 191, 0.62);
-          background: rgba(45, 212, 191, 0.07);
-          box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.18);
+          border-color: rgba(var(--tl-brand-rgb), 0.62);
+          background: rgba(var(--tl-brand-rgb), 0.07);
+          box-shadow: inset 0 0 0 1px rgba(var(--tl-brand-rgb), 0.18);
         }
 
         .admin-section-tabs {
@@ -950,7 +950,7 @@ const AdminPage: React.FC = () => {
         .admin-section-tab-active {
           color: ${colors.text};
           background: ${colors.surface};
-          border-color: rgba(45, 212, 191, 0.42);
+          border-color: rgba(var(--tl-brand-rgb), 0.42);
         }
 
         .admin-dispute-queue-tabs {
@@ -984,8 +984,8 @@ const AdminPage: React.FC = () => {
 
         .admin-dispute-queue-tab-active {
           color: ${colors.text};
-          background: rgba(45, 212, 191, 0.08);
-          border-color: rgba(45, 212, 191, 0.42);
+          background: rgba(var(--tl-brand-rgb), 0.08);
+          border-color: rgba(var(--tl-brand-rgb), 0.42);
         }
 
         .admin-dispute-queue-count {
@@ -1059,8 +1059,8 @@ const AdminPage: React.FC = () => {
           margin: 0 0 18px;
           padding: 14px;
           border-radius: 8px;
-          border: 1px solid rgba(45, 212, 191, 0.28);
-          background: rgba(45, 212, 191, 0.07);
+          border: 1px solid rgba(var(--tl-brand-rgb), 0.28);
+          background: rgba(var(--tl-brand-rgb), 0.07);
         }
 
         .admin-resolution-links {
@@ -1075,7 +1075,7 @@ const AdminPage: React.FC = () => {
           min-height: 32px;
           padding: 0 10px;
           border-radius: 8px;
-          border: 1px solid rgba(45, 212, 191, 0.32);
+          border: 1px solid rgba(var(--tl-brand-rgb), 0.32);
           color: ${colors.teal};
           font-family: "DM Sans", sans-serif;
           font-size: 12px;
@@ -1195,7 +1195,7 @@ const AdminPage: React.FC = () => {
         }
 
         .admin-table tr:last-child td { border-bottom: 0; }
-        .admin-table tbody tr:hover td { background: rgba(45, 212, 191, 0.035); }
+        .admin-table tbody tr:hover td { background: rgba(var(--tl-brand-rgb), 0.035); }
 
         .admin-mono-cell {
           font-family: "JetBrains Mono", monospace !important;

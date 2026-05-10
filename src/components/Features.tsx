@@ -67,10 +67,10 @@ const Features: React.FC = () => {
               className="text-3xl md:text-4xl"
               style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 800, color: 'var(--tl-text)', letterSpacing: '-0.03em' }}
             >
-              Controls that make the payment record clear
+              Controls for programmable escrow
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-7" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
-              Truvlo is built to show what happened, what is waiting, and who needs to act next.
+              Truvlo shows what was agreed, what was paid, what proof was submitted, and who needs to act next.
             </p>
           </div>
           <button
@@ -131,10 +131,10 @@ const Features: React.FC = () => {
         <div className="mt-8 trust-panel-subtle px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold" style={{ color: 'var(--tl-text)', fontFamily: '"DM Sans", sans-serif' }}>
-              No hidden arbitration promise
+              No autonomous arbitration promise
             </p>
             <p className="mt-1 text-sm" style={{ color: 'var(--tl-muted)', fontFamily: '"DM Sans", sans-serif' }}>
-              Disputes and reward payouts are managed operationally, with on-chain movement when a final action is ready.
+              AI-assisted review can support the workflow, but human-reviewed dispute actions remain the final authority.
             </p>
           </div>
           <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: 'var(--tl-teal)' }} />

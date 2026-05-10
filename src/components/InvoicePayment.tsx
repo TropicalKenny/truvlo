@@ -393,7 +393,7 @@ const InvoicePayment: React.FC = () => {
     return (
       <div style={cardStyle}>
         <div className="p-12 flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin" style={{ color: '#2DD4BF' }} />
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--tl-brand)' }} />
           <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>Loading invoice...</p>
           {sdkInitError && <p style={{ color: '#EF4444', fontFamily: '"DM Sans", sans-serif', fontSize: '12px' }}>{sdkInitError}</p>}
         </div>
@@ -456,14 +456,14 @@ const InvoicePayment: React.FC = () => {
             <p style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px', marginBottom: '24px' }}>
               <span style={{ color: '#F8FAFC', fontWeight: 500 }}>{formatAmount(paidAmount, invoice.tokenType)}</span> deposited into escrow.
               {paidByAgent && (
-                <span style={{ display: 'block', marginTop: '8px', color: '#5EEAD4', fontWeight: 600 }}>
+                <span style={{ display: 'block', marginTop: '8px', color: 'var(--tl-brand-bright)', fontWeight: 600 }}>
                   Paid by Truvlo Agent on your behalf.
                 </span>
               )}
             </p>
           </div>
 
-          <div className="w-full rounded-lg p-4 text-left space-y-2.5" style={{ backgroundColor: '#1C2128' }}>
+          <div className="w-full rounded-lg p-4 text-left space-y-2.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
             {[
               { label: 'Amount paid', value: formatAmount(paidAmount, invoice.tokenType) },
               { label: 'Payment source', value: paidByAgent ? 'Truvlo Agent' : 'Connected wallet', highlight: paidByAgent },
@@ -478,7 +478,7 @@ const InvoicePayment: React.FC = () => {
           </div>
 
           {installments.length > 1 && (
-            <div className="w-full rounded-lg p-4 text-left" style={{ backgroundColor: '#1C2128' }}>
+            <div className="w-full rounded-lg p-4 text-left" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
               <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500, color: '#F8FAFC', marginBottom: '8px' }}>Withdrawal schedule</p>
               {installments.map((inst, i) => (
                 <div key={i} className="flex justify-between py-0.5">
@@ -493,10 +493,10 @@ const InvoicePayment: React.FC = () => {
 
           <div
             className="w-full rounded-lg p-4 flex items-start gap-3 text-left"
-            style={{ backgroundColor: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)' }}
+            style={{ backgroundColor: 'rgba(var(--tl-info-rgb), 0.06)', border: '1px solid rgba(var(--tl-info-rgb), 0.15)' }}
           >
-            <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#38BDF8' }} />
-            <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
+            <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--tl-info)' }} />
+            <p style={{ color: 'var(--tl-info-light)', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
               {paidByAgent
                 ? 'Truvlo Agent paid escrow under your invoice-only policy. Return to Truvlo to review proof, approve release, or submit evidence if there is a dispute.'
                 : 'Funds are secured on-chain. The creator can only withdraw according to the schedule you set. Use this same wallet to approve releases or raise a dispute later.'}
@@ -519,8 +519,8 @@ const InvoicePayment: React.FC = () => {
             onClick={() => navigate('/')}
             className="w-full rounded-lg py-3 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
             style={{
-              backgroundColor: '#2DD4BF',
-              color: '#0D1117',
+              backgroundColor: 'var(--tl-brand)',
+              color: 'var(--tl-bg-soft)',
               fontFamily: '"DM Sans", sans-serif',
               border: 'none',
               cursor: 'pointer',
@@ -611,8 +611,8 @@ const InvoicePayment: React.FC = () => {
           <span
             className="px-2.5 py-0.5 rounded-full text-xs font-medium"
             style={{
-              backgroundColor: invoice.tokenType === TokenType.USDC ? 'rgba(34,197,94,0.1)' : 'rgba(56,189,248,0.1)',
-              color: invoice.tokenType === TokenType.USDC ? '#4ADE80' : '#7DD3FC',
+              backgroundColor: invoice.tokenType === TokenType.USDC ? 'rgba(34,197,94,0.1)' : 'rgba(var(--tl-info-rgb), 0.1)',
+              color: invoice.tokenType === TokenType.USDC ? '#4ADE80' : 'var(--tl-info-light)',
               fontFamily: '"DM Sans", sans-serif',
             }}
           >
@@ -625,7 +625,7 @@ const InvoicePayment: React.FC = () => {
       <div className="p-6 space-y-4">
         {/* Creator */}
         <div>
-          <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+          <div className="rounded-lg p-3.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
             <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px' }}>From</p>
             <p style={{ fontFamily: invoiceMeta?.sender_name ? '"DM Sans", sans-serif' : '"JetBrains Mono", monospace', fontSize: invoiceMeta?.sender_name ? '14px' : '12px', color: '#F8FAFC', fontWeight: invoiceMeta?.sender_name ? 600 : 400 }}>
               {invoiceMeta?.sender_name || (creator ? `${creator.slice(0, 6)}...${creator.slice(-6)}` : 'Unknown')}
@@ -639,7 +639,7 @@ const InvoicePayment: React.FC = () => {
         </div>
 
         {invoiceMeta?.description && (
-          <div className="rounded-lg p-3.5" style={{ backgroundColor: '#1C2128' }}>
+          <div className="rounded-lg p-3.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
             <p style={{ color: '#64748B', fontFamily: '"DM Sans", sans-serif', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '4px' }}>Description</p>
             <p style={{ color: '#F8FAFC', fontFamily: '"DM Sans", sans-serif', fontSize: '13px', lineHeight: 1.5 }}>
               {invoiceMeta.description}
@@ -652,10 +652,10 @@ const InvoicePayment: React.FC = () => {
           <>
             <div
               className="rounded-lg p-3.5 flex items-start gap-3"
-              style={{ backgroundColor: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)' }}
+              style={{ backgroundColor: 'rgba(var(--tl-info-rgb), 0.06)', border: '1px solid rgba(var(--tl-info-rgb), 0.15)' }}
             >
-              <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#38BDF8' }} />
-              <p style={{ color: '#7DD3FC', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
+              <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--tl-info)' }} />
+              <p style={{ color: 'var(--tl-info-light)', fontFamily: '"DM Sans", sans-serif', fontSize: '12px', lineHeight: 1.5 }}>
                 Your payment is held securely in a smart contract. You decide how funds are withdrawn by the creator.
               </p>
             </div>
@@ -663,12 +663,12 @@ const InvoicePayment: React.FC = () => {
             <div
               className="rounded-lg p-4"
               style={{
-                border: '1px solid rgba(45,212,191,0.24)',
-                backgroundColor: agentPolicy?.status === 'active' ? 'rgba(45,212,191,0.08)' : 'rgba(15,23,32,0.66)',
+                border: '1px solid rgba(var(--tl-brand-rgb), 0.24)',
+                backgroundColor: agentPolicy?.status === 'active' ? 'rgba(var(--tl-brand-rgb), 0.08)' : 'rgba(15,23,32,0.66)',
               }}
             >
               <div className="flex items-start gap-3">
-                <Bot className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: '#5EEAD4' }} />
+                <Bot className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--tl-brand-bright)' }} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -709,8 +709,8 @@ const InvoicePayment: React.FC = () => {
                     disabled={agentBusy || breakdown.amount <= 0 || breakdown.priceUnavailable || agentPolicy?.status === 'active'}
                     className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
                     style={{
-                      backgroundColor: agentPolicy?.status === 'active' ? 'rgba(34,197,94,0.18)' : '#2DD4BF',
-                      color: agentPolicy?.status === 'active' ? '#4ADE80' : '#0D1117',
+                      backgroundColor: agentPolicy?.status === 'active' ? 'rgba(34,197,94,0.18)' : 'var(--tl-brand)',
+                      color: agentPolicy?.status === 'active' ? '#4ADE80' : 'var(--tl-bg-soft)',
                       border: 'none',
                       fontFamily: '"DM Sans", sans-serif',
                       cursor: agentBusy || agentPolicy?.status === 'active' ? 'default' : 'pointer',
@@ -773,7 +773,7 @@ const InvoicePayment: React.FC = () => {
                         max="100"
                         style={{
                           width: '100%',
-                          backgroundColor: '#1C2128',
+                          backgroundColor: 'var(--tl-surface-3)',
                           border: '1px solid rgba(255,255,255,0.08)',
                           borderRadius: '6px',
                           color: '#F8FAFC',
@@ -824,7 +824,7 @@ const InvoicePayment: React.FC = () => {
               <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>
                 Payment Amount
               </p>
-              <div className="rounded-lg p-4 space-y-2.5" style={{ backgroundColor: '#1C2128' }}>
+              <div className="rounded-lg p-4 space-y-2.5" style={{ backgroundColor: 'var(--tl-surface-3)' }}>
                 {[
                   { label: 'Amount', value: formatAmount(breakdown.amount, invoice.tokenType) },
                   {
@@ -856,7 +856,7 @@ const InvoicePayment: React.FC = () => {
                 <div className="space-y-3">
                   <div
                     className="flex items-center justify-center gap-2 rounded-lg p-3.5"
-                    style={{ backgroundColor: '#1C2128' }}
+                    style={{ backgroundColor: 'var(--tl-surface-3)' }}
                   >
                     <Wallet className="h-4 w-4" style={{ color: '#64748B' }} />
                     <span style={{ color: '#94A3B8', fontFamily: '"DM Sans", sans-serif', fontSize: '14px' }}>
@@ -868,8 +868,8 @@ const InvoicePayment: React.FC = () => {
                     style={{
                       width: '100%',
                       padding: '12px',
-                      backgroundColor: '#2DD4BF',
-                      color: '#0D1117',
+                      backgroundColor: 'var(--tl-brand)',
+                      color: 'var(--tl-bg-soft)',
                       border: 'none',
                       borderRadius: '8px',
                       fontFamily: '"DM Sans", sans-serif',
@@ -887,8 +887,8 @@ const InvoicePayment: React.FC = () => {
                   disabled={paying || breakdown.amount <= 0 || totalPercentage !== 100 || breakdown.priceUnavailable}
                   className="w-full flex items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-medium transition-opacity duration-150 hover:opacity-90 disabled:opacity-50"
                   style={{
-                    backgroundColor: '#2DD4BF',
-                    color: '#0D1117',
+                    backgroundColor: 'var(--tl-brand)',
+                    color: 'var(--tl-bg-soft)',
                     fontFamily: '"DM Sans", sans-serif',
                     border: 'none',
                     cursor: paying ? 'default' : 'pointer',

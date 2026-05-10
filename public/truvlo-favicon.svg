@@ -1,4 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0D1117"/>
-  <text x="4" y="26" font-family="Space Grotesk, sans-serif" font-weight="700" font-size="28" fill="#2DD4BF">T</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Truvlo">
+  <rect width="64" height="64" rx="12" fill="#080c0f"/>
+  <path d="M14 12h36v7H36v28l-4 7-4-7V19H14z" fill="#f8fafc"/>
+  <path d="M14 25h17l5 8-5 8H18l8-8-4-8h-8z" fill="#cbd5e1"/>
+  <path d="M50 25H33l-5 8 5 8h13l-8-8 4-8h8z" fill="#f8fafc"/>
+  <path d="M36 42v9l-4 7-4-7v-9l4 5z" fill="#2dd4bf"/>
+  <path d="M44 41h8l-4 10h-8z" fill="#2dd4bf"/>
 </svg>

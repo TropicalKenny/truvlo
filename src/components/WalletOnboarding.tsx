@@ -35,7 +35,7 @@ const labelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  backgroundColor: '#1C2128',
+  backgroundColor: 'var(--tl-surface-3)',
   border: '1px solid rgba(255,255,255,0.08)',
   borderRadius: '8px',
   color: '#F8FAFC',
@@ -122,7 +122,7 @@ const WalletOnboarding: React.FC = () => {
     >
       <div
         style={{
-          backgroundColor: '#161B22',
+          backgroundColor: 'var(--tl-surface-2)',
           border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: '16px',
           padding: '32px',
@@ -156,8 +156,8 @@ const WalletOnboarding: React.FC = () => {
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '14px',
-                  backgroundColor: 'rgba(45,212,191,0.06)',
-                  border: '1px solid rgba(45,212,191,0.2)',
+                  backgroundColor: 'rgba(var(--tl-brand-rgb), 0.06)',
+                  border: '1px solid rgba(var(--tl-brand-rgb), 0.2)',
                   borderRadius: '10px',
                   padding: '16px',
                   cursor: loading ? 'not-allowed' : 'pointer',
@@ -166,8 +166,8 @@ const WalletOnboarding: React.FC = () => {
                   transition: 'border-color 150ms ease',
                 }}
               >
-                <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'rgba(45,212,191,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {loading ? <Loader2 size={18} style={{ color: '#2DD4BF', animation: 'spin 1s linear infinite' }} /> : <Wallet size={18} style={{ color: '#2DD4BF' }} />}
+                <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'rgba(var(--tl-brand-rgb), 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {loading ? <Loader2 size={18} style={{ color: 'var(--tl-brand)', animation: 'spin 1s linear infinite' }} /> : <Wallet size={18} style={{ color: 'var(--tl-brand)' }} />}
                 </div>
                 <div>
                   <p style={{ fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '14px', color: '#F8FAFC', marginBottom: '4px' }}>
@@ -186,7 +186,7 @@ const WalletOnboarding: React.FC = () => {
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '14px',
-                  backgroundColor: '#1C2128',
+                  backgroundColor: 'var(--tl-surface-3)',
                   border: '1px solid rgba(255,255,255,0.08)',
                   borderRadius: '10px',
                   padding: '16px',
@@ -229,7 +229,7 @@ const WalletOnboarding: React.FC = () => {
             </div>
 
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#1C2128', borderRadius: '8px', padding: '3px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--tl-surface-3)', borderRadius: '8px', padding: '3px', marginBottom: '20px' }}>
               {(['privateKey', 'seedPhrase'] as const).map(t => (
                 <button
                   key={t}
@@ -243,7 +243,7 @@ const WalletOnboarding: React.FC = () => {
                     fontFamily: '"DM Sans", sans-serif',
                     fontSize: '13px',
                     fontWeight: 500,
-                    backgroundColor: tab === t ? '#161B22' : 'transparent',
+                    backgroundColor: tab === t ? 'var(--tl-surface-2)' : 'transparent',
                     color: tab === t ? '#F8FAFC' : '#64748B',
                     transition: 'all 150ms ease',
                   }}
@@ -294,8 +294,8 @@ const WalletOnboarding: React.FC = () => {
               disabled={loading}
               style={{
                 width: '100%',
-                backgroundColor: '#2DD4BF',
-                color: '#0D1117',
+                backgroundColor: 'var(--tl-brand)',
+                color: 'var(--tl-bg-soft)',
                 border: 'none',
                 borderRadius: '8px',
                 fontFamily: '"DM Sans", sans-serif',

@@ -17,18 +17,20 @@ function cleanOrigin(origin: string | undefined): string | null {
 
 export function resolveAppOrigin({
   envOrigin,
+  deploymentUrl,
   vercelUrl,
   headers,
 }: {
   envOrigin?: string;
+  deploymentUrl?: string;
   vercelUrl?: string;
   headers: Record<string, HeaderValue>;
 }): string | null {
   const configured = cleanOrigin(envOrigin);
   if (configured) return configured;
 
-  const vercel = cleanOrigin(vercelUrl);
-  if (vercel) return vercel;
+  const deployment = cleanOrigin(deploymentUrl || vercelUrl);
+  if (deployment) return deployment;
 
   const proto = firstHeader(headers['x-forwarded-proto']) || 'https';
   const host = firstHeader(headers['x-forwarded-host']) || firstHeader(headers.host);

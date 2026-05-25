@@ -43,12 +43,13 @@ test-ledger/
 contracts/Cargo.lock
 
 # Wallet keys (IMPORTANT: Never commit private keys!)
-*.json
-!package.json
-!package-lock.json
-!tsconfig*.json
-!contracts/interfaces/*.json
-!src/idl/*.json
+id.json
+**/id.json
+*keypair*.json
+*.keypair.json
+*private-key*.json
+*secret*.json
+*mnemonic*.json
 
 # OS
 .DS_Store
@@ -70,16 +71,14 @@ CODEBASE_TEACHER.md
 .agents
 .claude
 .vercel
+.wrangler/
 .env*.local
 .playwright-mcp
 AUDIT_POLICY_PACK.md
-.playwright-mcp
 .worktrees/
 .codex-appdata/
 .codex-logs/
 colosseum-assets
 GOALS.md
-scripts
 social-videos
-tests
-docs
+.codex-temp-index-*

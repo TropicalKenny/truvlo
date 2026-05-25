@@ -1,0 +1,6 @@
+/*
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'sha256-3N6LziT/W4MDtBSqJXlHiFDLtRzf2AB8LdiQOOj+YCg=' https://auth.privy.io; connect-src 'self' https://*.privy.io https://*.privy.systems https://*.rpc.privy.systems https://*.helius-rpc.com https://api.devnet.solana.com https://hermes.pyth.network wss://*.helius-rpc.com https://explorer-api.walletconnect.com wss://*.walletconnect.com https://*.walletconnect.org; frame-src https://auth.privy.io; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; upgrade-insecure-requests
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()

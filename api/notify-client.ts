@@ -7,6 +7,7 @@ import {
   walletBelongsToUser,
 } from './_shared.js';
 import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
+import { escapeAttribute, escapeHtml, safeEmailSubject } from './_html.js';
 import { resolveAppOrigin } from './_notify-client-origin.js';
 import { sendTelegramToPrivyId } from './_telegram.js';
 
@@ -24,7 +25,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const appOrigin = resolveAppOrigin({
     envOrigin: APP_ORIGIN,
-    vercelUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL,
+    deploymentUrl: process.env.CF_PAGES_URL
+      || process.env.CLOUDFLARE_PAGES_URL
+      || process.env.VERCEL_PROJECT_PRODUCTION_URL
+      || process.env.VERCEL_URL,
     headers: req.headers,
   });
   if (!appOrigin) {
@@ -92,9 +96,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (!RESEND_API_KEY) return res.status(200).json({ success: true, email_skipped: true });
 
-  const headline = displayName ? `${displayName} requested withdrawal approval` : 'Withdrawal requested';
+  const safeDisplayName = escapeHtml(displayName);
+  const safeInvoiceId = escapeHtml(invoiceId);
+  const safeAmount = escapeHtml(amount);
+  const safeDescription = escapeHtml(description);
+  const safeShortCreator = escapeHtml(shortCreator);
+  const safeApproveUrl = escapeAttribute(approveUrl);
+  const headline = displayName ? `${safeDisplayName} requested withdrawal approval` : 'Withdrawal requested';
   const body = displayName
-    ? `<strong style="color:#F8FAFC;">${displayName}</strong> has marked the work complete and requested withdrawal.`
+    ? `<strong style="color:#F8FAFC;">${safeDisplayName}</strong> has marked the work complete and requested withdrawal.`
     : 'The creator has marked the work complete and requested withdrawal.';
 
   const html = `
@@ -108,18 +118,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       <p style="margin:0 0 20px;color:#94A3B8;line-height:1.6;">${body}</p>
       <div style="background:#161B22;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:20px;">
         <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;">Invoice</div>
-        <div style="color:#F8FAFC;font-family:monospace;margin-top:4px;">${invoiceId}</div>
+        <div style="color:#F8FAFC;font-family:monospace;margin-top:4px;">${safeInvoiceId}</div>
         <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Amount</div>
-        <div style="color:#F8FAFC;font-size:22px;font-weight:700;margin-top:4px;">${amount}</div>
-        ${description ? `<div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Description</div><div style="color:#F8FAFC;margin-top:4px;">${description}</div>` : ''}
+        <div style="color:#F8FAFC;font-size:22px;font-weight:700;margin-top:4px;">${safeAmount}</div>
+        ${description ? `<div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Description</div><div style="color:#F8FAFC;margin-top:4px;">${safeDescription}</div>` : ''}
         <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Creator</div>
-        <div style="color:#94A3B8;font-family:monospace;margin-top:4px;">${shortCreator}</div>
+        <div style="color:#94A3B8;font-family:monospace;margin-top:4px;">${safeShortCreator}</div>
       </div>
       <div style="background:#1C2128;border-left:3px solid #2DD4BF;border-radius:10px;padding:14px 16px;margin-bottom:20px;">
         <div style="color:#F8FAFC;font-size:13px;font-weight:600;margin-bottom:4px;">You have 7 days to respond</div>
         <div style="color:#94A3B8;font-size:13px;line-height:1.6;">Review the work and approve the withdrawal, or raise a dispute if there is an issue.</div>
       </div>
-      <a href="${approveUrl}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Approve or Dispute</a>
+      <a href="${safeApproveUrl}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Approve or Dispute</a>
     </div>
   </div>
 </body>
@@ -135,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         from: `Truvlo <${FROM_EMAIL}>`,
         to: [clientEmail],
-        subject: `Withdrawal requested - ${displayName || shortCreator} (${invoiceId})`,
+        subject: `Withdrawal requested - ${safeEmailSubject(displayName || shortCreator)} (${safeEmailSubject(invoiceId)})`,
         html,
       }),
     });

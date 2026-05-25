@@ -9,6 +9,7 @@ import {
 import { logAdminAction, requireAdmin } from './_admin.js';
 import { sendDisputeAdminAlerts } from './_admin-alerts.js';
 import { DEFAULT_FROM_EMAIL, readResendError } from './_email.js';
+import { escapeAttribute, escapeHtml, safeEmailSubject } from './_html.js';
 import { resolveAppOrigin } from './_notify-client-origin.js';
 
 type DisputeDecision = 'creator' | 'client' | 'split';
@@ -184,15 +185,6 @@ function buildDisputeRecommendation(input: {
   };
 }
 
-function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 function formatShare(bps: unknown): string {
   const numeric = Number(bps ?? 0);
   if (!Number.isFinite(numeric)) return '0%';
@@ -264,7 +256,7 @@ function buildResolutionEmail(input: {
           <a href="${verdictUrl}" style="color:#2DD4BF;word-break:break-all;">${escapeHtml(input.verdictHashSignature)}</a>
         </div>
       </div>
-      <a href="${escapeHtml(input.dashboardUrl)}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Open Dashboard</a>
+      <a href="${escapeAttribute(input.dashboardUrl)}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Open Dashboard</a>
     </div>
   </div>
 </body>
@@ -297,7 +289,10 @@ async function sendDisputeResolutionEmails(input: {
 
   const appOrigin = resolveAppOrigin({
     envOrigin: APP_ORIGIN,
-    vercelUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL,
+    deploymentUrl: process.env.CF_PAGES_URL
+      || process.env.CLOUDFLARE_PAGES_URL
+      || process.env.VERCEL_PROJECT_PRODUCTION_URL
+      || process.env.VERCEL_URL,
     headers: input.req.headers,
   });
   const dashboardUrl = appOrigin ? `${appOrigin}/dashboard` : 'https://truvlo.io/dashboard';
@@ -323,7 +318,7 @@ async function sendDisputeResolutionEmails(input: {
       body: JSON.stringify({
         from: `Truvlo <${FROM_EMAIL}>`,
         to: [recipient.email],
-        subject: `Dispute resolved - ${invoiceId}`,
+        subject: `Dispute resolved - ${safeEmailSubject(invoiceId)}`,
         html: buildResolutionEmail({
           recipientRole: recipient.role,
           invoiceId,

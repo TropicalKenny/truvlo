@@ -8,6 +8,8 @@ import {
   walletBelongsToUser,
 } from './_shared.js';
 import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
+import { escapeAttribute, escapeHtml, safeEmailSubject } from './_html.js';
+import { resolveAppOrigin } from './_notify-client-origin.js';
 import { sendTelegramToPrivyId } from './_telegram.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -93,24 +95,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const hasCreatorEmail = !!creatorEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(creatorEmail);
 
   const shortWallet = `${normalizedCreatorWallet.slice(0, 8)}...${normalizedCreatorWallet.slice(-8)}`;
-  const dashboardUrl = 'https://truvlo.io/dashboard';
+  const appOrigin = resolveAppOrigin({
+    envOrigin: process.env.APP_ORIGIN,
+    deploymentUrl: process.env.CF_PAGES_URL
+      || process.env.CLOUDFLARE_PAGES_URL
+      || process.env.VERCEL_PROJECT_PRODUCTION_URL
+      || process.env.VERCEL_URL,
+    headers: req.headers,
+  });
+  const dashboardUrl = appOrigin ? `${appOrigin}/dashboard` : 'https://truvlo.io/dashboard';
+  const safeInvoiceId = escapeHtml(invoiceId);
+  const safeSubjectInvoiceId = safeEmailSubject(invoiceId);
+  const safeAmount = escapeHtml(amount || 'the invoice amount');
+  const safeShortWallet = escapeHtml(shortWallet);
+  const safeDashboardUrl = escapeAttribute(dashboardUrl);
   const eventConfig: Record<EventType, { subject: string; headline: string; body: string; accent: string }> = {
     paid: {
-      subject: `Payment received — ${invoiceId}`,
+      subject: `Payment received - ${safeSubjectInvoiceId}`,
       headline: 'Your invoice was paid',
-      body: `Your client has paid <strong style="color:#F8FAFC;">${amount || 'the invoice amount'}</strong> into escrow. Funds are held on-chain until withdrawal.`,
+      body: `Your client has paid <strong style="color:#F8FAFC;">${safeAmount}</strong> into escrow. Funds are held on-chain until withdrawal.`,
       accent: '#2DD4BF',
     },
     release_approved: {
-      subject: `Withdrawal approved - ${invoiceId}`,
+      subject: `Withdrawal approved - ${safeSubjectInvoiceId}`,
       headline: 'Client approved your withdrawal request',
-      body: `Your client has approved withdrawal for <strong style="color:#F8FAFC;">${invoiceId}</strong>. You can now withdraw the funds from your dashboard.`,
+      body: `Your client has approved withdrawal for <strong style="color:#F8FAFC;">${safeInvoiceId}</strong>. You can now withdraw the funds from your dashboard.`,
       accent: '#4ADE80',
     },
     disputed: {
-      subject: `Dispute raised — ${invoiceId}`,
+      subject: `Dispute raised - ${safeSubjectInvoiceId}`,
       headline: 'Client raised a dispute',
-      body: `Your client has raised a dispute on <strong style="color:#F8FAFC;">${invoiceId}</strong>. Funds are frozen while the case is reviewed by the platform.`,
+      body: `Your client has raised a dispute on <strong style="color:#F8FAFC;">${safeInvoiceId}</strong>. Funds are frozen while the case is reviewed by the platform.`,
       accent: '#FCD34D',
     },
   };
@@ -137,14 +152,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   <div style="max-width:560px;margin:0 auto;padding:32px;">
     <div style="background:#0D1117;border-radius:16px;padding:28px;border:1px solid rgba(255,255,255,0.08);">
       <div style="font-size:20px;font-weight:700;color:#F8FAFC;margin-bottom:16px;">Truvlo</div>
-      <h1 style="margin:0 0 8px;font-size:22px;color:#F8FAFC;">${headline}</h1>
+      <h1 style="margin:0 0 8px;font-size:22px;color:#F8FAFC;">${escapeHtml(headline)}</h1>
       <p style="margin:0 0 20px;color:#94A3B8;line-height:1.6;">${body}</p>
       <div style="background:#161B22;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 18px;margin-bottom:20px;">
         <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;">Invoice</div>
-        <div style="color:#F8FAFC;font-family:monospace;margin-top:4px;">${invoiceId}</div>
-        ${amount ? `<div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Amount</div><div style="color:#F8FAFC;font-size:22px;font-weight:700;margin-top:4px;">${amount}</div>` : ''}
+        <div style="color:#F8FAFC;font-family:monospace;margin-top:4px;">${safeInvoiceId}</div>
+        ${amount ? `<div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Amount</div><div style="color:#F8FAFC;font-size:22px;font-weight:700;margin-top:4px;">${safeAmount}</div>` : ''}
         <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.08em;margin-top:14px;">Creator wallet</div>
-        <div style="color:#94A3B8;font-family:monospace;margin-top:4px;">${shortWallet}</div>
+        <div style="color:#94A3B8;font-family:monospace;margin-top:4px;">${safeShortWallet}</div>
       </div>
       <div style="background:#1C2128;border-left:3px solid ${accent};border-radius:10px;padding:14px 16px;margin-bottom:20px;">
         <div style="color:#94A3B8;font-size:13px;line-height:1.6;">
@@ -153,7 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ${event === 'disputed' ? 'Open the dispute case in your dashboard to review evidence.' : ''}
         </div>
       </div>
-      <a href="${dashboardUrl}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Go to Dashboard</a>
+      <a href="${safeDashboardUrl}" style="display:inline-block;background:#2DD4BF;color:#0D1117;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Go to Dashboard</a>
     </div>
   </div>
 </body>

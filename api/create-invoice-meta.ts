@@ -7,6 +7,8 @@ import {
   walletBelongsToUser,
 } from './_shared.js';
 import { DEFAULT_FROM_EMAIL, PUBLIC_EMAIL_DELIVERY_ERROR, readResendError } from './_email.js';
+import { escapeAttribute, escapeHtml, safeEmailSubject } from './_html.js';
+import { resolveAppOrigin } from './_notify-client-origin.js';
 import {
   handleAgentVerifications,
   handleAgentPolicies,
@@ -77,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2. Validate body
   const {
     invoiceId, creatorWallet, clientWallet, clientEmail, senderName,
-    description, tokenType, amount, invoiceUrl,
+    description, tokenType, amount,
     jobType = 'human_service',
     verificationMode = 'manual',
     successCriteria,
@@ -85,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     proofText,
   } = req.body;
 
-  if (!invoiceId || !creatorWallet || !tokenType || amount == null || !invoiceUrl) {
+  if (!invoiceId || !creatorWallet || !tokenType || amount == null) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -94,6 +96,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (clientWallet && !isValidSolanaAddress(clientWallet)) {
     return res.status(400).json({ error: 'Invalid client wallet' });
+  }
+  if (!['USDC', 'SOL'].includes(tokenType)) {
+    return res.status(400).json({ error: 'Invalid token type' });
   }
   if (!['human_service', 'research_task', 'code_task', 'api_task', 'file_delivery'].includes(jobType)) {
     return res.status(400).json({ error: 'Invalid job type' });
@@ -106,6 +111,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!(await walletBelongsToUser(supabase, privyId, normalizedCreatorWallet))) {
     return res.status(403).json({ error: 'Creator wallet does not belong to the authenticated user' });
   }
+
+  const appOrigin = resolveAppOrigin({
+    envOrigin: process.env.APP_ORIGIN,
+    deploymentUrl: process.env.CF_PAGES_URL
+      || process.env.CLOUDFLARE_PAGES_URL
+      || process.env.VERCEL_PROJECT_PRODUCTION_URL
+      || process.env.VERCEL_URL,
+    headers: req.headers,
+  });
+  if (!appOrigin) {
+    console.error('Unable to resolve app origin for create-invoice-meta');
+    return res.status(500).json({ error: 'Server misconfiguration' });
+  }
+  const invoiceUrl = `${appOrigin}/invoice/${encodeURIComponent(invoiceId)}/${encodeURIComponent(normalizedCreatorWallet)}`;
 
   // 3. Look up creator's notification_email from their profile
   let creatorEmail: string | null = null;
@@ -185,7 +204,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body: JSON.stringify({
           from: `Truvlo <${FROM_EMAIL}>`,
           to: [clientEmail],
-          subject: `${senderName ? senderName + ' sent you an invoice' : 'New invoice'} — ${amount} ${tokenType}`,
+          subject: `${safeEmailSubject(senderName) ? safeEmailSubject(senderName) + ' sent you an invoice' : 'New invoice'} - ${safeEmailSubject(amount)} ${safeEmailSubject(tokenType)}`,
           html: emailHtml,
         }),
       });
@@ -225,13 +244,22 @@ function buildInvoiceEmail({
   invoiceUrl: string;
   shortCreator: string;
 }): string {
+  const safeInvoiceId = escapeHtml(invoiceId);
+  const safeSenderName = escapeHtml(senderName);
+  const safeAmount = escapeHtml(amount);
+  const safeTokenType = escapeHtml(tokenType);
+  const safeDescription = escapeHtml(description);
+  const safeShortCreator = escapeHtml(shortCreator);
+  const safeInvoiceUrl = escapeAttribute(invoiceUrl);
+  const safeInvoiceUrlText = escapeHtml(invoiceUrl);
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Invoice ${invoiceId}</title>
+  <title>Invoice ${safeInvoiceId}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 20px;">
@@ -256,7 +284,7 @@ function buildInvoiceEmail({
               </h2>
               <p style="margin:0 0 24px;font-size:15px;color:#94A3B8;line-height:1.6;">
                 ${senderName
-                  ? `<strong style="color:#F8FAFC;">${senderName}</strong> sent you an invoice for payment.`
+                  ? `<strong style="color:#F8FAFC;">${safeSenderName}</strong> sent you an invoice for payment.`
                   : 'Someone sent you an invoice for payment.'
                 } Review the details and pay securely through escrow.
               </p>
@@ -267,29 +295,29 @@ function buildInvoiceEmail({
                 <tr>
                   <td style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);">
                     <span style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Invoice ID</span>
-                    <p style="margin:4px 0 0;font-size:14px;color:#F8FAFC;font-family:monospace;">${invoiceId}</p>
+                    <p style="margin:4px 0 0;font-size:14px;color:#F8FAFC;font-family:monospace;">${safeInvoiceId}</p>
                   </td>
                 </tr>
                 <tr>
                   <td style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);">
                     <span style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Amount due</span>
-                    <p style="margin:4px 0 0;font-size:28px;font-weight:700;color:#F8FAFC;letter-spacing:-0.02em;">${amount} ${tokenType}</p>
+                    <p style="margin:4px 0 0;font-size:28px;font-weight:700;color:#F8FAFC;letter-spacing:-0.02em;">${safeAmount} ${safeTokenType}</p>
                   </td>
                 </tr>
                 ${description ? `
                 <tr>
                   <td style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.06);">
                     <span style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Description</span>
-                    <p style="margin:4px 0 0;font-size:14px;color:#F8FAFC;">${description}</p>
+                    <p style="margin:4px 0 0;font-size:14px;color:#F8FAFC;">${safeDescription}</p>
                   </td>
                 </tr>` : ''}
                 <tr>
                   <td style="padding:16px 20px;">
                     <span style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">From</span>
                     ${senderName
-                      ? `<p style="margin:4px 0 2px;font-size:15px;font-weight:500;color:#F8FAFC;">${senderName}</p>
-                         <p style="margin:0;font-size:12px;color:#64748B;font-family:monospace;">${shortCreator}</p>`
-                      : `<p style="margin:4px 0 0;font-size:13px;color:#94A3B8;font-family:monospace;">${shortCreator}</p>`
+                      ? `<p style="margin:4px 0 2px;font-size:15px;font-weight:500;color:#F8FAFC;">${safeSenderName}</p>
+                         <p style="margin:0;font-size:12px;color:#64748B;font-family:monospace;">${safeShortCreator}</p>`
+                      : `<p style="margin:4px 0 0;font-size:13px;color:#94A3B8;font-family:monospace;">${safeShortCreator}</p>`
                     }
                   </td>
                 </tr>
@@ -313,7 +341,7 @@ function buildInvoiceEmail({
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
                 <tr>
                   <td align="center">
-                    <a href="${invoiceUrl}"
+                    <a href="${safeInvoiceUrl}"
                       style="display:inline-block;background:#2DD4BF;color:#0D1117;font-size:15px;font-weight:500;
                              text-decoration:none;padding:14px 32px;border-radius:8px;letter-spacing:-0.01em;">
                       Review &amp; Pay Invoice
@@ -324,7 +352,7 @@ function buildInvoiceEmail({
 
               <p style="margin:0;font-size:12px;color:#64748B;text-align:center;line-height:1.6;">
                 Or copy this link:<br>
-                <a href="${invoiceUrl}" style="color:#2DD4BF;word-break:break-all;">${invoiceUrl}</a>
+                <a href="${safeInvoiceUrl}" style="color:#2DD4BF;word-break:break-all;">${safeInvoiceUrlText}</a>
               </p>
             </td>
           </tr>

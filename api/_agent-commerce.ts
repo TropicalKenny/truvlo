@@ -19,10 +19,10 @@ import { EscrowPaySDK, TokenType } from '../src/lib/escrowPaySDK.js';
 import { resolveAppOrigin } from './_notify-client-origin.js';
 import { sendTelegramToPrivyId } from './_telegram.js';
 
-const VALID_VERIFICATION_STATUSES = ['pending', 'passed', 'failed', 'needs_human_review'] as const;
-const VALID_CONFIDENCE_LEVELS = ['low', 'medium', 'high'] as const;
-const VALID_RECOMMENDED_ACTIONS = ['approve', 'dispute', 'manual_review'] as const;
-const VALID_VERIFIER_TYPES = ['rule', 'ai', 'manual'] as const;
+export const VALID_VERIFICATION_STATUSES = ['pending', 'passed', 'failed', 'needs_human_review'] as const;
+export const VALID_CONFIDENCE_LEVELS = ['low', 'medium', 'high'] as const;
+export const VALID_RECOMMENDED_ACTIONS = ['approve', 'dispute', 'manual_review'] as const;
+export const VALID_VERIFIER_TYPES = ['rule', 'ai', 'manual'] as const;
 const X402_NETWORK = 'solana:devnet';
 
 type VerificationStatus = typeof VALID_VERIFICATION_STATUSES[number];
@@ -49,10 +49,6 @@ type AgentPolicyRow = {
   created_at?: string;
   updated_at?: string;
 };
-
-function isOneOf<T extends readonly string[]>(allowed: T, value: unknown): value is T[number] {
-  return typeof value === 'string' && allowed.includes(value);
-}
 
 function asText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -150,16 +146,11 @@ export async function handleAgentVerifications(req: VercelRequest, res: VercelRe
   const {
     invoiceId, creatorWallet, clientWallet, submittedByWallet,
     successCriteria, deliverableUrl, proofText,
-    verificationStatus, confidence, summary, risks, recommendedAction, verifierType,
   } = req.body as Record<string, string | null | undefined>;
 
   if (!invoiceId || !creatorWallet || !submittedByWallet) return res.status(400).json({ error: 'Missing required fields' });
   if (!isValidSolanaAddress(creatorWallet) || !isValidSolanaAddress(submittedByWallet)) return res.status(400).json({ error: 'Invalid wallet address' });
   if (clientWallet && !isValidSolanaAddress(clientWallet)) return res.status(400).json({ error: 'Invalid client wallet' });
-  if (verificationStatus && !isOneOf(VALID_VERIFICATION_STATUSES, verificationStatus)) return res.status(400).json({ error: 'Invalid verification status' });
-  if (confidence && !isOneOf(VALID_CONFIDENCE_LEVELS, confidence)) return res.status(400).json({ error: 'Invalid confidence' });
-  if (recommendedAction && !isOneOf(VALID_RECOMMENDED_ACTIONS, recommendedAction)) return res.status(400).json({ error: 'Invalid recommended action' });
-  if (verifierType && !isOneOf(VALID_VERIFIER_TYPES, verifierType)) return res.status(400).json({ error: 'Invalid verifier type' });
 
   const normalizedCreatorWallet = normalizeSolanaAddress(creatorWallet);
   const normalizedSubmitter = normalizeSolanaAddress(submittedByWallet);
@@ -191,12 +182,12 @@ export async function handleAgentVerifications(req: VercelRequest, res: VercelRe
       invoice_id: invoiceId,
       creator_wallet: normalizedCreatorWallet,
       client_wallet: clientWallet ? normalizeSolanaAddress(clientWallet) : invoiceMeta.client_wallet ?? null,
-      verification_status: verificationStatus ?? ruleResult.verificationStatus,
-      confidence: confidence ?? ruleResult.confidence,
-      summary: asText(summary) ?? ruleResult.summary,
-      risks: asText(risks) ?? ruleResult.risks,
-      recommended_action: recommendedAction ?? ruleResult.recommendedAction,
-      verifier_type: verifierType ?? ruleResult.verifierType,
+      verification_status: ruleResult.verificationStatus,
+      confidence: ruleResult.confidence,
+      summary: ruleResult.summary,
+      risks: ruleResult.risks,
+      recommended_action: ruleResult.recommendedAction,
+      verifier_type: ruleResult.verifierType,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'invoice_id,creator_wallet' })
     .select('invoice_id, creator_wallet, client_wallet, verification_status, confidence, summary, risks, recommended_action, verifier_type, updated_at')
@@ -218,7 +209,10 @@ export async function handleAgentVerifications(req: VercelRequest, res: VercelRe
     .maybeSingle();
   const appOrigin = resolveAppOrigin({
     envOrigin: process.env.APP_ORIGIN,
-    vercelUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL,
+    deploymentUrl: process.env.CF_PAGES_URL
+      || process.env.CLOUDFLARE_PAGES_URL
+      || process.env.VERCEL_PROJECT_PRODUCTION_URL
+      || process.env.VERCEL_URL,
     headers: req.headers,
   });
   const reviewUrl = appOrigin

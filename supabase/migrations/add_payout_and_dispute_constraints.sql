@@ -7,8 +7,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS payout_requests_one_pending_per_user
   ON payout_requests (privy_id, token_type)
   WHERE (status = 'pending');
 
--- Also required for disputes.ts fix #3 (insert instead of upsert on dispute_cases):
--- Confirm this unique constraint already exists; if not, add it.
--- The upsert was relying on it implicitly — make it explicit.
-ALTER TABLE dispute_cases
-  ADD CONSTRAINT IF NOT EXISTS dispute_cases_invoice_id_key UNIQUE (invoice_id);
+-- Disputes are scoped by invoice and creator wallet. Do not restore the older
+-- invoice-only unique key, because the agent-commerce hardening migration
+-- intentionally replaced it with this composite uniqueness rule.
+CREATE UNIQUE INDEX IF NOT EXISTS dispute_cases_invoice_creator_key
+  ON dispute_cases (invoice_id, creator_wallet);

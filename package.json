@@ -11,6 +11,7 @@
     "test": "node tests/run-all.mjs",
     "verify:dispute-qa": "node scripts/verify-dispute-qa.mjs",
     "verify:goal": "node scripts/verify-goal-readiness.mjs",
+    "verify:demo-health": "node scripts/verify-demo-health.mjs",
     "preview": "vite preview",
     "watch": "vite build --watch"
   },

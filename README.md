@@ -101,10 +101,13 @@ Run:
 
 ```bash
 npm test
+TRUVLO_HEALTH_BASE_URL=https://your-deployment.example npm run verify:demo-health
 npm run build
 npm run lint
 npm audit --audit-level=high
 ```
+
+`verify:demo-health` checks the root, create, dashboard, SOL price, agent policy, and profile routes. Expected unauthenticated API responses are treated as healthy baselines; Solana devnet RPC rate limits and Resend test-sender mode are reported as warnings instead of secret-printing failures.
 
 ## Operating Notes
 

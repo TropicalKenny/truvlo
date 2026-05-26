@@ -41,6 +41,7 @@ const AGENT_REWRITES: Record<string, string> = {
 
 const ROUTES: Record<string, () => Promise<HandlerModule>> = {
   'admin-overview': () => import('../../api/admin-overview.js'),
+  'agent-credentials': () => import('../../api/agent-credentials.js'),
   'combined-profile': () => import('../../api/combined-profile.js'),
   'create-invoice-meta': () => import('../../api/create-invoice-meta.js'),
   'disputes': () => import('../../api/disputes.js'),
@@ -210,4 +211,3 @@ async function getBody(request: Request): Promise<unknown> {
 
   return rawBody;
 }
-

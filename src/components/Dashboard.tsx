@@ -226,7 +226,7 @@ const Dashboard: React.FC = () => {
 
   const isFetching = useRef(false);
 
-  const fetchAll = useCallback(async (showRefreshSpinner = false) => {
+  const fetchAll = useCallback(async (showRefreshSpinner = false, forceNetwork = showRefreshSpinner) => {
     if (isFetching.current) return;
     if (showRefreshSpinner) setRefreshing(true);
     if (!sdk || !connected || !sdk.isInitialized()) {
@@ -239,13 +239,33 @@ const Dashboard: React.FC = () => {
     setLoading(!hasLoadedOnce.current);
     setFetchError(null);
     try {
+      if (forceNetwork) sdk.clearInvoiceAccountsCache();
       const fetchTimeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('timeout')), 10_000)
       );
       const [creatorResult, clientResult] = await Promise.race([
-        Promise.all([sdk.fetchInvoicesByCreator(), sdk.fetchInvoicesByClient()]),
+        Promise.all([
+          sdk.fetchInvoicesByCreator(undefined, { force: forceNetwork }),
+          sdk.fetchInvoicesByClient(undefined, { force: forceNetwork }),
+        ]),
         fetchTimeout,
       ]) as [Awaited<ReturnType<typeof sdk.fetchInvoicesByCreator>>, Awaited<ReturnType<typeof sdk.fetchInvoicesByClient>>];
+
+      const failedResult = [creatorResult, clientResult].find(result => !result.success);
+      if (failedResult) {
+        const rawError = failedResult.error ?? '';
+        const isRateLimited = /429|too many requests|rate limit|rate-limit/i.test(rawError);
+        setFetchError(isRateLimited
+          ? 'Solana devnet RPC is rate limited. Showing the last loaded invoices; retry in a moment.'
+          : 'Failed to load invoices. Try refreshing.'
+        );
+        if (!hasLoadedOnce.current) {
+          setSentInvoices([]);
+          setReceivedInvoices([]);
+          setClientInvoices([]);
+        }
+        return;
+      }
 
       const sort = (arr: InvoiceWithKey[]) =>
         arr.sort((a, b) => {
@@ -595,7 +615,7 @@ const Dashboard: React.FC = () => {
           toast({ title: 'Withdrawal requested', description: 'Email notification failed. Copy the invoice link if needed.', variant: 'destructive' });
         }
         addNotification({ type: 'info', title: 'Withdrawal Requested', message: `7-day window started for ${inv.invoiceId}.` });
-        lastFetchedAt.current = 0; await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll(false, true);
       } else {
         toast({ title: 'Request failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -657,7 +677,7 @@ const Dashboard: React.FC = () => {
         }
         addNotification({ type: 'success', title: 'Funds Withdrawn', message: `Withdrew ${formatAmount(releaseModal.releaseableAmount, releaseModal.tokenType)} from ${releaseModal.invoiceId}` });
         lastFetchedAt.current = 0;
-        await fetchAll();
+        await fetchAll(false, true);
       } else {
         toast({ title: 'Withdrawal failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -798,7 +818,7 @@ const Dashboard: React.FC = () => {
       });
       setProofModal(null);
       lastFetchedAt.current = 0;
-      await fetchAll();
+      await fetchAll(false, true);
     } catch (error) {
       toast({
         title: 'Proof submission failed',
@@ -839,7 +859,7 @@ const Dashboard: React.FC = () => {
         } catch { /* non-blocking */ }
         toast({ title: 'Withdrawal approved' });
         addNotification({ type: 'success', title: 'Withdrawal Approved', message: `You approved withdrawal for ${inv.invoiceId}.` });
-        lastFetchedAt.current = 0; await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll(false, true);
       } else {
         toast({ title: 'Approval failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
       }
@@ -885,7 +905,7 @@ const Dashboard: React.FC = () => {
         } catch { /* non-blocking */ }
         toast({ title: 'Dispute raised', description: 'Funds frozen. Truvlo will review the case.' });
         addNotification({ type: 'warning', title: 'Dispute Raised', message: `Dispute opened for ${inv.invoiceId}.` });
-        lastFetchedAt.current = 0; await fetchAll();
+        lastFetchedAt.current = 0; await fetchAll(false, true);
         navigate(`/disputes/${encodeURIComponent(inv.invoiceId)}/${encodeURIComponent(inv.creator.toBase58())}/evidence`);
       } else {
         toast({ title: 'Dispute failed', description: typeof result.error === 'string' ? result.error : 'Failed', variant: 'destructive' });
@@ -1793,7 +1813,7 @@ const Dashboard: React.FC = () => {
             {fetchError}
           </p>
           <button
-            onClick={() => { lastFetchedAt.current = 0; void fetchAll(true); }}
+            onClick={() => { lastFetchedAt.current = 0; void fetchAll(true, true); }}
             style={{
               fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: 600,
               color: '#F59E0B', background: 'none', border: '1px solid rgba(245,158,11,0.3)',

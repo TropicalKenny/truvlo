@@ -23,6 +23,8 @@ const PROGRAM_ID = new PublicKey(IDL.address || "12mH9wkUUvyQmhqD9A6gJzLGxEUCTZC
 const INVOICE_DISCRIMINATOR = Buffer.from([51, 194, 250, 114, 6, 104, 18, 164]);
 
 const MIN_INVOICE_BYTES = 100;
+const INVOICE_ACCOUNTS_CACHE_TTL_MS = 20_000;
+const INVOICE_ACCOUNTS_RATE_LIMIT_BACKOFF_MS = 20_000;
 
 export const USDC_MINT_DEVNET = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 export const USDC_MINT_MAINNET = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
@@ -87,6 +89,8 @@ export interface SDKResult<T> {
   error?: string;
 }
 
+type InvoiceAccountEntry = { publicKey: PublicKey; account: InvoiceData };
+
 export type SponsorFn = (tx: Uint8Array) => Promise<string>;
 
 function safeStringify(obj: any): string {
@@ -131,6 +135,9 @@ export class EscrowPaySDK {
   private initialized: boolean = false;
   private initError: string | null = null;
   private readonly sponsorFn: SponsorFn | null;
+  private invoiceAccountsCache: { fetchedAt: number; data: InvoiceAccountEntry[] } | null = null;
+  private invoiceAccountsPromise: Promise<SDKResult<InvoiceAccountEntry[]>> | null = null;
+  private invoiceAccountsRateLimitedUntil = 0;
 
   constructor(provider: Provider, useMainnet: boolean = false, sponsorFn: SponsorFn | null = null) {
     this.provider = provider;
@@ -154,6 +161,11 @@ export class EscrowPaySDK {
 
   getInitError(): string | null {
     return this.initError;
+  }
+
+  clearInvoiceAccountsCache(): void {
+    this.invoiceAccountsCache = null;
+    this.invoiceAccountsRateLimitedUntil = 0;
   }
 
   private decodeInvoiceAccount(data: Buffer): any {
@@ -266,9 +278,92 @@ export class EscrowPaySDK {
     }
   }
 
+  private isRateLimitError(error: any): boolean {
+    const status = Number(error?.status || error?.code || error?.cause?.status || error?.response?.status);
+    if (status === 429) return true;
+    const text = safeStringify(error).toLowerCase();
+    return text.includes('429') ||
+      text.includes('too many requests') ||
+      text.includes('rate limit') ||
+      text.includes('rate-limit');
+  }
+
+  private async fetchDecodedInvoiceAccounts(options: { force?: boolean } = {}): Promise<SDKResult<InvoiceAccountEntry[]>> {
+    if (!this.initialized || !this.program) {
+      return { success: false, error: this.initError || 'SDK not initialized' };
+    }
+
+    const now = Date.now();
+    const force = options.force === true;
+    if (!force && this.invoiceAccountsCache && now - this.invoiceAccountsCache.fetchedAt < INVOICE_ACCOUNTS_CACHE_TTL_MS) {
+      return { success: true, data: this.invoiceAccountsCache.data };
+    }
+
+    if (!force && this.invoiceAccountsRateLimitedUntil > now) {
+      if (this.invoiceAccountsCache) return { success: true, data: this.invoiceAccountsCache.data };
+      return {
+        success: false,
+        error: 'Solana devnet RPC is rate limited. Wait a moment, then refresh.',
+      };
+    }
+
+    if (this.invoiceAccountsPromise) return this.invoiceAccountsPromise;
+
+    const request = (async (): Promise<SDKResult<InvoiceAccountEntry[]>> => {
+      try {
+        const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
+          filters: [
+            { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
+          ],
+        });
+
+        const mapped = accounts
+          .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
+          .map((acc) => {
+            try {
+              const decoded = this.decodeInvoiceAccount(acc.account.data);
+              const parsed = this.parseInvoiceData(decoded);
+              if (parsed) return { publicKey: acc.pubkey, account: parsed };
+            } catch (e) {
+              console.error('Failed to decode account:', e);
+            }
+            return null;
+          })
+          .filter((inv): inv is InvoiceAccountEntry => inv !== null);
+
+        this.invoiceAccountsCache = { fetchedAt: Date.now(), data: mapped };
+        this.invoiceAccountsRateLimitedUntil = 0;
+        return { success: true, data: mapped };
+      } catch (error: any) {
+        if (this.isRateLimitError(error)) {
+          this.invoiceAccountsRateLimitedUntil = Date.now() + INVOICE_ACCOUNTS_RATE_LIMIT_BACKOFF_MS;
+          if (this.invoiceAccountsCache) {
+            return { success: true, data: this.invoiceAccountsCache.data, error: this.parseError(error) };
+          }
+        }
+        this.logError('fetchDecodedInvoiceAccounts', error);
+        return { success: false, error: this.parseError(error) };
+      }
+    })();
+
+    this.invoiceAccountsPromise = request;
+    try {
+      return await request;
+    } finally {
+      if (this.invoiceAccountsPromise === request) this.invoiceAccountsPromise = null;
+    }
+  }
+
   private parseError(error: any): string {
     if (!error) return 'Unknown error occurred.';
-    if (typeof error === 'string') return error;
+    if (typeof error === 'string') {
+      return this.isRateLimitError(error)
+        ? 'Solana devnet RPC is rate limited. Wait a moment, then refresh.'
+        : error;
+    }
+    if (this.isRateLimitError(error)) {
+      return 'Solana devnet RPC is rate limited. Wait a moment, then refresh.';
+    }
     let message = '';
     try {
       message = error.message || error.msg || '';
@@ -627,36 +722,15 @@ export class EscrowPaySDK {
     }
   }
 
-  async fetchInvoicesByCreator(creator?: PublicKey): Promise<SDKResult<Array<{ publicKey: PublicKey; account: InvoiceData }>>> {
+  async fetchInvoicesByCreator(creator?: PublicKey, options: { force?: boolean } = {}): Promise<SDKResult<Array<{ publicKey: PublicKey; account: InvoiceData }>>> {
     const targetCreator = creator || this.provider.publicKey;
     if (!targetCreator) return { success: false, error: "No creator provided" };
     try {
-      if (!this.initialized || !this.program) {
-        return { success: false, error: this.initError || "SDK not initialized" };
-      }
-      if (!(await this.testConnection())) {
-        return { success: false, error: "Network unavailable" };
-      }
-      const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
-        filters: [
-          { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
-        ],
-      });
-      if (!accounts?.length) return { success: true, data: [] };
+      const accounts = await this.fetchDecodedInvoiceAccounts(options);
+      if (!accounts.success) return { success: false, error: accounts.error };
+      if (!accounts.data?.length) return { success: true, data: [] };
       const targetCreatorStr = targetCreator.toBase58();
-      const mapped = accounts
-        .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
-        .map((acc) => {
-          try {
-            const decoded = this.decodeInvoiceAccount(acc.account.data);
-            const parsed = this.parseInvoiceData(decoded);
-            if (parsed && parsed.creator?.toString() === targetCreatorStr)
-              return { publicKey: acc.pubkey, account: parsed };
-          } catch (e) {
-            console.error('Failed to decode account:', e);
-          }
-          return null;
-        }).filter((inv): inv is { publicKey: PublicKey; account: InvoiceData } => inv !== null);
+      const mapped = accounts.data.filter(inv => inv.account.creator?.toString() === targetCreatorStr);
       return { success: true, data: mapped };
     } catch (error: any) {
       this.logError('fetchInvoicesByCreator', error);
@@ -664,31 +738,15 @@ export class EscrowPaySDK {
     }
   }
 
-  async fetchInvoicesByClient(client?: PublicKey): Promise<SDKResult<Array<{ publicKey: PublicKey; account: InvoiceData }>>> {
+  async fetchInvoicesByClient(client?: PublicKey, options: { force?: boolean } = {}): Promise<SDKResult<Array<{ publicKey: PublicKey; account: InvoiceData }>>> {
     const targetClient = client || this.provider.publicKey;
     if (!targetClient) return { success: false, error: 'No client provided' };
-    if (!this.initialized || !this.program) return { success: false, error: this.initError || 'SDK not initialized' };
     try {
-      if (!(await this.testConnection())) return { success: false, error: 'Network unavailable' };
+      const accounts = await this.fetchDecodedInvoiceAccounts(options);
+      if (!accounts.success) return { success: false, error: accounts.error };
+      if (!accounts.data?.length) return { success: true, data: [] };
       const targetStr = targetClient.toString();
-      const accounts = await this.provider.connection.getProgramAccounts(this.programId, {
-        filters: [
-          { memcmp: { offset: 0, bytes: utils.bytes.bs58.encode(INVOICE_DISCRIMINATOR) } },
-        ],
-      });
-      if (!accounts?.length) return { success: true, data: [] };
-      const mapped = accounts
-        .filter(acc => acc.account.data.length >= MIN_INVOICE_BYTES)
-        .map((acc) => {
-          try {
-            const decoded = this.decodeInvoiceAccount(acc.account.data);
-            const parsed = this.parseInvoiceData(decoded);
-            if (!parsed) return null;
-            if (!parsed.client) return null;
-            if (parsed.client.toString() !== targetStr) return null;
-            return { publicKey: acc.pubkey, account: parsed };
-          } catch { return null; }
-        }).filter(Boolean) as Array<{ publicKey: PublicKey; account: InvoiceData }>;
+      const mapped = accounts.data.filter(inv => inv.account.client?.toString() === targetStr);
       return { success: true, data: mapped };
     } catch (error: any) {
       this.logError('fetchInvoicesByClient', error);

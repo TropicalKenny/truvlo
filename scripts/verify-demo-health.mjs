@@ -38,6 +38,12 @@ export const DEMO_ROUTE_CHECKS = [
     warningStatuses: [],
   },
   {
+    label: 'agent credential API unauthenticated baseline',
+    path: '/api/agent-credentials',
+    okStatuses: [401],
+    warningStatuses: [],
+  },
+  {
     label: 'profile API unauthenticated baseline',
     path: '/api/profile',
     okStatuses: [401],

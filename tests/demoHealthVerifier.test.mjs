@@ -23,6 +23,12 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
+  classifyRouteStatus({ path: '/api/agent-credentials', okStatuses: [401], warningStatuses: [] }, 401),
+  { level: 'pass', reason: 'expected_status' },
+  'agent credential checks should pass on expected unauthenticated 401 responses'
+);
+
+assert.deepEqual(
   classifyRouteStatus({ path: '/api/sol-price', okStatuses: [200], warningStatuses: [503] }, 503),
   { level: 'warn', reason: 'expected_warning_status' },
   'temporary upstream price failures should be warnings, not demo route blockers'
